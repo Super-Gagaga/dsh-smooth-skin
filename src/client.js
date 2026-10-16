@@ -1,0 +1,271 @@
+/**
+ * Client half of the Smooth bundle. It owns the whole rendering surface:
+ * browser-local persisted state, the theme-token overrides,
+ * the scoped stylesheet and one Settings page.
+ */
+
+const React = require('react');
+const h = React.createElement;
+const inject = ['slots', 'theme', 'locale', 'layout', 'uiWorkspace', 'remote', 'remote.workspaceFiles'];
+const LOCALE_NS = 'smooth';
+
+const CSS = `/* injected through the package stylesheet; kept beside the skin rules */
+.smooth-settings{max-width:820px;margin:0 auto;padding:8px 0 28px;color:var(--dsw-alias-label-primary);font-size:14px;line-height:1.6}
+.smooth-settings h2{font-size:26px;font-weight:600;margin:0 0 8px;letter-spacing:-.4px}
+.smooth-settings h3{font-size:15px;font-weight:600;margin:0}
+.smooth-settings p.smooth-description{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px}
+.smooth-settings section{border-top:1px solid var(--dsw-alias-border-l1);padding:24px 0}
+.smooth-settings section:first-of-type{border-top:0;padding-top:22px}
+.smooth-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:18px 0}
+.smooth-row--appearance{align-items:stretch;flex-direction:column;gap:16px;border-top:1px solid var(--dsw-alias-border-l1);margin-top:12px;padding-top:24px}
+.smooth-row-copy{min-width:0;flex:1}
+.smooth-row-copy small{display:block;margin-top:4px;color:var(--dsw-alias-label-secondary);font-size:12.5px;line-height:1.6}
+.smooth-switch{appearance:none;flex:none;width:44px;height:26px;margin:2px 0 0;border-radius:999px;border:1px solid var(--dsw-alias-border-l3);background:var(--smooth-surface-3,rgba(128,128,128,.25));position:relative;cursor:pointer;transition:background-color .18s ease}
+.smooth-switch::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--dsw-alias-switch-thumb,#fff);transition:transform .18s ease}
+.smooth-switch:checked{background:var(--dsw-alias-button-primary-fill,#f7f7f8);border-color:transparent}
+.smooth-switch:checked::after{transform:translateX(18px);background:var(--dsw-alias-label-primary-foreground,#181a1e)}
+.smooth-switch:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
+.smooth-switch:disabled{opacity:.5;cursor:default}
+.smooth-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;flex:none}
+.smooth-choice{font:inherit;font-size:14px;padding:22px 10px;min-height:88px;border-radius:20px;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;transition:background-color .16s ease,border-color .16s ease}
+.smooth-choice:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
+.smooth-choice[aria-pressed="true"]{background:var(--dsw-alias-interactive-bg-active,rgba(128,128,128,.16));border-color:var(--dsw-alias-label-secondary);color:var(--dsw-alias-label-primary);font-weight:600}
+.smooth-choice:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
+.smooth-choice:disabled{opacity:.5;cursor:default}
+.smooth-footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.smooth-button{font:inherit;font-size:13px;padding:8px 16px;border-radius:999px;border:1px solid var(--dsw-alias-border-l3);background:var(--dsw-alias-bg-layer-1,transparent);color:inherit;cursor:pointer}
+.smooth-button:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12))}
+.smooth-button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
+.smooth-button:disabled{opacity:.5;cursor:default}
+.smooth-status{font-size:12.5px;color:var(--dsw-alias-label-secondary)}
+.smooth-status[data-error="true"]{color:var(--dsw-alias-state-error-primary)}
+@media(max-width:600px){.smooth-choices{gap:8px}.smooth-choice{min-height:72px;font-size:12px;padding:16px 6px}.smooth-row{gap:14px}}
+@media(prefers-reduced-motion:reduce){.smooth-switch,.smooth-switch::after,.smooth-choice{transition:none}}
+`;
+
+function apply(ctx) {
+  let state = normalize();
+  let ready = false;
+  let disposed = false;
+  let failure = '';
+  let tokenSignature = '';
+  let tokensDispose;
+  let styleDispose;
+  let settingsDispose;
+  let referenceShell;
+  const scrollbarMotion = installScrollbarMotion();
+  let previousPreference;
+  let appliedPreference;
+
+  // Services come from `inject`, but a plugin that throws during activation blanks
+  // its own slot entry, so every use below is guarded rather than assumed.
+  const theme = ctx.theme && typeof ctx.theme.setTheme === 'function' ? ctx.theme : undefined;
+  const slots = ctx.slots && typeof ctx.slots.inject === 'function' ? ctx.slots : undefined;
+  const locale = ctx.locale && typeof ctx.locale.register === 'function' ? ctx.locale : undefined;
+  const layout = ctx.layout;
+  const uiWorkspace = ctx.uiWorkspace;
+  const remote = ctx.remote;
+
+  const listeners = new Set();
+  const emit = () => { for (const fn of listeners) fn(); };
+
+  /**
+   * The durable store is this browser profile's localStorage. Nothing here reaches
+   * for a host service, so no missing service name can fail activation.
+   */
+  function readState() {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) state = normalize(JSON.parse(raw));
+    } catch (error) {
+      failure = String(error && error.message ? error.message : error);
+    }
+    ready = true;
+    emit();
+    sync();
+  }
+
+  function writeState(next) {
+    state = normalize(next);
+    failure = '';
+    emit();
+    sync();
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (error) {
+      failure = String(error && error.message ? error.message : error);
+      emit();
+    }
+    return Promise.resolve();
+  }
+
+  function restoreTheme() {
+    if (!appliedPreference || !theme) return;
+    if (theme.getTheme().preference === appliedPreference) theme.setTheme(previousPreference || 'system');
+    previousPreference = appliedPreference = undefined;
+  }
+
+  function syncHostTheme() {
+    if (!theme) return;
+    if (!state.enabled || state.theme === 'auto') { restoreTheme(); return; }
+    const current = theme.getTheme().preference;
+    if (!appliedPreference || current !== appliedPreference) previousPreference = current;
+    appliedPreference = state.theme;
+    theme.setTheme(state.theme);
+  }
+
+  function attachStyle() {
+    if (styleDispose) return;
+    const style = document.createElement('style');
+    // An untagged <style> is claimed by whichever plugin materializes next and is
+    // then deleted when that plugin is hot-replaced, which would take the skin with
+    // it; the module tags its own sheet so another rebuild cannot adopt it.
+    style.dataset.plugin = PLUGIN_ID;
+    style.dataset.pluginCss = `${PLUGIN_ID}/client.css`;
+    style.dataset.smoothSkin = 'true';
+    style.textContent = SKIN_CSS + CSS;
+    document.head.append(style);
+    styleDispose = () => { style.remove(); styleDispose = undefined; };
+  }
+
+  function sync() {
+    if (disposed) return;
+    document.body.toggleAttribute(SKIN_ATTRIBUTE, !!state.enabled);
+    scrollbarMotion.setEnabled(!!state.enabled);
+    referenceShell?.setEnabled?.(!!state.enabled);
+    syncHostTheme();
+    attachStyle();
+    if (!state.enabled) {
+      tokensDispose?.();
+      tokensDispose = undefined;
+      tokenSignature = '';
+      return;
+    }
+    if (!theme || typeof theme.overrideTokens !== 'function') return;
+    const tokens = buildTokens(state);
+    const signature = JSON.stringify(tokens);
+    if (signature === tokenSignature) return;
+    if (tokensDispose) tokensDispose();
+    tokensDispose = theme.overrideTokens(PLUGIN_ID, tokens);
+    tokenSignature = signature;
+  }
+
+  function text(key, fallback) {
+    if (!locale || typeof locale.translate !== 'function') return fallback;
+    return locale.translate(LOCALE_NS, key) ?? fallback;
+  }
+
+  if (locale) ctx.effect(() => locale.register(LOCALE_NS, { zh: zhCN, en: enUS }), 'smooth-skin: locale');
+
+  function useSmoothState() {
+    const [, tick] = React.useReducer((value) => value + 1, 0);
+    React.useEffect(() => { listeners.add(tick); return () => { listeners.delete(tick); }; }, []);
+    return { state, ready, failure, update: writeState };
+  }
+
+  function ToggleRow(props) {
+    return h('div', { className: 'smooth-row' },
+      h('div', { className: 'smooth-row-copy' },
+        h('h3', null, props.title),
+        props.hint ? h('small', null, props.hint) : null),
+      h('input', {
+        className: 'smooth-switch',
+        type: 'checkbox',
+        role: 'switch',
+        'aria-label': props.title,
+        checked: props.checked,
+        disabled: props.disabled,
+        onChange: (event) => props.onChange(event.target.checked),
+      }));
+  }
+
+  function ChoiceRow(props) {
+    return h('div', { className: 'smooth-row smooth-row--appearance' },
+      h('div', { className: 'smooth-row-copy' },
+        h('h3', null, props.title),
+        props.hint ? h('small', null, props.hint) : null),
+      h('div', { className: 'smooth-choices' }, props.options.map((option) => h('button', {
+        key: option.value,
+        type: 'button',
+        className: 'smooth-choice',
+        'aria-pressed': props.value === option.value,
+        disabled: props.disabled,
+        onClick: () => props.onChange(option.value),
+      }, option.label))));
+  }
+
+  function SmoothSettings() {
+    const view = useSmoothState();
+    const current = view.state;
+    const disabled = !view.ready;
+    const modeOptions = [
+      { value: 'auto', label: text('settings.theme.auto', 'Follow host') },
+      { value: 'dark', label: text('settings.theme.dark', 'Dark') },
+      { value: 'light', label: text('settings.theme.light', 'Light') },
+    ];
+    return h('div', { className: 'smooth-settings' },
+      h('header', null,
+        h('h2', null, text('settings.title', 'Smooth')),
+        h('p', { className: 'smooth-description' }, text('settings.subtitle', 'Dark palette, radii and list-card texture for the whole Harness UI.'))),
+      h('section', null,
+        h(ToggleRow, {
+          title: text('settings.enable', 'Enable the Smooth skin'),
+          hint: text('settings.enableHint', 'Turning this off restores the stock appearance.'),
+          checked: current.enabled,
+          disabled,
+          onChange: (value) => view.update({ ...current, enabled: value }),
+        }),
+        h(ChoiceRow, {
+          title: text('settings.theme', 'Appearance'),
+          hint: text('settings.themeHint', 'A fixed mode also syncs the host theme preference.'),
+          value: current.theme,
+          disabled: disabled || !current.enabled,
+          options: modeOptions,
+          onChange: (value) => view.update({ ...current, theme: value }),
+        })),
+      h('section', null,
+        h('div', { className: 'smooth-footer' },
+          h('button', {
+            type: 'button',
+            className: 'smooth-button',
+            disabled,
+            onClick: () => view.update({ enabled: true, theme: 'auto' }),
+          }, text('settings.reset', 'Reset to defaults')),
+          h('span', {
+            className: 'smooth-status',
+            'data-error': view.failure ? 'true' : 'false',
+          }, view.failure || (!view.ready ? text('settings.loading', 'Reading settings…') : '')))));
+  }
+
+  if (slots) {
+    settingsDispose = slots.inject('settings.section', () => slots.register({
+      name: 'settings.section',
+      id: PLUGIN_ID,
+      order: 72,
+      label: text('section.title', 'Smooth'),
+    }, SmoothSettings));
+  }
+
+  ctx.effect(() => () => {
+    disposed = true;
+    listeners.clear();
+    settingsDispose?.();
+    referenceShell?.dispose?.();
+    scrollbarMotion.dispose();
+    restoreTheme();
+    tokensDispose?.();
+    styleDispose?.();
+    document.body.removeAttribute(SKIN_ATTRIBUTE);
+  }, 'smooth-skin');
+
+  referenceShell = installReferenceShell({ slots, layout, uiWorkspace, theme, remote, useSmoothState, text,
+    subscribeTheme: (listener) => ctx.on('theme/change', listener),
+    chooseTheme: (preference) => { writeState({ ...state, theme: 'auto' }); theme?.setTheme(preference); },
+  });
+  readState();
+}
+
+// The module loader activates the returned exports object, not local declarations.
+exports.name = PLUGIN_ID;
+exports.inject = inject;
+exports.apply = apply;

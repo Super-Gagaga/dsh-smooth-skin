@@ -1,0 +1,17 @@
+# 依赖
+node_modules/
+
+# 构建中间产物
+*.tmp
+lib/*.tmp
+
+# 从宿主 app.asar 抽出的原生代码/CSS 转储，可用 tools/.inspect-conversation.mjs 重新生成
+tools/.dsh-client-ui-*.txt
+tools/.native-*.css
+
+# 编辑器与系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

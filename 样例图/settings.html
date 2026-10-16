@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>设置 · DeepSeek Harness</title>
+  <style>
+    :root {
+      --u: calc(100vw / 1950);
+      --left-unit: clamp(.72px, calc(100vw / 1790), 1.12px);
+      --rail-width: calc(77 * var(--left-unit));
+      --app-header-height: clamp(48px, calc(65 * var(--u)), 64px);
+      --left-width: clamp(320px, 28.5vw, 560px);
+      --sidebar-width: calc(var(--left-width) - var(--rail-width));
+      --sidebar: #202123;
+      --surface: #292c2e;
+      --text: #bfc0c2;
+      --muted: #96989e;
+      --line: #393b3e;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    body {
+      background: var(--sidebar);
+      color: var(--text);
+      font: 500 calc(20 * var(--u))/1.5 "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before { content: ""; position: fixed; inset: 0 0 0 var(--left-width); z-index: 11; border-radius: calc(35 * var(--u)) 0 0 calc(35 * var(--u)); box-shadow: -2px 0 6px rgba(0, 0, 0, .06), -6px 0 14px rgba(0, 0, 0, .08); pointer-events: none; }
+    button { padding: 0; border: 0; color: inherit; background: transparent; font: inherit; cursor: default; }
+    .icon { display: inline-block; width: calc(22 * var(--u)); height: calc(22 * var(--u)); flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+    .symbols { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .side-rail, .sidebar, .account-menu { --u: .91px; font-size: calc(20 * var(--u)); }
+    .side-rail { position: fixed; inset: var(--app-header-height) auto 0 0; width: var(--rail-width); background: var(--sidebar); }
+    .side-rail::before { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; background: var(--line); pointer-events: none; }
+    .rail-content { height: calc(100% - 80 * var(--left-unit)); padding-top: calc(18 * var(--left-unit)); overflow-y: auto; scrollbar-width: none; }
+    .side-rail::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 60px; height: 1px; background: var(--line); pointer-events: none; }
+    .rail-content::-webkit-scrollbar { display: none; }
+    .rail-group { display: flex; flex-direction: column; align-items: center; gap: calc(12 * var(--left-unit)); }
+    .rail-button { display: flex; flex: none; align-items: center; justify-content: center; width: calc(54 * var(--left-unit)); height: calc(54 * var(--left-unit)); border-radius: 11px; color: var(--muted); }
+    .rail-button .icon { width: calc(28 * var(--left-unit)); height: calc(28 * var(--left-unit)); }
+    .rail-button.is-active { background: #393a3e; color: #fff; }
+    .rail-button--plugin { color: #ededee; }
+    .rail-button:focus-visible { outline: 2px solid #96989e; outline-offset: -2px; }
+    .rail-avatar { position: absolute; bottom: calc(20 * var(--left-unit)); left: 50%; transform: translateX(-50%); width: calc(36 * var(--left-unit)); height: calc(36 * var(--left-unit)); border-radius: 50%; overflow: hidden; }
+    .rail-avatar .icon { width: 100%; height: 100%; }
+    .rail-avatar:focus-visible { outline: 2px solid #96989e; outline-offset: 3px; }
+    .rail-avatar { cursor: pointer; transition: box-shadow 160ms ease; }
+    .rail-avatar[aria-expanded="true"] { box-shadow: 0 0 0 6px #393a3e; }
+    .account-menu { --u: .75px; position: fixed; left: calc(var(--rail-width) - 10 * var(--u)); bottom: calc(8 * var(--u)); z-index: 30; width: calc(344 * var(--u)); max-width: calc(100vw - var(--rail-width) - 6 * var(--u)); max-height: calc(100dvh - 16 * var(--u)); overflow-y: auto; padding: calc(8 * var(--u)) calc(6 * var(--u)); border: 1px solid #3c3c3e; border-radius: calc(26 * var(--u)); background: rgba(43, 43, 43, .96); box-shadow: 0 calc(2 * var(--u)) calc(5 * var(--u)) #0004, 0 calc(8 * var(--u)) calc(24 * var(--u)) #0003; backdrop-filter: blur(16px); opacity: 0; visibility: hidden; pointer-events: none; transform: translate(calc(-8 * var(--u)), calc(10 * var(--u))) scale(.22); transform-origin: left bottom; transition: transform 240ms cubic-bezier(.2, .8, .2, 1), opacity 160ms ease, visibility 0s linear 240ms; }
+    .account-menu.is-open { opacity: 1; visibility: visible; pointer-events: auto; transform: translate(0, 0) scale(1); transition-delay: 0s; }
+    .account-profile { display: flex; align-items: center; gap: calc(8 * var(--u)); padding: calc(5 * var(--u)) calc(10 * var(--u)) calc(9 * var(--u)); }
+    .account-profile .icon { width: calc(28 * var(--u)); height: calc(28 * var(--u)); }
+    .account-name { font-size: calc(20 * var(--u)); font-weight: 650; line-height: 1.3; color: #f0f0f0; }
+    .account-plan { font-size: calc(18 * var(--u)); line-height: 1.3; color: #a3a3a6; }
+    .account-divider { height: 1px; margin: calc(5 * var(--u)) calc(12 * var(--u)); background: #444446; }
+    .account-item { display: flex; align-items: center; gap: calc(10 * var(--u)); width: 100%; min-height: calc(43 * var(--u)); padding: calc(6 * var(--u)) calc(12 * var(--u)); border-radius: calc(19 * var(--u)); color: #ededee; text-align: left; font-size: calc(20 * var(--u)); line-height: 1.4; cursor: pointer; }
+    .account-item .icon { width: calc(22 * var(--u)); height: calc(22 * var(--u)); color: #c9cbcd; }
+    .account-item--highlight { background: #3b3b3c; }
+    .account-item:hover, .account-item:focus-visible { background: #444446; outline: none; }
+    .account-item kbd { margin-left: auto; color: #969698; font: 400 calc(18 * var(--u))/1.4 "Segoe UI", sans-serif; white-space: nowrap; }
+    .account-item .account-chevron { width: calc(15 * var(--u)); height: calc(15 * var(--u)); margin-left: auto; color: #919295; transform: rotate(-90deg); }
+    @media (prefers-reduced-motion: reduce) {
+      .account-menu { transform: none; transition: none; }
+      .rail-avatar { transition: none; }
+    }
+    .sidebar { --u: var(--left-unit); --start-height: calc(148 * var(--u)); --heading-height: calc(48 * var(--u)); position: fixed; inset: var(--app-header-height) auto 0 var(--rail-width); width: var(--sidebar-width); background: linear-gradient(20deg, #1e2324 0%, #202123 24%, #202123 100%); font-size: calc(21 * var(--u)); }
+    .app-header { position: fixed; inset: 0 0 auto; z-index: 10; display: grid; grid-template-columns: var(--left-width) minmax(0, 1fr); height: var(--app-header-height); background: var(--sidebar); }
+    .app-header::after { content: ""; position: absolute; left: var(--left-width); right: 0; bottom: 0; height: 1px; background: #3b3e40; pointer-events: none; }
+    .sidebar-toolbar { --u: var(--left-unit); position: relative; display: flex; align-items: center; gap: calc(28 * var(--u)); min-width: 0; height: 100%; padding: 0 calc(20 * var(--u)); background: var(--sidebar); color: #bfc0c2; font-size: calc(21 * var(--u)); }
+    .sidebar-toolbar::after { content: ""; position: absolute; left: 12px; right: 24px; bottom: 0; height: 1px; background: var(--line); pointer-events: none; }
+    .sidebar-toolbar .icon { width: calc(22 * var(--u)); height: calc(22 * var(--u)); }
+    .sidebar-menu-button { font-size: calc(21 * var(--u)); line-height: 1.4; }
+    .sidebar-menu-button:focus-visible { outline: 2px solid #96989e; outline-offset: 4px; border-radius: calc(3 * var(--u)); }
+    .sidebar-start { height: var(--start-height); padding: calc(18 * var(--u)) calc(18 * var(--u)) 0 calc(18 * var(--u)); }
+    .sidebar-brand { display: flex; align-items: center; gap: calc(8 * var(--u)); height: calc(45 * var(--u)); padding-left: calc(7 * var(--u)); color: #f6f6f7; white-space: nowrap; }
+    .sidebar-brand .brand-whale { width: calc(38 * var(--u)); height: calc(32 * var(--u)); }
+    .brand-wordmark { font: 750 calc(28 * var(--u))/1 "Segoe UI", sans-serif; letter-spacing: calc(-.8 * var(--u)); }
+    .brand-harness { padding: 0 calc(4 * var(--u)); border-radius: calc(2 * var(--u)); background: #f2f2f3; color: #292b2e; font: 500 calc(14 * var(--u))/1.3 Consolas, monospace; letter-spacing: calc(.5 * var(--u)); }
+    .sidebar-new-chat { position: relative; display: flex; align-items: center; justify-content: center; gap: calc(8 * var(--u)); width: 100%; height: calc(46 * var(--u)); margin-top: calc(18 * var(--u)); border: 1px solid #55585b; border-radius: calc(15 * var(--u)); background: #343638; color: #f0f0f1; font-size: calc(22 * var(--u)); }
+    .sidebar-new-chat .icon { width: calc(21 * var(--u)); height: calc(21 * var(--u)); }
+    .sidebar-new-chat kbd { position: absolute; right: calc(18 * var(--u)); color: #b8c1d0; font: 400 calc(14 * var(--u))/1.4 "Segoe UI", sans-serif; }
+    .sidebar-new-chat:focus-visible { outline: 2px solid #96989e; outline-offset: 3px; }
+    .divider { height: 1px; margin: 0; background: #37383b; clip-path: inset(0 18px 0 8px); }
+    .section-heading { display: flex; align-items: center; height: var(--heading-height); padding: calc(4 * var(--u)) calc(18 * var(--u)) 0 calc(24 * var(--u)); color: var(--muted); font-size: calc(20 * var(--u)); font-weight: 600; }
+    .section-actions { display: flex; align-items: center; gap: calc(14 * var(--u)); margin-left: auto; }
+    .section-action { display: flex; align-items: center; justify-content: center; width: calc(30 * var(--u)); height: calc(30 * var(--u)); border-radius: calc(6 * var(--u)); color: #c2c7ca; }
+    .section-actions .icon { width: calc(24 * var(--u)); height: calc(24 * var(--u)); stroke-width: 1.4; }
+    .section-action:focus-visible { outline: 2px solid #96989e; outline-offset: 2px; }
+    .project-row { display: flex; align-items: center; height: calc(48 * var(--u)); padding: 0 calc(24 * var(--u)); gap: calc(12 * var(--u)); }
+    .project-row .icon { width: calc(21 * var(--u)); height: calc(21 * var(--u)); color: #a6aaae; }
+    .conversation { display: flex; align-items: center; height: calc(44 * var(--u)); padding-left: calc(58 * var(--u)); white-space: nowrap; }
+    .personal { margin-top: calc(11 * var(--u)); }
+    .project-spaced { margin-top: 0; }
+    .selected { height: calc(44 * var(--u)); margin: calc(2 * var(--u)) calc(26 * var(--u)) calc(12 * var(--u)) calc(12 * var(--u)); padding-left: calc(46 * var(--u)); border-radius: calc(11 * var(--u)); background: #393a3e; font-weight: 600; }
+    .empty { margin: calc(6 * var(--u)) calc(10 * var(--u)) 0 0; text-align: center; font-size: calc(18 * var(--u)); font-style: italic; color: #85878f; }
+    .workspace { position: absolute; inset: var(--app-header-height) 0 0 var(--left-width); overflow: hidden; border-radius: 0 0 0 calc(35 * var(--u)); background: var(--surface); }
+    .titlebar { min-width: 0; height: 100%; display: flex; align-items: center; gap: calc(12 * var(--u)); padding: 0 calc(23 * var(--u)) 0 calc(10 * var(--u)); overflow: hidden; border-radius: calc(35 * var(--u)) 0 0 0; background: var(--surface); }
+    .tab-strip { position: relative; flex: 1 1 auto; min-width: 0; }
+    .titlebar-tabs { display: flex; align-items: center; gap: calc(12 * var(--u)); min-width: 0; overflow-x: auto; scrollbar-width: none; scroll-padding-inline: calc(54 * var(--u)); overscroll-behavior-x: contain; }
+    .titlebar-tabs::-webkit-scrollbar { display: none; }
+    .tab-scroll { position: absolute; top: 50%; z-index: 2; display: flex; align-items: center; justify-content: center; width: calc(48 * var(--u)); height: calc(48 * var(--u)); transform: translateY(-50%); border-radius: 50%; background: #303335; box-shadow: 0 0 0 calc(5 * var(--u)) var(--surface); color: #bfc0c2; cursor: pointer; }
+    .tab-scroll[hidden] { display: none; }
+    .tab-scroll-left { left: calc(2 * var(--u)); }
+    .tab-scroll-right { right: calc(2 * var(--u)); }
+    .tab-scroll .icon { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
+    .tab-scroll-left .icon { transform: rotate(90deg); }
+    .tab-scroll-right .icon { transform: rotate(-90deg); }
+    .tab-scroll:hover { background: #3a3d3f; }
+    .tab-scroll:focus-visible { outline: 2px solid #96989e; outline-offset: -3px; }
+    .tab { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: calc(138 * var(--u)); height: calc(43 * var(--u)); background: #444748; border-radius: calc(26 * var(--u)); font-size: calc(20 * var(--u)); font-weight: 650; white-space: nowrap; }
+    .tab-secondary { border: 1px solid #505356; background: transparent; font-weight: 500; }
+    .tab-greeting { width: calc(184 * var(--u)); }
+    .tab-resume { width: calc(300 * var(--u)); }
+    .tab-board { width: calc(164 * var(--u)); }
+    .tab-assistant { width: calc(125 * var(--u)); }
+    .tab:focus-visible { outline: 2px solid #96989e; outline-offset: -3px; }
+    .window-actions { display: flex; flex-shrink: 0; align-items: center; gap: calc(18 * var(--u)); margin-left: auto; color: #b0b4b6; }
+    .window-actions .icon { width: calc(19 * var(--u)); height: calc(19 * var(--u)); }
+    .window-actions .separator { width: 1px; height: calc(22 * var(--u)); background: #404346; margin: 0 calc(8 * var(--u)) 0 0; }
+    .window-actions .window-button { display: flex; justify-content: center; width: calc(48 * var(--u)); }
+    .window-actions .window-button:last-child { margin-left: calc(1 * var(--u)); margin-right: calc(-14 * var(--u)); }
+    .welcome { position: absolute; top: 40.65%; left: 50%; width: min(calc(915 * var(--u)), calc(100% - 120 * var(--u))); transform: translate(-50%, -50%); text-align: center; }
+    .welcome h1 { display: flex; align-items: center; justify-content: center; gap: .35em; margin: 0; font-size: calc(44 * var(--u)); line-height: 1.5; letter-spacing: calc(1 * var(--u)); font-weight: 700; color: #c7c8ca; }
+    .welcome h1 .welcome-mark { width: 1.25em; height: 1.05em; color: #f3f4f5; }
+    .welcome-rule { height: calc(2 * var(--u)); margin-top: calc(29 * var(--u)); background: #414446; }
+    .context { margin-top: calc(33 * var(--u)); color: #a4a6ae; font-size: calc(23 * var(--u)); line-height: calc(41 * var(--u)); }
+    .context-line { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: calc(9 * var(--u)); white-space: nowrap; }
+    .context strong { color: #c0c1c4; font-weight: 650; }
+    .context .repository { display: inline-flex; align-items: center; gap: calc(5 * var(--u)); margin-left: calc(8 * var(--u)); }
+    .context .icon { width: calc(19 * var(--u)); height: calc(19 * var(--u)); }
+    .context .chevron { width: calc(12 * var(--u)); height: calc(12 * var(--u)); margin-left: calc(2 * var(--u)); color: #7a7d82; }
+    .context .slash { color: #62656c; margin: 0 calc(7 * var(--u)); }
+    .context .branch { display: inline-flex; align-items: center; gap: calc(5 * var(--u)); margin-right: calc(9 * var(--u)); }
+    .composer { position: absolute; top: max(51.5%, calc(40.65% + 122 * var(--u))); left: 7.45%; right: 8.2%; height: calc(173 * var(--u)); border-radius: calc(25 * var(--u)); background: #323537; box-shadow: 0 calc(2 * var(--u)) calc(4 * var(--u)) #0002, 0 calc(6 * var(--u)) calc(12 * var(--u)) #0003; }
+    .composer-meta { height: calc(45 * var(--u)); padding: 0 calc(16 * var(--u)) 0 calc(21 * var(--u)); display: flex; align-items: center; gap: calc(25 * var(--u)); font-size: calc(16 * var(--u)); color: #9699a2; }
+    .meta-item { display: inline-flex; align-items: center; gap: calc(6 * var(--u)); }
+    .composer-meta .icon { width: calc(17 * var(--u)); height: calc(17 * var(--u)); }
+    .meta-divider { height: calc(14 * var(--u)); width: 1px; background: #64666b; margin-left: calc(-2 * var(--u)); }
+    .access { display: inline-flex; align-items: center; gap: calc(5 * var(--u)); margin-left: auto; padding: 0 calc(10 * var(--u)); border-radius: calc(18 * var(--u)); color: #a49ba0; background: #513437; font-weight: 650; line-height: calc(25 * var(--u)); }
+    .access .icon { color: #ef3538; }
+    .status-circle { width: calc(17 * var(--u)); height: calc(17 * var(--u)); border: calc(3 * var(--u)) solid #666b70; border-radius: 50%; margin-left: calc(-5 * var(--u)); }
+    .input-area { position: absolute; inset: calc(45 * var(--u)) 0 0; border: 1px solid #535658; border-radius: calc(23 * var(--u)); background: #303335; }
+    .placeholder { position: absolute; top: calc(17 * var(--u)); left: calc(18 * var(--u)); color: #777b80; font-size: calc(20 * var(--u)); }
+    .input-toolbar { position: absolute; bottom: calc(10 * var(--u)); left: calc(13 * var(--u)); right: calc(12 * var(--u)); display: flex; align-items: center; height: calc(36 * var(--u)); gap: calc(23 * var(--u)); }
+    .round-button { display: inline-flex; align-items: center; justify-content: center; width: calc(34 * var(--u)); height: calc(34 * var(--u)); border-radius: 50%; background: #2d3032; color: #afb3b7; }
+    .round-button .icon { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
+    .mode { font-size: calc(20 * var(--u)); }
+    .model { display: inline-flex; align-items: center; gap: calc(8 * var(--u)); margin-left: auto; font-size: calc(20 * var(--u)); color: #b2b4b9; }
+    .model .icon { width: calc(13 * var(--u)); height: calc(13 * var(--u)); }
+    .microphone { color: #b0b4b8; }
+    .microphone .icon { width: calc(22 * var(--u)); height: calc(22 * var(--u)); }
+    .send { margin-left: calc(-9 * var(--u)); color: #45494c; }
+    @media (max-aspect-ratio: 6/5) {
+      :root { --u: calc(100vw / 1100); }
+      .welcome { width: 82%; }
+      .welcome h1 { font-size: calc(34 * var(--u)); }
+      .context { font-size: calc(18 * var(--u)); }
+      .composer { left: 5%; right: 5%; }
+      .composer-meta { gap: calc(14 * var(--u)); }
+    }
+    /* Extra conversation text uses the original row styles. */
+    .project-list { position: absolute; top: calc(var(--start-height) + var(--heading-height) + 1px); bottom: calc(16 * var(--u)); left: 0; right: 0; overflow-y: auto; scrollbar-width: none; font-size: calc(19 * var(--u)); }
+    .project-list::-webkit-scrollbar { display: none; }
+    .conversation-label { overflow: hidden; text-overflow: ellipsis; }
+    .conversation time { margin-left: auto; padding: 0 calc(24 * var(--u)) 0 calc(8 * var(--u)); flex: none; color: var(--muted); font-size: calc(14 * var(--u)); }
+
+    /* Settings use the existing application palette and component shapes. */
+    .settings-sidebar { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #3c3f42 transparent; }
+    .settings-sidebar-title { margin: calc(30 * var(--u)) calc(24 * var(--u)) calc(22 * var(--u)); font-size: calc(28 * var(--u)); line-height: 1.5; font-weight: 650; color: var(--text); }
+    .settings-navigation { display: grid; gap: calc(6 * var(--u)); margin: 0 calc(16 * var(--u)) calc(24 * var(--u)); }
+    .settings-category { display: flex; align-items: center; gap: calc(13 * var(--u)); width: 100%; min-height: calc(48 * var(--u)); padding: calc(10 * var(--u)) calc(16 * var(--u)); border-radius: calc(11 * var(--u)); color: var(--text); text-align: left; font-size: calc(19 * var(--u)); line-height: 1.5; cursor: pointer; }
+    .settings-category .icon { width: calc(22 * var(--u)); height: calc(22 * var(--u)); color: #a6aaae; }
+    .settings-category[aria-selected="true"] { background: #393a3e; font-weight: 600; color: #e4e5e7; }
+    .settings-category:hover { background: #303336; }
+    .settings-category[aria-selected="true"]:hover { background: #393a3e; }
+    .settings-category:focus-visible { outline: 2px solid #96989e; outline-offset: -2px; }
+    .workspace.settings-workspace { --s: clamp(.78px, calc((100vw - var(--left-width)) / 1250), 1.1px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #4a4d50 transparent; }
+    .settings-content { width: min(100%, 1120px); margin: 0 auto; padding: calc(40 * var(--s)) calc(56 * var(--s)) calc(56 * var(--s)); }
+    .settings-content-header { display: flex; align-items: center; justify-content: space-between; gap: calc(24 * var(--s)); margin-bottom: calc(22 * var(--s)); }
+    .settings-content-header h1 { margin: 0; font-size: calc(30 * var(--s)); line-height: 1.5; font-weight: 650; color: #c7c8ca; }
+    .settings-panel[hidden] { display: none; }
+    .setting-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: calc(28 * var(--s)); min-height: calc(92 * var(--s)); padding: calc(22 * var(--s)) 0; border-bottom: 1px solid #3b3e40; }
+    .setting-row:last-child { border-bottom: 0; }
+    .setting-copy { min-width: 0; }
+    .setting-name { display: block; margin: 0; color: #c7c8ca; font-size: calc(19 * var(--s)); line-height: 1.5; font-weight: 550; }
+    .setting-description { margin: calc(4 * var(--s)) 0 0; color: #9699a2; font-size: calc(15 * var(--s)); line-height: 1.65; }
+    .setting-select, .setting-input, .setting-textarea { appearance: none; font: 400 calc(17 * var(--s))/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; color: #c7c8ca; border: 1px solid #505356; border-radius: calc(12 * var(--s)); background: #303335; outline: none; }
+    .setting-select { width: 100%; min-width: calc(150 * var(--s)); height: calc(42 * var(--s)); padding: 0 calc(38 * var(--s)) 0 calc(14 * var(--s)); cursor: pointer; }
+    .setting-select-wrap { position: relative; width: max-content; max-width: 100%; }
+    .setting-select-wrap .icon { position: absolute; pointer-events: none; right: calc(13 * var(--s)); top: 50%; transform: translateY(-50%); width: calc(13 * var(--s)); height: calc(13 * var(--s)); color: #96989e; }
+    .setting-input { width: calc(250 * var(--s)); max-width: 100%; height: calc(42 * var(--s)); padding: 0 calc(14 * var(--s)); }
+    .setting-input::placeholder, .setting-textarea::placeholder { color: #777d83; }
+    .setting-input-small { width: calc(80 * var(--s)); text-align: center; }
+    .setting-unit { display: inline-flex; align-items: center; gap: calc(10 * var(--s)); color: #9699a2; font-size: calc(16 * var(--s)); }
+    .setting-textarea { display: block; width: 100%; min-height: calc(126 * var(--s)); resize: vertical; padding: calc(12 * var(--s)) calc(14 * var(--s)); }
+    .setting-row-stacked { grid-template-columns: minmax(0, 1fr); gap: calc(14 * var(--s)); }
+    .setting-button { display: inline-flex; justify-content: center; align-items: center; gap: calc(7 * var(--s)); min-height: calc(40 * var(--s)); padding: calc(7 * var(--s)) calc(16 * var(--s)); border: 1px solid #505356; border-radius: calc(20 * var(--s)); background: transparent; color: #bfc0c2; font-size: calc(16 * var(--s)); line-height: 1.5; text-decoration: none; white-space: nowrap; cursor: pointer; }
+    .setting-button:hover { background: #343739; }
+    .setting-value { color: #bfc0c2; font-size: calc(18 * var(--s)); }
+    .setting-switch { position: relative; appearance: none; flex: none; width: calc(44 * var(--s)); height: calc(26 * var(--s)); margin: 0; border: 0; border-radius: 50px; background: #474b50; cursor: pointer; }
+    .setting-switch::after { content: ""; position: absolute; top: calc(3 * var(--s)); left: calc(3 * var(--s)); width: calc(20 * var(--s)); height: calc(20 * var(--s)); border-radius: 50%; background: #aeb3b9; transition: transform 160ms ease; }
+    .setting-switch:checked { background: #ededee; }
+    .setting-switch:checked::after { transform: translateX(calc(18 * var(--s))); background: #292c2e; }
+    .setting-row-appearance { grid-template-columns: minmax(0, 1fr); gap: calc(12 * var(--s)); }
+    .appearance-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(12 * var(--s)); width: 100%; }
+    .appearance-option { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: calc(12 * var(--s)); min-width: 0; min-height: calc(124 * var(--s)); padding: calc(20 * var(--s)) calc(12 * var(--s)); border: 1px solid #55585c; border-radius: calc(25 * var(--s)); color: #ededee; background: transparent; font-size: calc(21 * var(--s)); line-height: 1.4; white-space: nowrap; cursor: pointer; }
+    .appearance-option .icon { width: calc(24 * var(--s)); height: calc(24 * var(--s)); }
+    .appearance-option[aria-checked="true"] { background: #343638; border-color: #b7bdc5; color: #f1f2f3; }
+    .setting-select:focus-visible, .setting-input:focus-visible, .setting-textarea:focus-visible, .setting-button:focus-visible, .setting-switch:focus-visible, .appearance-option:focus-visible { outline: 2px solid #96989e; outline-offset: 3px; }
+    .settings-dialog { --s: 1px; width: min(600px, calc(100vw - 40px)); max-height: calc(100dvh - 48px); padding: 24px; border: 1px solid #505356; border-radius: 23px; background: #303335; color: #bfc0c2; box-shadow: 0 2px 5px #0004, 0 8px 24px #0003; }
+    .settings-dialog::backdrop { background: #0006; }
+    .settings-dialog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .settings-dialog-header h2 { margin: 0; font-size: 22px; }
+    .settings-dialog-close { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; }
+    .settings-dialog-close .icon { width: 18px; height: 18px; }
+    .config-preview { width: 100%; min-height: 280px; padding: 16px; border: 1px solid #505356; border-radius: 12px; background: #292c2e; color: #c7c8ca; font: 14px/1.7 Consolas, monospace; resize: vertical; }
+    .shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 0; border-bottom: 1px solid #414446; font-size: 16px; }
+    .shortcut-row .setting-input { width: 150px; }
+    @media (max-width: 1150px) {
+      .settings-content { padding-left: 28px; padding-right: 28px; }
+      .setting-row { gap: 18px; }
+      .setting-row-appearance { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 900px) {
+      .settings-content { padding-left: 20px; padding-right: 20px; }
+      .settings-content-header { align-items: flex-start; flex-direction: column; gap: 12px; }
+      .setting-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+      .setting-select-wrap, .setting-select, .setting-input:not(.setting-input-small) { width: 100%; }
+      .setting-switch { justify-self: start; }
+      .appearance-option { padding-left: 10px; padding-right: 10px; }
+    }
+    @media (max-width: 760px) {
+      :root { --u: .75px; --rail-width: 48px; --left-width: 48px; }
+      .app-header { grid-template-columns: 148px minmax(0, 1fr); }
+      .sidebar-toolbar { gap: 12px; padding: 0 10px; }
+      .sidebar-menu-button { font-size: 14px; }
+      .sidebar-toolbar .icon { width: 16px; height: 16px; }
+      .window-actions { display: none; }
+      .settings-sidebar { inset: var(--app-header-height) 0 auto var(--rail-width); z-index: 5; width: auto; height: 104px; overflow: hidden; }
+      .settings-sidebar-title { margin: 10px 14px 6px; font-size: 20px; line-height: 30px; }
+      .settings-navigation { display: flex; gap: 6px; margin: 0 8px 10px; overflow-x: auto; scrollbar-width: none; }
+      .settings-navigation::-webkit-scrollbar { display: none; }
+      .settings-category { flex: none; width: auto; min-height: 38px; padding: 8px 12px; font-size: 14px; }
+      .settings-category .icon { width: 18px; height: 18px; }
+      .workspace.settings-workspace { top: calc(var(--app-header-height) + 104px); }
+      .settings-content { padding-top: 24px; }
+    }
+    @media (max-width: 600px) {
+      .appearance-option { min-height: calc(110 * var(--s)); padding-left: 8px; padding-right: 8px; font-size: calc(18 * var(--s)); white-space: normal; }
+    }
+    @media (prefers-reduced-motion: reduce) { .setting-switch::after { transition: none; } }
+  </style>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <symbol id="workspace-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7.5"/><path d="m15.5 15.5 6 6"/></symbol>
+      <symbol id="workspace-controls" viewBox="0 0 24 24"><path d="M2 7h9m4 0h7M2 17h4m4 0h12"/><circle cx="13" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+      <symbol id="workspace-folder-plus" viewBox="0 0 24 24"><path d="M13 6h-2L8 3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6M19 2v8m-4-4h8"/></symbol>
+      <symbol id="brand-whale" viewBox="0 0 64 48"><path fill="currentColor" stroke="none" d="M53 9c4 1 7-1 10-4-1 7-3 12-8 15 2 3 3 6 2 10l-6-4c-2 9-10 16-21 16C16 43 5 36 3 25 1 15 8 7 18 7c5-1 10 0 14 2l6-7 1 9c5 2 9 6 12 11l3-6-1-7ZM10 17c-4 7 0 16 8 20 7 3 15 3 21-1-8 0-15-5-18-12l-2 7c-6-2-9-7-9-14Z"/><circle cx="43" cy="22" r="1.6" fill="#202123" stroke="none"/><path d="m32 16 7 7-2-8" stroke="#202123" stroke-width="2"/></symbol>
+      <symbol id="message-plus" viewBox="0 0 24 24"><path d="M7 20 3 21l1-5a9 9 0 1 1 3 4Z"/><path d="M12 7v8m-4-4h8"/></symbol>
+      <symbol id="plugin-orbit" viewBox="0 0 24 24"><path d="M12 1c4 0 4 7 4 7s7 0 7 4-7 4-7 4 0 7-4 7-4-7-4-7-7 0-7-4 7-4 7-4 0-7 4-7Z"/><path d="m7 10 10 4"/></symbol>
+      <symbol id="account-usage" viewBox="0 0 24 24"><path d="M5 20a10 10 0 1 1 14 0M12 4v2M4 12h2m12 0h2m-8 0 5-5"/><circle cx="12" cy="12" r="2"/></symbol>
+      <symbol id="account-pet" viewBox="0 0 24 24"><path d="M4 16C4 9 7 3 12 3s8 6 8 13c0 4-3 6-8 6s-8-2-8-6Z"/><circle cx="9" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="13" r="1" fill="currentColor" stroke="none"/><path d="M11 17h2"/></symbol>
+      <symbol id="account-invite" viewBox="0 0 24 24"><path d="m22 2-7 20-5-8-8-5 20-7ZM10 14 22 2"/></symbol>
+      <symbol id="account-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="5"/><path d="m5 5 3.5 3.5M15.5 15.5 19 19M5 19l3.5-3.5m7-7L19 5"/></symbol>
+      <symbol id="account-logout" viewBox="0 0 24 24"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5m-1-9h13m-5-5 5 5-5 5"/></symbol>
+      <symbol id="rail-home" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="m10.1 3.3-7 5.8A3 3 0 0 0 2 11.4V12a1 1 0 0 0 1.5.9V20a2 2 0 0 0 2 2H9v-6a3 3 0 0 1 6 0v6h3.5a2 2 0 0 0 2-2v-7.1A1 1 0 0 0 22 12v-.6a3 3 0 0 0-1.1-2.3l-7-5.8a3 3 0 0 0-3.8 0Z"/></symbol>
+      <symbol id="rail-avatar" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#fafafa" stroke="none"/><path d="M8 34c1-8 5-10 12-10s11 2 12 10Z" fill="#151617" stroke="none"/><path d="m17 8 3-4 3 4-1 5 4 9-6 4-6-4 4-9Zm-2 8-4 8m14-8 4 8M20 8v17m-5-7h10" stroke="#151617" stroke-width="1.3"/></symbol>
+      <symbol id="panel" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M9 3v18"/></symbol>
+      <symbol id="folder" viewBox="0 0 24 24"><path d="M3 20h17a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-9L8 3H3a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1Z"/></symbol>
+      <symbol id="folder-open" viewBox="0 0 24 24"><path d="M3 19V5a1 1 0 0 1 1-1h5l3 3h7v4M3 20l3-9h16l-3 9Z"/></symbol>
+      <symbol id="minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+      <symbol id="square" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/></symbol>
+      <symbol id="close" viewBox="0 0 24 24"><path d="m7 7 10 10M7 17 17 7"/></symbol>
+      <symbol id="chevron" viewBox="0 0 24 24"><path d="m5 9 7 7 7-7"/></symbol>
+      <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="up" viewBox="0 0 24 24"><path d="M12 20V5m-7 7 7-7 7 7"/></symbol>
+      <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></symbol>
+      <symbol id="settings" viewBox="0 0 24 24"><path d="m9.5 3-.6 2.4-2 .9-2.2-.7-2.2 3.8 1.7 1.8v2.3l-1.7 1.7 2.2 3.9 2.3-.7 2 .9.5 2.4h4.4l.6-2.4 2-.9 2.2.7 2.2-3.9-1.7-1.7v-2.3l1.7-1.8-2.2-3.8-2.3.7-2-.9L13.9 3Z"/><circle cx="11.7" cy="12.2" r="3.2"/></symbol>
+      <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3"/></symbol>
+      <symbol id="branch" viewBox="0 0 24 24"><circle cx="6" cy="4" r="2"/><circle cx="6" cy="20" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 6v12m0-3c0-6 12-1 12-8"/></symbol>
+      <symbol id="laptop" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="12" rx="1"/><path d="m4 16-2 4h20l-2-4"/></symbol>
+      <symbol id="shield" viewBox="0 0 24 24"><path d="m12 2 8 4v6c0 5-8 10-8 10s-8-5-8-10V6Zm0 4v9m0 3v.1"/></symbol>
+
+      <symbol id="s-user" viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></symbol>
+      <symbol id="s-model" viewBox="0 0 24 24"><ellipse cx="11" cy="5" rx="8" ry="3"/><path d="M3 5v13c0 2 4 3 8 3m8-16v8M3 11c0 2 4 3 8 3M3 17c0 2 4 3 8 3"/><circle cx="18" cy="18" r="4"/><path d="m21 21 2 2"/></symbol>
+      <symbol id="s-network" viewBox="0 0 24 24"><circle cx="12" cy="4" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M9 6c-4 2-5 5-4 10m10-10c4 2 5 5 4 10M9 19h6m-6 0 3-6 3 6"/></symbol>
+      <symbol id="s-prompt" viewBox="0 0 24 24"><path d="M3 8h12M3 13h16M3 18h10m5-16 1.5 4.5L24 8l-4.5 1.5L18 14l-1.5-4.5L12 8l4.5-1.5Z"/></symbol>
+      <symbol id="s-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+      <symbol id="s-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 1v2m0 18v2M1 12h2m18 0h2M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/></symbol>
+      <symbol id="s-moon" viewBox="0 0 24 24"><path d="M21 14A9 9 0 0 1 10 3a9 9 0 1 0 11 11Z"/></symbol>
+      <symbol id="s-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+    </defs>
+  </svg>
+
+  <header class="app-header" aria-label="应用功能区">
+    <div class="sidebar-toolbar">
+      <button aria-label="侧边栏"><svg class="icon"><use href="#panel"/></svg></button>
+      <button type="button" class="sidebar-menu-button">应用</button>
+      <button type="button" class="sidebar-menu-button">编辑</button>
+    </div>
+    <div class="titlebar">
+      <div class="tab-strip" id="tab-strip">
+      <button type="button" id="tab-scroll-left" class="tab-scroll tab-scroll-left" aria-label="向左滚动标签页" aria-controls="titlebar-tabs" title="向左滚动标签页" hidden><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></button>
+      <nav class="titlebar-tabs" id="titlebar-tabs" aria-label="顶部快捷入口">
+        <button type="button" aria-current="page" class="tab tab-assistant">设置</button>
+        <button type="button" class="tab tab-secondary">新会话</button>
+        <button type="button" class="tab tab-secondary tab-greeting">优化皮肤插件</button>
+        <button type="button" class="tab tab-secondary tab-resume">Vue 3 前端迁移方案</button>
+        <button type="button" class="tab tab-secondary tab-board">插件</button>
+      </nav>
+      <button type="button" id="tab-scroll-right" class="tab-scroll tab-scroll-right" aria-label="向右滚动标签页" aria-controls="titlebar-tabs" title="向右滚动标签页" hidden><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></button>
+      </div>
+      <div class="window-actions" aria-hidden="true">
+        <svg class="icon"><use href="#panel"/></svg><span class="separator"></span>
+        <span class="window-button"><svg class="icon"><use href="#minus"/></svg></span><span class="window-button"><svg class="icon"><use href="#square"/></svg></span><span class="window-button"><svg class="icon"><use href="#close"/></svg></span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="side-rail" aria-label="侧边快捷入口">
+    <div class="rail-content">
+      <div class="rail-group">
+        <button type="button" class="rail-button is-active" aria-label="首页" title="首页" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#rail-home"/></svg></button>
+        <button type="button" class="rail-button rail-button--plugin" aria-label="插件" title="插件"><svg class="icon" aria-hidden="true"><use href="#plugin-orbit"/></svg></button>
+        <button type="button" class="rail-button" aria-label="自动化任务" title="自动化任务"><svg class="icon" aria-hidden="true"><use href="#clock"/></svg></button>
+      </div>
+    </div>
+    <button type="button" id="account-trigger" class="rail-avatar" aria-label="账户菜单" title="账户菜单" aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu"><svg class="icon" aria-hidden="true"><use href="#rail-avatar"/></svg></button>
+  </nav>
+  <aside class="sidebar settings-sidebar" aria-label="设置分类">
+    <h1 class="settings-sidebar-title">设置</h1>
+    <nav class="settings-navigation" role="tablist" aria-label="设置分类" aria-orientation="vertical">
+      <button type="button" class="settings-category" role="tab" id="settings-tab-account" aria-controls="settings-panel-account" aria-selected="false" tabindex="-1" data-section="account"><svg class="icon" aria-hidden="true"><use href="#s-user"/></svg><span>账号与余额</span></button>
+      <button type="button" class="settings-category" role="tab" id="settings-tab-general" aria-controls="settings-panel-general" aria-selected="true" tabindex="0" data-section="general"><svg class="icon" aria-hidden="true"><use href="#settings"/></svg><span>通用设置</span></button>
+      <button type="button" class="settings-category" role="tab" id="settings-tab-models" aria-controls="settings-panel-models" aria-selected="false" tabindex="-1" data-section="models"><svg class="icon" aria-hidden="true"><use href="#s-model"/></svg><span>模型</span></button>
+      <button type="button" class="settings-category" role="tab" id="settings-tab-builtin" aria-controls="settings-panel-builtin" aria-selected="false" tabindex="-1" data-section="builtin"><svg class="icon" aria-hidden="true"><use href="#workspace-controls"/></svg><span>内置插件</span></button>
+      <button type="button" class="settings-category" role="tab" id="settings-tab-presets" aria-controls="settings-panel-presets" aria-selected="false" tabindex="-1" data-section="presets"><svg class="icon" aria-hidden="true"><use href="#s-network"/></svg><span>Agent 预设</span></button>
+      <button type="button" class="settings-category" role="tab" id="settings-tab-prompt" aria-controls="settings-panel-prompt" aria-selected="false" tabindex="-1" data-section="prompt"><svg class="icon" aria-hidden="true"><use href="#s-prompt"/></svg><span>提示词优化</span></button>
+      <button type="button" class="settings-category" role="tab" id="settings-tab-market" aria-controls="settings-panel-market" aria-selected="false" tabindex="-1" data-section="market"><svg class="icon" aria-hidden="true"><use href="#s-grid"/></svg><span>插件市场</span></button>
+      <button type="button" class="settings-category" role="tab" id="settings-tab-bili" aria-controls="settings-panel-bili" aria-selected="false" tabindex="-1" data-section="bili"><svg class="icon" aria-hidden="true"><use href="#settings"/></svg><span>bili 设置</span></button>
+    </nav>
+  </aside>
+  <main class="workspace settings-workspace" aria-label="设置内容">
+    <div class="settings-content">
+      <header class="settings-content-header"><h1 id="settings-section-title">通用设置</h1><button type="button" class="setting-button" id="open-config">打开配置文件</button></header>
+      <section class="settings-panel" role="tabpanel" id="settings-panel-account" aria-labelledby="settings-tab-account" tabindex="0" hidden><div class="setting-row"><div class="setting-copy"><h2 class="setting-name">账号</h2><p class="setting-description">当前账户</p></div><span class="setting-value">黄嘎嘎</span></div><div class="setting-row"><div class="setting-copy"><h2 class="setting-name">订阅计划</h2></div><span class="setting-value">Plus</span></div><div class="setting-row"><div class="setting-copy"><h2 class="setting-name">账户余额</h2></div><span class="setting-value">—</span></div><div class="setting-row"><div class="setting-copy"><h2 class="setting-name">剩余用量</h2></div><span class="setting-value">—</span></div></section>
+      <section class="settings-panel" role="tabpanel" id="settings-panel-general" aria-labelledby="settings-tab-general" tabindex="0"><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="permission">权限</label><p class="setting-description">选择新会话的默认权限模式</p></div><div class="setting-select-wrap"><select class="setting-select" id="permission" data-config="permission"><option value="只读">只读</option><option value="工作区内修改" selected>工作区内修改</option><option value="完全权限">完全权限</option></select><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></div></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="language">语言</label></div><div class="setting-select-wrap"><select class="setting-select" id="language" data-config="language"><option value="中文" selected>中文</option><option value="English">English</option></select><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></div></div><div class="setting-row setting-row-appearance"><div class="setting-copy"><h2 class="setting-name">外观</h2></div><div class="appearance-options" role="radiogroup" aria-label="外观"><button type="button" class="appearance-option" role="radio" aria-checked="false" tabindex="-1" data-appearance="light"><svg class="icon" aria-hidden="true"><use href="#s-sun"/></svg>浅色</button><button type="button" class="appearance-option" role="radio" aria-checked="false" tabindex="-1" data-appearance="dark"><svg class="icon" aria-hidden="true"><use href="#s-moon"/></svg>深色</button><button type="button" class="appearance-option" role="radio" aria-checked="true" tabindex="0" data-appearance="system"><svg class="icon" aria-hidden="true"><use href="#s-monitor"/></svg>跟随系统</button></div></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="chat-font-size">字号大小</label><p class="setting-description">仅影响会话内容的字号</p></div><div class="setting-unit"><input type="number" class="setting-input setting-input-small" id="chat-font-size" data-config="chat-font-size" min="10" max="28" value="14"><span>px</span></div></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="work-steps">工作步骤展示</label><p class="setting-description">选择希望看到多少工具调用细节</p></div><div class="setting-select-wrap"><select class="setting-select" id="work-steps" data-config="work-steps"><option value="精简">精简</option><option value="详细" selected>详细</option></select><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></div></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="code-work-view">显示代码工作视图</label><p class="setting-description">开启后，显示轨迹、本轮代码差异，可选择完整的 Agent 预设切换</p></div><input type="checkbox" role="switch" class="setting-switch" id="code-work-view" data-config="code-work-view" checked></div><div class="setting-row"><div class="setting-copy"><h2 class="setting-name">快捷键</h2><p class="setting-description">查看和编辑当前可用的快捷键和输入操作</p></div><button type="button" class="setting-button" id="edit-shortcuts">编辑快捷键</button></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="link-target">网页链接默认打开方式</label><p class="setting-description">对话中网页链接的打开位置</p></div><div class="setting-select-wrap"><select class="setting-select" id="link-target" data-config="link-target"><option value="应用内侧边栏" selected>应用内侧边栏</option><option value="系统浏览器">系统浏览器</option></select><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></div></div></section>
+      <section class="settings-panel" role="tabpanel" id="settings-panel-models" aria-labelledby="settings-tab-models" tabindex="0" hidden><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="default-model">默认模型</label><p class="setting-description">选择新会话使用的模型</p></div><div class="setting-select-wrap"><select class="setting-select" id="default-model" data-config="default-model"><option value="DeepSeek-V4T-Flash" selected>DeepSeek-V4T-Flash</option><option value="自定义模型">自定义模型</option></select><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></div></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="reasoning">推理强度</label></div><div class="setting-select-wrap"><select class="setting-select" id="reasoning" data-config="reasoning"><option value="Low">Low</option><option value="Medium">Medium</option><option value="High" selected>High</option></select><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></div></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="api-base">API 地址</label></div><input class="setting-input" type="url" id="api-base" placeholder="输入 API 地址" data-config="api-base"></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="api-key">API Key</label></div><input class="setting-input" type="password" id="api-key" placeholder="填写 API Key"></div></section>
+      <section class="settings-panel" role="tabpanel" id="settings-panel-builtin" aria-labelledby="settings-tab-builtin" tabindex="0" hidden><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="builtin-team">智能体团队</label><p class="setting-description">启用团队协作、团队工具、成员列表和共享任务看板。</p></div><input type="checkbox" role="switch" class="setting-switch" id="builtin-team" data-config="builtin-team"></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="builtin-review">自动授权审查</label><p class="setting-description">提供自动审查权限模式，由模型在每次工具调用前判断是否授权。</p></div><input type="checkbox" role="switch" class="setting-switch" id="builtin-review" data-config="builtin-review" checked></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="builtin-automation">自动化任务</label><p class="setting-description">按设定的时间或周期，在会话中自动执行任务。</p></div><input type="checkbox" role="switch" class="setting-switch" id="builtin-automation" data-config="builtin-automation"></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="builtin-voice">语音输入</label><p class="setting-description">在本机使用 SenseVoice 转写录音，首次使用需安装依赖。</p></div><input type="checkbox" role="switch" class="setting-switch" id="builtin-voice" data-config="builtin-voice"></div><div class="setting-row"><div class="setting-copy"><h2 class="setting-name">全部插件</h2><p class="setting-description">安装、启用和配置插件</p></div><a class="setting-button" href="plugins.html">查看全部插件</a></div></section>
+      <section class="settings-panel" role="tabpanel" id="settings-panel-presets" aria-labelledby="settings-tab-presets" tabindex="0" hidden><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="agent-preset">默认预设</label></div><div class="setting-select-wrap"><select class="setting-select" id="agent-preset" data-config="agent-preset"><option value="标准模式" selected>标准模式</option><option value="自定义预设">自定义预设</option></select><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></div></div><div class="setting-row setting-row-stacked"><div class="setting-copy"><label class="setting-name" for="system-prompt">系统提示词</label></div><textarea class="setting-textarea" id="system-prompt" data-config="system-prompt" placeholder="输入 Agent 的工作方式与偏好"></textarea></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="context-strategy">上下文策略</label></div><div class="setting-select-wrap"><select class="setting-select" id="context-strategy" data-config="context-strategy"><option value="标准" selected>标准</option><option value="精简">精简</option><option value="完整">完整</option></select><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></div></div></section>
+      <section class="settings-panel" role="tabpanel" id="settings-panel-prompt" aria-labelledby="settings-tab-prompt" tabindex="0" hidden><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="prompt-optimization">启用提示词优化</label></div><input type="checkbox" role="switch" class="setting-switch" id="prompt-optimization" data-config="prompt-optimization"></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="prompt-mode">优化方式</label></div><div class="setting-select-wrap"><select class="setting-select" id="prompt-mode" data-config="prompt-mode"><option value="手动确认" selected>手动确认</option><option value="自动应用">自动应用</option></select><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></div></div><div class="setting-row"><div class="setting-copy"><label class="setting-name" for="prompt-model">优化模型</label></div><div class="setting-select-wrap"><select class="setting-select" id="prompt-model" data-config="prompt-model"><option value="跟随默认模型" selected>跟随默认模型</option><option value="自定义模型">自定义模型</option></select><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></div></div><div class="setting-row setting-row-stacked"><div class="setting-copy"><label class="setting-name" for="optimization-prompt">优化提示词</label></div><textarea class="setting-textarea" id="optimization-prompt" data-config="optimization-prompt" placeholder="输入提示词优化规则"></textarea></div></section>
+      <section class="settings-panel" role="tabpanel" id="settings-panel-market" aria-labelledby="settings-tab-market" tabindex="0" hidden><div class="setting-row"><div class="setting-copy"><h2 class="setting-name">官方插件</h2><p class="setting-description">安装、启用和配置官方插件</p></div><a class="setting-button" href="plugins.html">管理插件</a></div><div class="setting-row"><div class="setting-copy"><h2 class="setting-name">已安装插件</h2><p class="setting-description">billion-context</p></div><span class="setting-value">已启用</span></div></section>
+      <section class="settings-panel" role="tabpanel" id="settings-panel-bili" aria-labelledby="settings-tab-bili" tabindex="0" hidden><div class="setting-row"><div class="setting-copy"><h2 class="setting-name">插件状态</h2></div><span class="setting-value">未配置</span></div><div class="setting-row setting-row-stacked"><div class="setting-copy"><label class="setting-name" for="bili-config">配置内容</label></div><textarea class="setting-textarea" id="bili-config" data-config="bili-config" placeholder="{}"></textarea></div></section>
+    </div>
+  </main>
+  <div id="account-menu" class="account-menu" role="menu" aria-label="账户菜单" aria-hidden="true" inert>
+    <div class="account-profile" role="presentation">
+      <svg class="icon" aria-hidden="true"><use href="#rail-avatar"/></svg>
+      <div><div class="account-name">黄嘎嘎</div><div class="account-plan">Plus</div></div>
+    </div>
+    <div class="account-divider" role="separator"></div>
+    <button type="button" class="account-item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#account-usage"/></svg><span>剩余用量</span><svg class="icon account-chevron" aria-hidden="true"><use href="#chevron"/></svg></button>
+    <button type="button" class="account-item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#account-invite"/></svg><span>反馈意见</span></button>
+    <button type="button" class="account-item account-item--highlight" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#settings"/></svg><span>设置</span><kbd>Ctrl+,</kbd></button>
+    <div class="account-divider" role="separator"></div>
+    <button type="button" class="account-item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#account-help"/></svg><span>帮助</span><svg class="icon account-chevron" aria-hidden="true"><use href="#chevron"/></svg></button>
+    <button type="button" class="account-item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#account-logout"/></svg><span>退出登录</span></button>
+  </div>
+  <script>
+    (() => {
+      const trigger = document.getElementById('account-trigger');
+      const menu = document.getElementById('account-menu');
+      const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+      let isOpen = false;
+
+      function setMenuOpen(open, focusFirst = false, restoreFocus = false) {
+        isOpen = open;
+        menu.classList.toggle('is-open', open);
+        menu.inert = !open;
+        menu.setAttribute('aria-hidden', String(!open));
+        trigger.setAttribute('aria-expanded', String(open));
+        if (open && focusFirst) items[0].focus({ preventScroll: true });
+        if (!open && restoreFocus) trigger.focus({ preventScroll: true });
+      }
+
+      trigger.addEventListener('click', (event) => {
+        setMenuOpen(!isOpen, event.detail === 0);
+      });
+      trigger.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        event.preventDefault();
+        setMenuOpen(true);
+        items[event.key === 'ArrowUp' ? items.length - 1 : 0].focus({ preventScroll: true });
+      });
+      document.addEventListener('pointerdown', (event) => {
+        if (isOpen && !menu.contains(event.target) && !trigger.contains(event.target)) {
+          setMenuOpen(false);
+        }
+      });
+      document.addEventListener('keydown', (event) => {
+        if (isOpen && event.key === 'Escape') {
+          event.preventDefault();
+          setMenuOpen(false, false, true);
+        }
+      });
+      menu.addEventListener('keydown', (event) => {
+        if (event.key === 'Tab') {
+          setMenuOpen(false, false, true);
+          return;
+        }
+        const index = items.indexOf(document.activeElement);
+        let next;
+        if (event.key === 'ArrowDown') next = (index + 1) % items.length;
+        if (event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = items.length - 1;
+        if (next === undefined) return;
+        event.preventDefault();
+        items[next].focus({ preventScroll: true });
+      });
+    })();
+  </script>
+  <script>
+    (() => {
+      const tabs = document.getElementById('titlebar-tabs');
+      const left = document.getElementById('tab-scroll-left');
+      const right = document.getElementById('tab-scroll-right');
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+      let pendingFrame = false;
+
+      function updateButtons() {
+        const maxScroll = Math.max(0, tabs.scrollWidth - tabs.clientWidth);
+        left.hidden = maxScroll <= 1 || tabs.scrollLeft <= 1;
+        right.hidden = maxScroll <= 1 || tabs.scrollLeft >= maxScroll - 1;
+        const focused = document.activeElement;
+        if ((focused === left && left.hidden) || (focused === right && right.hidden)) {
+          const next = !left.hidden ? left : !right.hidden ? right : tabs.querySelector('.tab');
+          if (next) next.focus({ preventScroll: true });
+        }
+      }
+
+      function scheduleUpdate() {
+        if (pendingFrame) return;
+        pendingFrame = true;
+        requestAnimationFrame(() => {
+          pendingFrame = false;
+          updateButtons();
+        });
+      }
+
+      function scrollTabs(direction) {
+        tabs.scrollBy({
+          left: direction * Math.max(120, Math.round(tabs.clientWidth * .7)),
+          behavior: reducedMotion.matches ? 'auto' : 'smooth'
+        });
+        scheduleUpdate();
+      }
+
+      left.addEventListener('click', () => scrollTabs(-1));
+      right.addEventListener('click', () => scrollTabs(1));
+      tabs.addEventListener('scroll', scheduleUpdate, { passive: true });
+      window.addEventListener('resize', scheduleUpdate);
+      tabs.addEventListener('focusin', (event) => {
+        const tab = event.target.closest('.tab');
+        if (!tab || !tabs.contains(tab)) return;
+        const viewport = tabs.getBoundingClientRect();
+        const bounds = tab.getBoundingClientRect();
+        const start = viewport.left + (left.hidden ? 0 : left.offsetWidth + 4);
+        const end = viewport.right - (right.hidden ? 0 : right.offsetWidth + 4);
+        let distance = 0;
+        if (bounds.left < start) distance = bounds.left - start;
+        else if (bounds.right > end) distance = bounds.right - end;
+        if (distance) tabs.scrollBy({ left: distance, behavior: 'auto' });
+        scheduleUpdate();
+      });
+
+      const resizeObserver = new ResizeObserver(scheduleUpdate);
+      function observeTabs() {
+        resizeObserver.disconnect();
+        resizeObserver.observe(tabs);
+        for (const tab of tabs.children) resizeObserver.observe(tab);
+      }
+      const mutationObserver = new MutationObserver(() => {
+        observeTabs();
+        scheduleUpdate();
+      });
+      mutationObserver.observe(tabs, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'hidden']
+      });
+      observeTabs();
+      if (document.fonts) document.fonts.ready.then(scheduleUpdate);
+      updateButtons();
+    })();
+  </script>
+  <dialog class="settings-dialog" id="config-dialog" aria-labelledby="config-title">
+    <header class="settings-dialog-header"><h2 id="config-title">配置文件</h2><button type="button" class="settings-dialog-close" data-close-dialog aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#close"/></svg></button></header>
+    <textarea class="config-preview" id="config-preview" readonly aria-label="当前页面配置"></textarea>
+  </dialog>
+  <dialog class="settings-dialog" id="shortcuts-dialog" aria-labelledby="shortcuts-title">
+    <header class="settings-dialog-header"><h2 id="shortcuts-title">编辑快捷键</h2><button type="button" class="settings-dialog-close" data-close-dialog aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#close"/></svg></button></header>
+    <label class="shortcut-row" for="shortcut-new">新会话<input class="setting-input" id="shortcut-new" value="Ctrl + N" data-config="shortcut-new"></label>
+    <label class="shortcut-row" for="shortcut-search">搜索<input class="setting-input" id="shortcut-search" value="Ctrl + K" data-config="shortcut-search"></label>
+    <label class="shortcut-row" for="shortcut-settings">设置<input class="setting-input" id="shortcut-settings" value="Ctrl + ," data-config="shortcut-settings"></label>
+  </dialog>
+  <script>
+    (() => {
+      const categories = Array.from(document.querySelectorAll('.settings-category'));
+      const panels = Array.from(document.querySelectorAll('.settings-panel'));
+      const title = document.getElementById('settings-section-title');
+      const workspace = document.querySelector('.settings-workspace');
+      function selectCategory(button) {
+        for (const item of categories) {
+          const active = item === button;
+          item.setAttribute('aria-selected', String(active));
+          item.tabIndex = active ? 0 : -1;
+        }
+        for (const panel of panels) panel.hidden = panel.id !== button.getAttribute('aria-controls');
+        title.textContent = button.querySelector('span').textContent;
+        workspace.scrollTop = 0;
+      }
+      for (const button of categories) {
+        button.addEventListener('click', () => selectCategory(button));
+        button.addEventListener('keydown', (event) => {
+          const index = categories.indexOf(button);
+          let next;
+          if (event.key === 'ArrowDown') next = (index + 1) % categories.length;
+          if (event.key === 'ArrowUp') next = (index - 1 + categories.length) % categories.length;
+          if (event.key === 'Home') next = 0;
+          if (event.key === 'End') next = categories.length - 1;
+          if (next === undefined) return;
+          event.preventDefault();
+          selectCategory(categories[next]);
+          categories[next].focus({ preventScroll: true });
+        });
+      }
+      const appearanceButtons = Array.from(document.querySelectorAll('[data-appearance]'));
+      function selectAppearance(button) {
+        for (const item of appearanceButtons) {
+          item.setAttribute('aria-checked', String(item === button));
+          item.tabIndex = item === button ? 0 : -1;
+        }
+      }
+      for (const button of appearanceButtons) {
+        button.addEventListener('click', () => selectAppearance(button));
+        button.addEventListener('keydown', (event) => {
+          if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+          event.preventDefault();
+          const index = appearanceButtons.indexOf(button);
+          const next = appearanceButtons[(index + (event.key === 'ArrowRight' ? 1 : -1) + appearanceButtons.length) % appearanceButtons.length];
+          selectAppearance(next);
+          next.focus();
+        });
+      }
+      document.getElementById('open-config').addEventListener('click', () => {
+        const config = {};
+        for (const field of document.querySelectorAll('[data-config]')) {
+          config[field.dataset.config] = field.type === 'checkbox' ? field.checked : field.type === 'number' ? field.valueAsNumber : field.value;
+        }
+        config.appearance = appearanceButtons.find(button => button.getAttribute('aria-checked') === 'true').dataset.appearance;
+        document.getElementById('config-preview').value = JSON.stringify(config, null, 2);
+        document.getElementById('config-dialog').showModal();
+      });
+      document.getElementById('edit-shortcuts').addEventListener('click', () => document.getElementById('shortcuts-dialog').showModal());
+      for (const button of document.querySelectorAll('[data-close-dialog]')) {
+        button.addEventListener('click', () => button.closest('dialog').close());
+      }
+      for (const dialog of document.querySelectorAll('.settings-dialog')) {
+        dialog.addEventListener('click', (event) => {
+          if (event.target !== dialog) return;
+          const bounds = dialog.getBoundingClientRect();
+          if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>插件 · DeepSeek Harness</title>
+  <style>
+    :root {
+      --u: calc(100vw / 1950);
+      --left-unit: clamp(.72px, calc(100vw / 1790), 1.12px);
+      --rail-width: calc(77 * var(--left-unit));
+      --app-header-height: clamp(48px, calc(65 * var(--u)), 64px);
+      --left-width: clamp(320px, 28.5vw, 560px);
+      --sidebar-width: calc(var(--left-width) - var(--rail-width));
+      --sidebar: #202123;
+      --surface: #292c2e;
+      --text: #bfc0c2;
+      --muted: #96989e;
+      --line: #393b3e;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    body {
+      background: var(--sidebar);
+      color: var(--text);
+      font: 500 calc(20 * var(--u))/1.5 "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before { content: ""; position: fixed; inset: 0 0 0 var(--left-width); z-index: 11; border-radius: calc(35 * var(--u)) 0 0 calc(35 * var(--u)); box-shadow: -2px 0 6px rgba(0, 0, 0, .06), -6px 0 14px rgba(0, 0, 0, .08); pointer-events: none; }
+    button { padding: 0; border: 0; color: inherit; background: transparent; font: inherit; cursor: default; }
+    .icon { display: inline-block; width: calc(22 * var(--u)); height: calc(22 * var(--u)); flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+    .symbols { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .side-rail, .sidebar, .account-menu { --u: .91px; font-size: calc(20 * var(--u)); }
+    .side-rail { position: fixed; inset: var(--app-header-height) auto 0 0; width: var(--rail-width); background: var(--sidebar); }
+    .side-rail::before { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; background: var(--line); pointer-events: none; }
+    .rail-content { height: calc(100% - 80 * var(--left-unit)); padding-top: calc(18 * var(--left-unit)); overflow-y: auto; scrollbar-width: none; }
+    .side-rail::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 60px; height: 1px; background: var(--line); pointer-events: none; }
+    .rail-content::-webkit-scrollbar { display: none; }
+    .rail-group { display: flex; flex-direction: column; align-items: center; gap: calc(12 * var(--left-unit)); }
+    .rail-button { display: flex; flex: none; align-items: center; justify-content: center; width: calc(54 * var(--left-unit)); height: calc(54 * var(--left-unit)); border-radius: 11px; color: var(--muted); }
+    .rail-button .icon { width: calc(28 * var(--left-unit)); height: calc(28 * var(--left-unit)); }
+    .rail-button.is-active { background: #393a3e; color: #fff; }
+    .rail-button--plugin { color: #ededee; }
+    .rail-button:focus-visible { outline: 2px solid #96989e; outline-offset: -2px; }
+    .rail-avatar { position: absolute; bottom: calc(20 * var(--left-unit)); left: 50%; transform: translateX(-50%); width: calc(36 * var(--left-unit)); height: calc(36 * var(--left-unit)); border-radius: 50%; overflow: hidden; }
+    .rail-avatar .icon { width: 100%; height: 100%; }
+    .rail-avatar:focus-visible { outline: 2px solid #96989e; outline-offset: 3px; }
+    .rail-avatar { cursor: pointer; transition: box-shadow 160ms ease; }
+    .rail-avatar[aria-expanded="true"] { box-shadow: 0 0 0 6px #393a3e; }
+    .account-menu { --u: .75px; position: fixed; left: calc(var(--rail-width) - 10 * var(--u)); bottom: calc(8 * var(--u)); z-index: 30; width: calc(344 * var(--u)); max-width: calc(100vw - var(--rail-width) - 6 * var(--u)); max-height: calc(100dvh - 16 * var(--u)); overflow-y: auto; padding: calc(8 * var(--u)) calc(6 * var(--u)); border: 1px solid #3c3c3e; border-radius: calc(26 * var(--u)); background: rgba(43, 43, 43, .96); box-shadow: 0 calc(2 * var(--u)) calc(5 * var(--u)) #0004, 0 calc(8 * var(--u)) calc(24 * var(--u)) #0003; backdrop-filter: blur(16px); opacity: 0; visibility: hidden; pointer-events: none; transform: translate(calc(-8 * var(--u)), calc(10 * var(--u))) scale(.22); transform-origin: left bottom; transition: transform 240ms cubic-bezier(.2, .8, .2, 1), opacity 160ms ease, visibility 0s linear 240ms; }
+    .account-menu.is-open { opacity: 1; visibility: visible; pointer-events: auto; transform: translate(0, 0) scale(1); transition-delay: 0s; }
+    .account-profile { display: flex; align-items: center; gap: calc(8 * var(--u)); padding: calc(5 * var(--u)) calc(10 * var(--u)) calc(9 * var(--u)); }
+    .account-profile .icon { width: calc(28 * var(--u)); height: calc(28 * var(--u)); }
+    .account-name { font-size: calc(20 * var(--u)); font-weight: 650; line-height: 1.3; color: #f0f0f0; }
+    .account-plan { font-size: calc(18 * var(--u)); line-height: 1.3; color: #a3a3a6; }
+    .account-divider { height: 1px; margin: calc(5 * var(--u)) calc(12 * var(--u)); background: #444446; }
+    .account-item { display: flex; align-items: center; gap: calc(10 * var(--u)); width: 100%; min-height: calc(43 * var(--u)); padding: calc(6 * var(--u)) calc(12 * var(--u)); border-radius: calc(19 * var(--u)); color: #ededee; text-align: left; font-size: calc(20 * var(--u)); line-height: 1.4; cursor: pointer; }
+    .account-item .icon { width: calc(22 * var(--u)); height: calc(22 * var(--u)); color: #c9cbcd; }
+    .account-item--highlight { background: #3b3b3c; }
+    .account-item:hover, .account-item:focus-visible { background: #444446; outline: none; }
+    .account-item kbd { margin-left: auto; color: #969698; font: 400 calc(18 * var(--u))/1.4 "Segoe UI", sans-serif; white-space: nowrap; }
+    .account-item .account-chevron { width: calc(15 * var(--u)); height: calc(15 * var(--u)); margin-left: auto; color: #919295; transform: rotate(-90deg); }
+    @media (prefers-reduced-motion: reduce) {
+      .account-menu { transform: none; transition: none; }
+      .rail-avatar { transition: none; }
+    }
+    .sidebar { --u: var(--left-unit); --start-height: calc(148 * var(--u)); --heading-height: calc(48 * var(--u)); position: fixed; inset: var(--app-header-height) auto 0 var(--rail-width); width: var(--sidebar-width); background: linear-gradient(20deg, #1e2324 0%, #202123 24%, #202123 100%); font-size: calc(21 * var(--u)); }
+    .app-header { position: fixed; inset: 0 0 auto; z-index: 10; display: grid; grid-template-columns: var(--left-width) minmax(0, 1fr); height: var(--app-header-height); background: var(--sidebar); }
+    .app-header::after { content: ""; position: absolute; left: var(--left-width); right: 0; bottom: 0; height: 1px; background: #3b3e40; pointer-events: none; }
+    .sidebar-toolbar { --u: var(--left-unit); position: relative; display: flex; align-items: center; gap: calc(28 * var(--u)); min-width: 0; height: 100%; padding: 0 calc(20 * var(--u)); background: var(--sidebar); color: #bfc0c2; font-size: calc(21 * var(--u)); }
+    .sidebar-toolbar::after { content: ""; position: absolute; left: 12px; right: 24px; bottom: 0; height: 1px; background: var(--line); pointer-events: none; }
+    .sidebar-toolbar .icon { width: calc(22 * var(--u)); height: calc(22 * var(--u)); }
+    .sidebar-menu-button { font-size: calc(21 * var(--u)); line-height: 1.4; }
+    .sidebar-menu-button:focus-visible { outline: 2px solid #96989e; outline-offset: 4px; border-radius: calc(3 * var(--u)); }
+    .sidebar-start { height: var(--start-height); padding: calc(18 * var(--u)) calc(18 * var(--u)) 0 calc(18 * var(--u)); }
+    .sidebar-brand { display: flex; align-items: center; gap: calc(8 * var(--u)); height: calc(45 * var(--u)); padding-left: calc(7 * var(--u)); color: #f6f6f7; white-space: nowrap; }
+    .sidebar-brand .brand-whale { width: calc(38 * var(--u)); height: calc(32 * var(--u)); }
+    .brand-wordmark { font: 750 calc(28 * var(--u))/1 "Segoe UI", sans-serif; letter-spacing: calc(-.8 * var(--u)); }
+    .brand-harness { padding: 0 calc(4 * var(--u)); border-radius: calc(2 * var(--u)); background: #f2f2f3; color: #292b2e; font: 500 calc(14 * var(--u))/1.3 Consolas, monospace; letter-spacing: calc(.5 * var(--u)); }
+    .sidebar-new-chat { position: relative; display: flex; align-items: center; justify-content: center; gap: calc(8 * var(--u)); width: 100%; height: calc(46 * var(--u)); margin-top: calc(18 * var(--u)); border: 1px solid #55585b; border-radius: calc(15 * var(--u)); background: #343638; color: #f0f0f1; font-size: calc(22 * var(--u)); }
+    .sidebar-new-chat .icon { width: calc(21 * var(--u)); height: calc(21 * var(--u)); }
+    .sidebar-new-chat kbd { position: absolute; right: calc(18 * var(--u)); color: #b8c1d0; font: 400 calc(14 * var(--u))/1.4 "Segoe UI", sans-serif; }
+    .sidebar-new-chat:focus-visible { outline: 2px solid #96989e; outline-offset: 3px; }
+    .divider { height: 1px; margin: 0; background: #37383b; clip-path: inset(0 18px 0 8px); }
+    .section-heading { display: flex; align-items: center; height: var(--heading-height); padding: calc(4 * var(--u)) calc(18 * var(--u)) 0 calc(24 * var(--u)); color: var(--muted); font-size: calc(20 * var(--u)); font-weight: 600; }
+    .section-actions { display: flex; align-items: center; gap: calc(14 * var(--u)); margin-left: auto; }
+    .section-action { display: flex; align-items: center; justify-content: center; width: calc(30 * var(--u)); height: calc(30 * var(--u)); border-radius: calc(6 * var(--u)); color: #c2c7ca; }
+    .section-actions .icon { width: calc(24 * var(--u)); height: calc(24 * var(--u)); stroke-width: 1.4; }
+    .section-action:focus-visible { outline: 2px solid #96989e; outline-offset: 2px; }
+    .project-row { display: flex; align-items: center; height: calc(48 * var(--u)); padding: 0 calc(24 * var(--u)); gap: calc(12 * var(--u)); }
+    .project-row .icon { width: calc(21 * var(--u)); height: calc(21 * var(--u)); color: #a6aaae; }
+    .conversation { display: flex; align-items: center; height: calc(44 * var(--u)); padding-left: calc(58 * var(--u)); white-space: nowrap; }
+    .personal { margin-top: calc(11 * var(--u)); }
+    .project-spaced { margin-top: 0; }
+    .selected { height: calc(44 * var(--u)); margin: calc(2 * var(--u)) calc(26 * var(--u)) calc(12 * var(--u)) calc(12 * var(--u)); padding-left: calc(46 * var(--u)); border-radius: calc(11 * var(--u)); background: #393a3e; font-weight: 600; }
+    .empty { margin: calc(6 * var(--u)) calc(10 * var(--u)) 0 0; text-align: center; font-size: calc(18 * var(--u)); font-style: italic; color: #85878f; }
+    .workspace { position: absolute; inset: var(--app-header-height) 0 0 var(--left-width); overflow: hidden; border-radius: 0 0 0 calc(35 * var(--u)); background: var(--surface); }
+    .titlebar { min-width: 0; height: 100%; display: flex; align-items: center; gap: calc(12 * var(--u)); padding: 0 calc(23 * var(--u)) 0 calc(10 * var(--u)); overflow: hidden; border-radius: calc(35 * var(--u)) 0 0 0; background: var(--surface); }
+    .tab-strip { position: relative; flex: 1 1 auto; min-width: 0; }
+    .titlebar-tabs { display: flex; align-items: center; gap: calc(12 * var(--u)); min-width: 0; overflow-x: auto; scrollbar-width: none; scroll-padding-inline: calc(54 * var(--u)); overscroll-behavior-x: contain; }
+    .titlebar-tabs::-webkit-scrollbar { display: none; }
+    .tab-scroll { position: absolute; top: 50%; z-index: 2; display: flex; align-items: center; justify-content: center; width: calc(48 * var(--u)); height: calc(48 * var(--u)); transform: translateY(-50%); border-radius: 50%; background: #303335; box-shadow: 0 0 0 calc(5 * var(--u)) var(--surface); color: #bfc0c2; cursor: pointer; }
+    .tab-scroll[hidden] { display: none; }
+    .tab-scroll-left { left: calc(2 * var(--u)); }
+    .tab-scroll-right { right: calc(2 * var(--u)); }
+    .tab-scroll .icon { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
+    .tab-scroll-left .icon { transform: rotate(90deg); }
+    .tab-scroll-right .icon { transform: rotate(-90deg); }
+    .tab-scroll:hover { background: #3a3d3f; }
+    .tab-scroll:focus-visible { outline: 2px solid #96989e; outline-offset: -3px; }
+    .tab { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; width: calc(138 * var(--u)); height: calc(43 * var(--u)); background: #444748; border-radius: calc(26 * var(--u)); font-size: calc(20 * var(--u)); font-weight: 650; white-space: nowrap; }
+    .tab-secondary { border: 1px solid #505356; background: transparent; font-weight: 500; }
+    .tab-greeting { width: calc(184 * var(--u)); }
+    .tab-resume { width: calc(300 * var(--u)); }
+    .tab-board { width: calc(164 * var(--u)); }
+    .tab-assistant { width: calc(125 * var(--u)); }
+    .tab:focus-visible { outline: 2px solid #96989e; outline-offset: -3px; }
+    .window-actions { display: flex; flex-shrink: 0; align-items: center; gap: calc(18 * var(--u)); margin-left: auto; color: #b0b4b6; }
+    .window-actions .icon { width: calc(19 * var(--u)); height: calc(19 * var(--u)); }
+    .window-actions .separator { width: 1px; height: calc(22 * var(--u)); background: #404346; margin: 0 calc(8 * var(--u)) 0 0; }
+    .window-actions .window-button { display: flex; justify-content: center; width: calc(48 * var(--u)); }
+    .window-actions .window-button:last-child { margin-left: calc(1 * var(--u)); margin-right: calc(-14 * var(--u)); }
+    .welcome { position: absolute; top: 40.65%; left: 50%; width: min(calc(915 * var(--u)), calc(100% - 120 * var(--u))); transform: translate(-50%, -50%); text-align: center; }
+    .welcome h1 { display: flex; align-items: center; justify-content: center; gap: .35em; margin: 0; font-size: calc(44 * var(--u)); line-height: 1.5; letter-spacing: calc(1 * var(--u)); font-weight: 700; color: #c7c8ca; }
+    .welcome h1 .welcome-mark { width: 1.25em; height: 1.05em; color: #f3f4f5; }
+    .welcome-rule { height: calc(2 * var(--u)); margin-top: calc(29 * var(--u)); background: #414446; }
+    .context { margin-top: calc(33 * var(--u)); color: #a4a6ae; font-size: calc(23 * var(--u)); line-height: calc(41 * var(--u)); }
+    .context-line { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: calc(9 * var(--u)); white-space: nowrap; }
+    .context strong { color: #c0c1c4; font-weight: 650; }
+    .context .repository { display: inline-flex; align-items: center; gap: calc(5 * var(--u)); margin-left: calc(8 * var(--u)); }
+    .context .icon { width: calc(19 * var(--u)); height: calc(19 * var(--u)); }
+    .context .chevron { width: calc(12 * var(--u)); height: calc(12 * var(--u)); margin-left: calc(2 * var(--u)); color: #7a7d82; }
+    .context .slash { color: #62656c; margin: 0 calc(7 * var(--u)); }
+    .context .branch { display: inline-flex; align-items: center; gap: calc(5 * var(--u)); margin-right: calc(9 * var(--u)); }
+    .composer { position: absolute; top: max(51.5%, calc(40.65% + 122 * var(--u))); left: 7.45%; right: 8.2%; height: calc(173 * var(--u)); border-radius: calc(25 * var(--u)); background: #323537; box-shadow: 0 calc(2 * var(--u)) calc(4 * var(--u)) #0002, 0 calc(6 * var(--u)) calc(12 * var(--u)) #0003; }
+    .composer-meta { height: calc(45 * var(--u)); padding: 0 calc(16 * var(--u)) 0 calc(21 * var(--u)); display: flex; align-items: center; gap: calc(25 * var(--u)); font-size: calc(16 * var(--u)); color: #9699a2; }
+    .meta-item { display: inline-flex; align-items: center; gap: calc(6 * var(--u)); }
+    .composer-meta .icon { width: calc(17 * var(--u)); height: calc(17 * var(--u)); }
+    .meta-divider { height: calc(14 * var(--u)); width: 1px; background: #64666b; margin-left: calc(-2 * var(--u)); }
+    .access { display: inline-flex; align-items: center; gap: calc(5 * var(--u)); margin-left: auto; padding: 0 calc(10 * var(--u)); border-radius: calc(18 * var(--u)); color: #a49ba0; background: #513437; font-weight: 650; line-height: calc(25 * var(--u)); }
+    .access .icon { color: #ef3538; }
+    .status-circle { width: calc(17 * var(--u)); height: calc(17 * var(--u)); border: calc(3 * var(--u)) solid #666b70; border-radius: 50%; margin-left: calc(-5 * var(--u)); }
+    .input-area { position: absolute; inset: calc(45 * var(--u)) 0 0; border: 1px solid #535658; border-radius: calc(23 * var(--u)); background: #303335; }
+    .placeholder { position: absolute; top: calc(17 * var(--u)); left: calc(18 * var(--u)); color: #777b80; font-size: calc(20 * var(--u)); }
+    .input-toolbar { position: absolute; bottom: calc(10 * var(--u)); left: calc(13 * var(--u)); right: calc(12 * var(--u)); display: flex; align-items: center; height: calc(36 * var(--u)); gap: calc(23 * var(--u)); }
+    .round-button { display: inline-flex; align-items: center; justify-content: center; width: calc(34 * var(--u)); height: calc(34 * var(--u)); border-radius: 50%; background: #2d3032; color: #afb3b7; }
+    .round-button .icon { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
+    .mode { font-size: calc(20 * var(--u)); }
+    .model { display: inline-flex; align-items: center; gap: calc(8 * var(--u)); margin-left: auto; font-size: calc(20 * var(--u)); color: #b2b4b9; }
+    .model .icon { width: calc(13 * var(--u)); height: calc(13 * var(--u)); }
+    .microphone { color: #b0b4b8; }
+    .microphone .icon { width: calc(22 * var(--u)); height: calc(22 * var(--u)); }
+    .send { margin-left: calc(-9 * var(--u)); color: #45494c; }
+    @media (max-aspect-ratio: 6/5) {
+      :root { --u: calc(100vw / 1100); }
+      .welcome { width: 82%; }
+      .welcome h1 { font-size: calc(34 * var(--u)); }
+      .context { font-size: calc(18 * var(--u)); }
+      .composer { left: 5%; right: 5%; }
+      .composer-meta { gap: calc(14 * var(--u)); }
+    }
+    /* Extra conversation text uses the original row styles. */
+    .project-list { position: absolute; top: calc(var(--start-height) + var(--heading-height) + 1px); bottom: calc(16 * var(--u)); left: 0; right: 0; overflow-y: auto; scrollbar-width: none; font-size: calc(19 * var(--u)); }
+    .project-list::-webkit-scrollbar { display: none; }
+    .conversation-label { overflow: hidden; text-overflow: ellipsis; }
+    .conversation time { margin-left: auto; padding: 0 calc(24 * var(--u)) 0 calc(8 * var(--u)); flex: none; color: var(--muted); font-size: calc(14 * var(--u)); }
+
+    /* Plugin page content; the shared application shell stays unchanged. */
+    .workspace.plugin-workspace { --p: clamp(.72px, calc((100vw - var(--left-width)) / 1370), 1.12px); overflow-y: auto; background: var(--surface); color: #eeeef0; scrollbar-width: thin; scrollbar-color: #3c3c3d transparent; }
+    .plugin-workspace::-webkit-scrollbar { width: 6px; }
+    .plugin-workspace::-webkit-scrollbar-thumb { border-radius: 4px; background: #3c3c3d; }
+    .plugins-page { min-height: 100%; padding: calc(44 * var(--p)) calc(63 * var(--p)) calc(28 * var(--p)); }
+    .plugins-header { display: flex; align-items: flex-start; justify-content: space-between; gap: calc(24 * var(--p)); padding: 0 calc(11 * var(--p)); }
+    .plugins-heading h1 { margin: 0; font-size: calc(30 * var(--p)); font-weight: 600; line-height: calc(45 * var(--p)); }
+    .plugins-description { display: flex; align-items: center; gap: calc(10 * var(--p)); margin: 0; color: #c5c8cc; font-size: calc(20 * var(--p)); line-height: calc(30 * var(--p)); }
+    .plugins-description .icon { width: calc(17 * var(--p)); height: calc(17 * var(--p)); color: #8c9299; }
+    .plugins-actions { display: flex; align-items: center; gap: calc(28 * var(--p)); padding-top: calc(1 * var(--p)); }
+    .plugins-refresh { display: flex; align-items: center; justify-content: center; width: calc(32 * var(--p)); height: calc(48 * var(--p)); color: #8e949b; }
+    .plugins-refresh .icon { width: calc(25 * var(--p)); height: calc(25 * var(--p)); stroke-width: 1.2; }
+    .plugins-add { display: inline-flex; align-items: center; justify-content: center; gap: calc(8 * var(--p)); height: calc(48 * var(--p)); padding: 0 calc(21 * var(--p)); border-radius: calc(15 * var(--p)); background: #fafafa; color: #181a1e; font-size: calc(20 * var(--p)); line-height: 1.4; white-space: nowrap; }
+    .plugins-add .icon { width: calc(18 * var(--p)); height: calc(18 * var(--p)); stroke-width: 1.4; }
+    .plugins-group { margin-top: calc(46 * var(--p)); }
+    .plugins-group-title { display: flex; align-items: baseline; gap: calc(12 * var(--p)); margin: 0 calc(11 * var(--p)); font-size: calc(22 * var(--p)); line-height: calc(33 * var(--p)); font-weight: 500; }
+    .plugins-group-title span { color: #82878e; font-size: calc(20 * var(--p)); font-weight: 400; }
+    .plugins-list { margin-top: calc(14 * var(--p)); }
+    .plugin-row { display: flex; align-items: center; gap: calc(20 * var(--p)); min-height: calc(101 * var(--p)); padding: calc(12 * var(--p)); border-radius: calc(26 * var(--p)); }
+    .plugin-row.is-highlighted { background: #34373a; }
+    .plugin-art { display: flex; align-items: center; justify-content: center; flex: none; width: calc(74 * var(--p)); height: calc(74 * var(--p)); border: 1px solid #3d3e40; border-radius: calc(20 * var(--p)); background: #272a2c; }
+    .plugin-art svg { width: calc(36 * var(--p)); height: calc(36 * var(--p)); }
+    .plugin-copy { flex: 1 1 auto; min-width: 0; padding: calc(1 * var(--p)) 0; }
+    .plugin-name { display: flex; flex-wrap: wrap; align-items: center; gap: calc(12 * var(--p)); margin: 0; font-size: calc(22 * var(--p)); font-weight: 500; line-height: calc(33 * var(--p)); }
+    .plugin-badge { padding: 0 calc(10 * var(--p)); border-radius: calc(16 * var(--p)); background: #202630; color: #85b2ff; font-size: calc(15 * var(--p)); line-height: calc(27 * var(--p)); font-weight: 400; }
+    .plugin-detail { margin: 0; color: #adb2ba; font-size: calc(20 * var(--p)); font-weight: 400; line-height: calc(31 * var(--p)); }
+    .plugin-switch { position: relative; appearance: none; -webkit-appearance: none; flex: none; width: calc(54 * var(--p)); height: calc(30 * var(--p)); margin: 0 0 0 calc(20 * var(--p)); border: 0; border-radius: calc(20 * var(--p)); background: #3c3c3d; cursor: pointer; }
+    .plugin-switch::after { content: ""; position: absolute; top: calc(3 * var(--p)); left: calc(3 * var(--p)); width: calc(24 * var(--p)); height: calc(24 * var(--p)); border-radius: 50%; background: #b3b8bf; transition: transform 160ms ease, background 160ms ease; }
+    .plugin-switch:checked { background: #f7f7f8; }
+    .plugin-switch:checked::after { transform: translateX(calc(24 * var(--p))); background: #121418; }
+    .plugin-switch:focus-visible, .plugins-add:focus-visible, .plugins-refresh:focus-visible { outline: 2px solid #8baff0; outline-offset: 4px; }
+    .plugins-installed { margin-top: calc(40 * var(--p)); }
+    .plugins-installed .plugin-name { font-weight: 650; }
+    @media (max-width: 1100px) {
+      .plugins-page { padding-left: 24px; padding-right: 24px; }
+      .plugin-row { gap: 12px; }
+      .plugin-art { width: 48px; height: 48px; border-radius: 14px; }
+      .plugins-header { padding-left: 0; padding-right: 0; }
+      .plugins-actions { gap: 12px; }
+      .plugins-add { padding: 0 12px; }
+      .plugin-switch { margin-left: 8px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .plugin-switch::after { transition: none; } }
+  </style>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <symbol id="workspace-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7.5"/><path d="m15.5 15.5 6 6"/></symbol>
+      <symbol id="workspace-controls" viewBox="0 0 24 24"><path d="M2 7h9m4 0h7M2 17h4m4 0h12"/><circle cx="13" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+      <symbol id="workspace-folder-plus" viewBox="0 0 24 24"><path d="M13 6h-2L8 3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6M19 2v8m-4-4h8"/></symbol>
+      <symbol id="brand-whale" viewBox="0 0 64 48"><path fill="currentColor" stroke="none" d="M53 9c4 1 7-1 10-4-1 7-3 12-8 15 2 3 3 6 2 10l-6-4c-2 9-10 16-21 16C16 43 5 36 3 25 1 15 8 7 18 7c5-1 10 0 14 2l6-7 1 9c5 2 9 6 12 11l3-6-1-7ZM10 17c-4 7 0 16 8 20 7 3 15 3 21-1-8 0-15-5-18-12l-2 7c-6-2-9-7-9-14Z"/><circle cx="43" cy="22" r="1.6" fill="#202123" stroke="none"/><path d="m32 16 7 7-2-8" stroke="#202123" stroke-width="2"/></symbol>
+      <symbol id="message-plus" viewBox="0 0 24 24"><path d="M7 20 3 21l1-5a9 9 0 1 1 3 4Z"/><path d="M12 7v8m-4-4h8"/></symbol>
+      <symbol id="plugin-orbit" viewBox="0 0 24 24"><path d="M12 1c4 0 4 7 4 7s7 0 7 4-7 4-7 4 0 7-4 7-4-7-4-7-7 0-7-4 7-4 7-4 0-7 4-7Z"/><path d="m7 10 10 4"/></symbol>
+      <symbol id="account-usage" viewBox="0 0 24 24"><path d="M5 20a10 10 0 1 1 14 0M12 4v2M4 12h2m12 0h2m-8 0 5-5"/><circle cx="12" cy="12" r="2"/></symbol>
+      <symbol id="account-pet" viewBox="0 0 24 24"><path d="M4 16C4 9 7 3 12 3s8 6 8 13c0 4-3 6-8 6s-8-2-8-6Z"/><circle cx="9" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="13" r="1" fill="currentColor" stroke="none"/><path d="M11 17h2"/></symbol>
+      <symbol id="account-invite" viewBox="0 0 24 24"><path d="m22 2-7 20-5-8-8-5 20-7ZM10 14 22 2"/></symbol>
+      <symbol id="account-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="5"/><path d="m5 5 3.5 3.5M15.5 15.5 19 19M5 19l3.5-3.5m7-7L19 5"/></symbol>
+      <symbol id="account-logout" viewBox="0 0 24 24"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5m-1-9h13m-5-5 5 5-5 5"/></symbol>
+      <symbol id="rail-home" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="m10.1 3.3-7 5.8A3 3 0 0 0 2 11.4V12a1 1 0 0 0 1.5.9V20a2 2 0 0 0 2 2H9v-6a3 3 0 0 1 6 0v6h3.5a2 2 0 0 0 2-2v-7.1A1 1 0 0 0 22 12v-.6a3 3 0 0 0-1.1-2.3l-7-5.8a3 3 0 0 0-3.8 0Z"/></symbol>
+      <symbol id="rail-avatar" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#fafafa" stroke="none"/><path d="M8 34c1-8 5-10 12-10s11 2 12 10Z" fill="#151617" stroke="none"/><path d="m17 8 3-4 3 4-1 5 4 9-6 4-6-4 4-9Zm-2 8-4 8m14-8 4 8M20 8v17m-5-7h10" stroke="#151617" stroke-width="1.3"/></symbol>
+      <symbol id="panel" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M9 3v18"/></symbol>
+      <symbol id="folder" viewBox="0 0 24 24"><path d="M3 20h17a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-9L8 3H3a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1Z"/></symbol>
+      <symbol id="folder-open" viewBox="0 0 24 24"><path d="M3 19V5a1 1 0 0 1 1-1h5l3 3h7v4M3 20l3-9h16l-3 9Z"/></symbol>
+      <symbol id="minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+      <symbol id="square" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/></symbol>
+      <symbol id="close" viewBox="0 0 24 24"><path d="m7 7 10 10M7 17 17 7"/></symbol>
+      <symbol id="chevron" viewBox="0 0 24 24"><path d="m5 9 7 7 7-7"/></symbol>
+      <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="up" viewBox="0 0 24 24"><path d="M12 20V5m-7 7 7-7 7 7"/></symbol>
+      <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></symbol>
+      <symbol id="settings" viewBox="0 0 24 24"><path d="m9.5 3-.6 2.4-2 .9-2.2-.7-2.2 3.8 1.7 1.8v2.3l-1.7 1.7 2.2 3.9 2.3-.7 2 .9.5 2.4h4.4l.6-2.4 2-.9 2.2.7 2.2-3.9-1.7-1.7v-2.3l1.7-1.8-2.2-3.8-2.3.7-2-.9L13.9 3Z"/><circle cx="11.7" cy="12.2" r="3.2"/></symbol>
+      <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3"/></symbol>
+      <symbol id="branch" viewBox="0 0 24 24"><circle cx="6" cy="4" r="2"/><circle cx="6" cy="20" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 6v12m0-3c0-6 12-1 12-8"/></symbol>
+      <symbol id="laptop" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="12" rx="1"/><path d="m4 16-2 4h20l-2-4"/></symbol>
+      <symbol id="shield" viewBox="0 0 24 24"><path d="m12 2 8 4v6c0 5-8 10-8 10s-8-5-8-10V6Zm0 4v9m0 3v.1"/></symbol>
+
+      <linearGradient id="p-blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6db7ec"/><stop offset="1" stop-color="#4659cb"/></linearGradient>
+      <linearGradient id="p-ocean" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#37dfbb"/><stop offset="1" stop-color="#5b80ff"/></linearGradient>
+      <linearGradient id="p-purple" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e799f1"/><stop offset="1" stop-color="#5e55ef"/></linearGradient>
+      <symbol id="p-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/></symbol>
+      <symbol id="p-refresh" viewBox="0 0 24 24"><path d="M21 4v6h-6M20 10a9 9 0 1 0 0 6"/></symbol>
+      <symbol id="p-team" viewBox="0 0 36 36"><path fill="#67a8ff" d="M11 4h6v9c0 4-3 7-7 7H4v-7h5c1 0 2-1 2-2Z"/><path fill="#ffc268" d="M19 4h6v7c0 1 1 2 2 2h5v7h-6c-4 0-7-3-7-7Z"/><path fill="#6385ff" d="M4 22h6c4 0 7 3 7 7v3h-6v-3c0-1-1-2-2-2H4Z"/><path fill="#29d8c4" d="M26 22h6v5h-5c-1 0-2 1-2 2v3h-6v-3c0-4 3-7 7-7Z"/></symbol>
+      <symbol id="p-review" viewBox="0 0 36 36"><path fill="url(#p-blue)" d="m18 2 14 5v10c0 8-7 14-14 17C11 31 4 25 4 17V7Z"/><path d="m12 18 4 4 8-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="p-automation" viewBox="0 0 36 36"><path d="M31 17a13 13 0 1 0-3 10M31 6v11H20m-2-8v10l7 4" fill="none" stroke="url(#p-ocean)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="p-voice" viewBox="0 0 36 36"><path d="M5 14v8m7-13v18m7-24v30m7-22v14m5-10v6" stroke="url(#p-blue)" stroke-width="3.5"/></symbol>
+      <symbol id="p-terminal" viewBox="0 0 36 36"><path d="m8 8 9 10-9 10m14 0h10" fill="none" stroke="#659dff" stroke-width="5"/></symbol>
+      <symbol id="p-agent" viewBox="0 0 36 36"><circle cx="18" cy="18" r="16" fill="#252249"/><path d="M18 2c0 10-6 16-16 16C2 9 9 2 18 2Z" fill="url(#p-purple)"/><path d="M34 18c-10 0-16-6-16-16 9 0 16 7 16 16Z" fill="#6694ff"/><path d="M18 34c0-10 6-16 16-16 0 9-7 16-16 16Z" fill="#4c5ef4"/><path d="M2 18c10 0 16 6 16 16-9 0-16-7-16-16Z" fill="#a993ff"/></symbol>
+      <symbol id="p-subagent" viewBox="0 0 36 36"><rect x="5" y="5" width="19" height="19" rx="4" fill="url(#p-blue)"/><rect x="14" y="14" width="19" height="19" rx="4" fill="#02959b" opacity=".88"/><rect x="5" y="14" width="19" height="10" rx="3" fill="#3452c9" opacity=".55"/></symbol>
+      <symbol id="p-search" viewBox="0 0 36 36"><path d="m24 24 8 8" stroke="#6793ff" stroke-width="6"/><circle cx="15" cy="15" r="10" fill="none" stroke="url(#p-ocean)" stroke-width="6"/></symbol>
+      <symbol id="p-context" viewBox="0 0 36 36"><path d="M9 18h17M18 9v18m-9 0 17-18" stroke="#658aff" stroke-width="9" stroke-linecap="round"/><circle cx="7" cy="8" r="4" fill="#4fdfd1"/><circle cx="27" cy="8" r="4" fill="#42ded1"/></symbol>
+    </defs>
+  </svg>
+
+  <header class="app-header" aria-label="应用功能区">
+    <div class="sidebar-toolbar">
+      <button aria-label="侧边栏"><svg class="icon"><use href="#panel"/></svg></button>
+      <button type="button" class="sidebar-menu-button">应用</button>
+      <button type="button" class="sidebar-menu-button">编辑</button>
+    </div>
+    <div class="titlebar">
+      <div class="tab-strip" id="tab-strip">
+      <button type="button" id="tab-scroll-left" class="tab-scroll tab-scroll-left" aria-label="向左滚动标签页" aria-controls="titlebar-tabs" title="向左滚动标签页" hidden><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></button>
+      <nav class="titlebar-tabs" id="titlebar-tabs" aria-label="顶部快捷入口">
+        <button type="button" aria-current="page" class="tab tab-board">插件</button>
+        <button type="button" class="tab tab-secondary">新会话</button>
+        <button type="button" class="tab tab-secondary tab-greeting">优化皮肤插件</button>
+        <button type="button" class="tab tab-secondary tab-resume">Vue 3 前端迁移方案</button>
+        <button type="button" class="tab tab-secondary tab-assistant">设置</button>
+      </nav>
+      <button type="button" id="tab-scroll-right" class="tab-scroll tab-scroll-right" aria-label="向右滚动标签页" aria-controls="titlebar-tabs" title="向右滚动标签页" hidden><svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></button>
+      </div>
+      <div class="window-actions" aria-hidden="true">
+        <svg class="icon"><use href="#panel"/></svg><span class="separator"></span>
+        <span class="window-button"><svg class="icon"><use href="#minus"/></svg></span><span class="window-button"><svg class="icon"><use href="#square"/></svg></span><span class="window-button"><svg class="icon"><use href="#close"/></svg></span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="side-rail" aria-label="侧边快捷入口">
+    <div class="rail-content">
+      <div class="rail-group">
+        <button type="button" class="rail-button" aria-label="首页" title="首页"><svg class="icon" aria-hidden="true"><use href="#rail-home"/></svg></button>
+        <button type="button" class="rail-button rail-button--plugin is-active" aria-current="page" aria-label="插件" title="插件"><svg class="icon" aria-hidden="true"><use href="#plugin-orbit"/></svg></button>
+        <button type="button" class="rail-button" aria-label="自动化任务" title="自动化任务"><svg class="icon" aria-hidden="true"><use href="#clock"/></svg></button>
+      </div>
+    </div>
+    <button type="button" id="account-trigger" class="rail-avatar" aria-label="账户菜单" title="账户菜单" aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu"><svg class="icon" aria-hidden="true"><use href="#rail-avatar"/></svg></button>
+  </nav>
+  <aside class="sidebar" aria-label="侧边栏">
+    <section class="sidebar-start" aria-label="品牌与快捷入口">
+      <div class="sidebar-brand" aria-label="DeepSeek Harness">
+        <svg class="icon brand-whale" aria-hidden="true"><use href="#brand-whale"/></svg><span class="brand-wordmark">deepseek</span><span class="brand-harness">HARNESS</span>
+      </div>
+      <button type="button" class="sidebar-new-chat"><svg class="icon" aria-hidden="true"><use href="#message-plus"/></svg><span>新会话</span><kbd>Ctrl + N</kbd></button>
+    </section>
+    <div class="divider"></div>
+    <div class="section-heading"><span>工作区</span><div class="section-actions">
+      <button type="button" class="section-action" aria-label="搜索工作区" title="搜索工作区"><svg class="icon" aria-hidden="true"><use href="#workspace-search"/></svg></button>
+      <button type="button" class="section-action" aria-label="工作区筛选设置" title="工作区筛选设置"><svg class="icon" aria-hidden="true"><use href="#workspace-controls"/></svg></button>
+      <button type="button" class="section-action" aria-label="新建文件夹" title="新建文件夹"><svg class="icon" aria-hidden="true"><use href="#workspace-folder-plus"/></svg></button>
+    </div></div>
+    <div class="project-list">
+      <div class="project-row"><svg class="icon"><use href="#folder"/></svg><strong>dsh-smooth</strong></div>
+      <div class="conversation selected">新会话</div>
+      <div class="project-row project-spaced"><svg class="icon"><use href="#folder"/></svg><span>lychee-depth</span></div>
+      <div class="project-row project-spaced"><svg class="icon"><use href="#folder"/></svg><span>jingyu</span></div>
+      <div class="conversation"><span class="conversation-label">帮我整理当前项目，并把改动</span><time>9天</time></div>
+      <div class="conversation"><span class="conversation-label">优化皮肤插件</span><time>12天</time></div>
+      <div class="project-row project-spaced"><svg class="icon"><use href="#folder"/></svg><span>go-blog</span></div>
+      <div class="conversation"><span class="conversation-label">Vue 3 前端迁移方案</span><time>19小时</time></div>
+      <div class="project-row project-spaced"><svg class="icon"><use href="#folder"/></svg><span>PromptForge</span></div>
+      <div class="conversation"><span class="conversation-label">整理代码并提交到 GitHub</span><time>9天</time></div>
+      <div class="conversation"><span class="conversation-label">查看自动提交 git 的实现方式</span><time>9天</time></div>
+      <div class="conversation"><span class="conversation-label">提示词优化插件实现</span><time>9天</time></div>
+      <div class="conversation"><span class="conversation-label">插件更新需重启原因排查</span><time>13天</time></div>
+      <div class="project-row project-spaced"><svg class="icon"><use href="#folder"/></svg><span>荔枝样本</span></div>
+      <div class="conversation"><span class="conversation-label">列出文件夹及其用途说明</span><time>13天</time></div>
+    </div>
+  </aside>
+  <main class="workspace plugin-workspace" aria-label="插件管理">
+    <div class="plugins-page">
+      <header class="plugins-header">
+        <div class="plugins-heading"><h1>插件</h1><p class="plugins-description">安装、启用和配置插件<svg class="icon" aria-hidden="true"><use href="#p-info"/></svg></p></div>
+        <div class="plugins-actions">
+          <button type="button" class="plugins-refresh" aria-label="刷新插件列表" title="刷新插件列表"><svg class="icon" aria-hidden="true"><use href="#p-refresh"/></svg></button>
+          <button type="button" class="plugins-add"><svg class="icon" aria-hidden="true"><use href="#plus"/></svg>添加插件</button>
+        </div>
+      </header>
+      <section class="plugins-group" aria-labelledby="official-plugins-title">
+        <h2 class="plugins-group-title" id="official-plugins-title">官方<span>8</span></h2>
+        <div class="plugins-list">
+          <article class="plugin-row">
+            <div class="plugin-art" aria-hidden="true"><svg viewBox="0 0 36 36"><use href="#p-team"/></svg></div>
+            <div class="plugin-copy"><h3 class="plugin-name">智能体团队<span class="plugin-badge">实验性</span></h3><p class="plugin-detail">启用团队协作、团队工具、成员列表和共享任务看板。</p></div>
+            <input type="checkbox" role="switch" class="plugin-switch" aria-label="启用智能体团队">
+          </article>
+          <article class="plugin-row">
+            <div class="plugin-art" aria-hidden="true"><svg viewBox="0 0 36 36"><use href="#p-review"/></svg></div>
+            <div class="plugin-copy"><h3 class="plugin-name">自动授权审查<span class="plugin-badge">实验性</span></h3><p class="plugin-detail">提供自动审查权限模式，由模型在每次工具调用前判断是否授权。</p></div>
+            <input type="checkbox" role="switch" class="plugin-switch" aria-label="启用自动授权审查" checked>
+          </article>
+          <article class="plugin-row is-highlighted">
+            <div class="plugin-art" aria-hidden="true"><svg viewBox="0 0 36 36"><use href="#p-automation"/></svg></div>
+            <div class="plugin-copy"><h3 class="plugin-name">自动化任务<span class="plugin-badge">实验性</span></h3><p class="plugin-detail">按设定的时间或周期，在会话中自动执行任务。</p></div>
+            <input type="checkbox" role="switch" class="plugin-switch" aria-label="启用自动化任务">
+          </article>
+          <article class="plugin-row">
+            <div class="plugin-art" aria-hidden="true"><svg viewBox="0 0 36 36"><use href="#p-voice"/></svg></div>
+            <div class="plugin-copy"><h3 class="plugin-name">语音输入<span class="plugin-badge">实验性</span></h3><p class="plugin-detail">在本机使用 SenseVoice 转写录音，首次使用需安装依赖。</p></div>
+            <input type="checkbox" role="switch" class="plugin-switch" aria-label="启用语音输入">
+          </article>
+          <article class="plugin-row">
+            <div class="plugin-art" aria-hidden="true"><svg viewBox="0 0 36 36"><use href="#p-terminal"/></svg></div>
+            <div class="plugin-copy"><h3 class="plugin-name">终端</h3><p class="plugin-detail">限制每条命令最多能跑多久、最多输出多少内容。</p></div>
+            
+          </article>
+          <article class="plugin-row">
+            <div class="plugin-art" aria-hidden="true"><svg viewBox="0 0 36 36"><use href="#p-agent"/></svg></div>
+            <div class="plugin-copy"><h3 class="plugin-name">Agent 循环</h3><p class="plugin-detail">控制 Agent 派发工具调用的方式。</p></div>
+            
+          </article>
+          <article class="plugin-row">
+            <div class="plugin-art" aria-hidden="true"><svg viewBox="0 0 36 36"><use href="#p-subagent"/></svg></div>
+            <div class="plugin-copy"><h3 class="plugin-name">子智能体</h3><p class="plugin-detail">设置子智能体的递归层级、数量和模型。</p></div>
+            
+          </article>
+          <article class="plugin-row">
+            <div class="plugin-art" aria-hidden="true"><svg viewBox="0 0 36 36"><use href="#p-search"/></svg></div>
+            <div class="plugin-copy"><h3 class="plugin-name">网页搜索</h3><p class="plugin-detail">设置 DeepSeek 的搜索提供方。</p></div>
+            
+          </article>
+        </div>
+      </section>
+      <section class="plugins-group plugins-installed" aria-labelledby="installed-plugins-title">
+        <h2 class="plugins-group-title" id="installed-plugins-title">已安装<span>5</span></h2>
+        <div class="plugins-list">
+          <article class="plugin-row">
+            <div class="plugin-art" aria-hidden="true"><svg viewBox="0 0 36 36"><use href="#p-context"/></svg></div>
+            <div class="plugin-copy"><h3 class="plugin-name">billion-context</h3></div>
+            <input type="checkbox" role="switch" class="plugin-switch" aria-label="启用billion-context" checked>
+          </article>
+        </div>
+      </section>
+    </div>
+  </main>
+  <div id="account-menu" class="account-menu" role="menu" aria-label="账户菜单" aria-hidden="true" inert>
+    <div class="account-profile" role="presentation">
+      <svg class="icon" aria-hidden="true"><use href="#rail-avatar"/></svg>
+      <div><div class="account-name">黄嘎嘎</div><div class="account-plan">Plus</div></div>
+    </div>
+    <div class="account-divider" role="separator"></div>
+    <button type="button" class="account-item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#account-usage"/></svg><span>剩余用量</span><svg class="icon account-chevron" aria-hidden="true"><use href="#chevron"/></svg></button>
+    <button type="button" class="account-item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#account-invite"/></svg><span>反馈意见</span></button>
+    <button type="button" class="account-item account-item--highlight" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#settings"/></svg><span>设置</span><kbd>Ctrl+,</kbd></button>
+    <div class="account-divider" role="separator"></div>
+    <button type="button" class="account-item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#account-help"/></svg><span>帮助</span><svg class="icon account-chevron" aria-hidden="true"><use href="#chevron"/></svg></button>
+    <button type="button" class="account-item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#account-logout"/></svg><span>退出登录</span></button>
+  </div>
+  <script>
+    (() => {
+      const trigger = document.getElementById('account-trigger');
+      const menu = document.getElementById('account-menu');
+      const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+      let isOpen = false;
+
+      function setMenuOpen(open, focusFirst = false, restoreFocus = false) {
+        isOpen = open;
+        menu.classList.toggle('is-open', open);
+        menu.inert = !open;
+        menu.setAttribute('aria-hidden', String(!open));
+        trigger.setAttribute('aria-expanded', String(open));
+        if (open && focusFirst) items[0].focus({ preventScroll: true });
+        if (!open && restoreFocus) trigger.focus({ preventScroll: true });
+      }
+
+      trigger.addEventListener('click', (event) => {
+        setMenuOpen(!isOpen, event.detail === 0);
+      });
+      trigger.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        event.preventDefault();
+        setMenuOpen(true);
+        items[event.key === 'ArrowUp' ? items.length - 1 : 0].focus({ preventScroll: true });
+      });
+      document.addEventListener('pointerdown', (event) => {
+        if (isOpen && !menu.contains(event.target) && !trigger.contains(event.target)) {
+          setMenuOpen(false);
+        }
+      });
+      document.addEventListener('keydown', (event) => {
+        if (isOpen && event.key === 'Escape') {
+          event.preventDefault();
+          setMenuOpen(false, false, true);
+        }
+      });
+      menu.addEventListener('keydown', (event) => {
+        if (event.key === 'Tab') {
+          setMenuOpen(false, false, true);
+          return;
+        }
+        const index = items.indexOf(document.activeElement);
+        let next;
+        if (event.key === 'ArrowDown') next = (index + 1) % items.length;
+        if (event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = items.length - 1;
+        if (next === undefined) return;
+        event.preventDefault();
+        items[next].focus({ preventScroll: true });
+      });
+    })();
+  </script>
+  <script>
+    (() => {
+      const tabs = document.getElementById('titlebar-tabs');
+      const left = document.getElementById('tab-scroll-left');
+      const right = document.getElementById('tab-scroll-right');
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+      let pendingFrame = false;
+
+      function updateButtons() {
+        const maxScroll = Math.max(0, tabs.scrollWidth - tabs.clientWidth);
+        left.hidden = maxScroll <= 1 || tabs.scrollLeft <= 1;
+        right.hidden = maxScroll <= 1 || tabs.scrollLeft >= maxScroll - 1;
+        const focused = document.activeElement;
+        if ((focused === left && left.hidden) || (focused === right && right.hidden)) {
+          const next = !left.hidden ? left : !right.hidden ? right : tabs.querySelector('.tab');
+          if (next) next.focus({ preventScroll: true });
+        }
+      }
+
+      function scheduleUpdate() {
+        if (pendingFrame) return;
+        pendingFrame = true;
+        requestAnimationFrame(() => {
+          pendingFrame = false;
+          updateButtons();
+        });
+      }
+
+      function scrollTabs(direction) {
+        tabs.scrollBy({
+          left: direction * Math.max(120, Math.round(tabs.clientWidth * .7)),
+          behavior: reducedMotion.matches ? 'auto' : 'smooth'
+        });
+        scheduleUpdate();
+      }
+
+      left.addEventListener('click', () => scrollTabs(-1));
+      right.addEventListener('click', () => scrollTabs(1));
+      tabs.addEventListener('scroll', scheduleUpdate, { passive: true });
+      window.addEventListener('resize', scheduleUpdate);
+      tabs.addEventListener('focusin', (event) => {
+        const tab = event.target.closest('.tab');
+        if (!tab || !tabs.contains(tab)) return;
+        const viewport = tabs.getBoundingClientRect();
+        const bounds = tab.getBoundingClientRect();
+        const start = viewport.left + (left.hidden ? 0 : left.offsetWidth + 4);
+        const end = viewport.right - (right.hidden ? 0 : right.offsetWidth + 4);
+        let distance = 0;
+        if (bounds.left < start) distance = bounds.left - start;
+        else if (bounds.right > end) distance = bounds.right - end;
+        if (distance) tabs.scrollBy({ left: distance, behavior: 'auto' });
+        scheduleUpdate();
+      });
+
+      const resizeObserver = new ResizeObserver(scheduleUpdate);
+      function observeTabs() {
+        resizeObserver.disconnect();
+        resizeObserver.observe(tabs);
+        for (const tab of tabs.children) resizeObserver.observe(tab);
+      }
+      const mutationObserver = new MutationObserver(() => {
+        observeTabs();
+        scheduleUpdate();
+      });
+      mutationObserver.observe(tabs, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'hidden']
+      });
+      observeTabs();
+      if (document.fonts) document.fonts.ready.then(scheduleUpdate);
+      updateButtons();
+    })();
+  </script>
+</body>
+</html>
