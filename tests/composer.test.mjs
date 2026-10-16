@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 
-const source = await readFile(new URL('../src/composer.js', import.meta.url), 'utf8');
+const read = (name) => readFile(new URL(`../src/${name}`, import.meta.url), 'utf8');
+// The bundle order: composer.js watches surfaces through watch.js.
+const source = `${await read('watch.js')}\n${await read('composer.js')}`;
 const sandbox = { PLUGIN_ID: 'smooth', hostPart: name => `.${name}` };
 runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint;', sandbox);
 

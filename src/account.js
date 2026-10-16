@@ -178,7 +178,10 @@ function installAccountMenu({ slots, text }) {
             setTarget(menu?.querySelector(accountPart('viewport')) || null);
           };
           observe();
-          const observer = new MutationObserver(observe);
+          // This one needs `aria-expanded` as well, so it keeps its own observer; the
+          // callback is coalesced to one pass per frame, which is what keeps the mount
+          // storm from turning into one document lookup per commit.
+          const observer = new MutationObserver(coalesceFrame(observe));
           observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-expanded'] });
           return () => { observer.disconnect(); marked?.removeEventListener('keydown', onKey, true); marked?.removeAttribute('data-smooth-account-menu'); };
         }, []);

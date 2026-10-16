@@ -77,11 +77,18 @@ function loadClient({ stored, unavailable = [] } = {}) {
       createElement: () => { const style = { dataset: {}, remove: () => styles.delete(style) }; return style; },
       head: { append: (style) => styles.add(style) },
       styleSheets: [],
+      // The skin watches host surfaces through one body observer; nothing here matches
+      // during startup, which is the state the first frame is in.
+      querySelector: () => null,
       getElementById: (id) => (id === 'dsh-smooth-splash' ? { querySelector: (selector) => (selector === 'animate' ? swim : null) } : null),
       body: {
         toggleAttribute: (name, enabled) => enabled ? attributes.add(name) : attributes.delete(name),
         removeAttribute: (name) => attributes.delete(name),
       },
+    },
+    MutationObserver: class {
+      constructor(callback) { this.callback = callback; }
+      observe() {} disconnect() {}
     },
   });
   assert.equal(registration.id, manifest.name);

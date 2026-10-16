@@ -64,15 +64,13 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
   const ui = require('@deepseek-ai/dsh-client-ui-primitives');
   const disposers = [];
   const hero = '[data-content-phase="hero"]';
+  // The three targets this module decorates share one coalesced body observer; see
+  // src/watch.js for why a per-target observer was a startup cost.
+  const surfaces = createSurfaceWatcher();
+  disposers.push(() => surfaces.dispose());
   function useTarget(selector) {
     const [target, setTarget] = React.useState(null);
-    React.useEffect(() => {
-      const update = () => setTarget(document.querySelector(selector));
-      update();
-      const observer = new MutationObserver(update);
-      observer.observe(document.body, { childList: true, subtree: true });
-      return () => observer.disconnect();
-    }, [selector]);
+    React.useEffect(() => surfaces.watch(selector, setTarget), [selector]);
     return target;
   }
   function useBranch(sessionId, cwd) {

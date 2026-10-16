@@ -44,7 +44,8 @@ DSH 界面美化插件，依据 `样例图/index.html`、`settings.html` 及预�
 - 顶部标签通过 `layout.selectPanel()`、`uiWorkspace.startSession()` / `openSession()` 和原生设置 store 导航。打开对话或页面先显示临时标签；在内容区输入、修改表单或点击操作控件后固定，单纯浏览不会累积标签，也不会自动加入其他历史会话。双击标签也可固定。点击关闭按钮或在标签上按 Delete 仅关闭标签，保留对话数据；关闭当前标签后切换到相邻标签，全部关闭时回到首页，且首页由页面本身承担，不占标签位也不作为固定目标。标签状态属于本次客户端生命周期。通过 slots 发布的共享 store 读取侧栏宽度和设置状态；在原生设置插槽内渲染标签，保留设置窗口的焦点管理。三块外观选项调用原生 `theme.setTheme()`，关闭时撤销插槽覆盖。
 - 配色通过 `theme.overrideTokens()` 提供 light / dark 两套值；样式以 `body[data-smooth-skin]` 为开关。选择器优先使用宿主的 `data-plugin-panel`、`data-plugin-package`、`data-composer-card` 等真实属性。没有公开属性的部位只匹配已核对的 CSS 模块语义后缀，不绑定构建哈希；宿主大版本升级后需重新检查这些部位。
 - 启动动画由 Host 半的 `bootInjections()` 注入 `style`、`html`、`script` 三行纯数据，服务端与桌面端使用相同内容。鲸鱼路径直接来自宿主 `FishLogo`（23.16 × 17.04），坐标取 2 位小数（最坏偏差 0.005 用户单位 ≈ 176px 下的 0.04px）：三行合计 5.2 KB（gzip 2.4 KB）；样式行在注入时去掉注释与缩进（该表内没有任何字符串，所以只删读者才需要的东西），源码里的版本保持可读。标记里没有 SMIL，脚本里没有几何运算：注入脚本只做三件事——读 `localStorage` 与减少动态效果偏好（不满足就摘掉整层）、等 `#root` 挂载、最短停留后 340ms 淡出并在 640ms 后清理；应用未挂载时最多多等 8s。宿主 index 里的 `<div id="root">` 是静态节点（已在 app.asar 的 `dsh-web-frontend/dist/index.html` 核对），所以等待只观察它的直接子节点，不再把应用挂载期间的每一次 DOM 变更都收进来；只有 `#root` 尚未解析出来时才退回观察整个文档子树，行为与之前一致。设置在下次页面加载时生效。
-- 启动开销的可复现度量在 `tools/startup-profile.mjs`：产物字节与 gzip、Host/Client 两半的模块解析求值、`factory` 与 `apply` 耗时，以及样式表的规则数、选择器数、`:is(`/`:has(` 计数。它用 V8（与 Chromium 同引擎）测量并扣除新建上下文的固定开销，因此样式重算、首屏绘制与传输时间不在其内，那几项只能在浏览器 DevTools 里读。
+- 启动开销的可复现度量在 `tools/startup-profile.mjs`：产物字节与 gzip、Host/Client 两半的模块解析求值、`factory` 与 `apply` 耗时，以及样式表的规则数、选择器数、`:is(`/`:has(` 计数。它用 V8（与 Chromium 同引擎）测量并扣除新建上下文的固定开销，因此样式重算、首屏绘制与传输时间不在其内，那几项只能在浏览器 DevTools 里读。浏览器侧的对照测量（真实时间、合成外壳、逐阶段计时）另有一份本地脚本，结论记在这里：外壳挂载期间**样式重算**是这份皮肤为启动付出的主要成本，其次才是 client 包的取回/解析/求值（约 6ms）；`src/watch.js` 就是据此把等待宿主表面的 observer 收成一个、并把检查按帧合并——启动期对整篇文档的查询从每次 commit 一次降到每帧一次。字节上并没有收益：`watch.js` 净增约 2.8 KB（`lib/client.js` 151538 → 154294 字节），换来的是挂载期的查询次数，而不是包体。
+- 等待宿主表面（输入卡片、英雄区、账号菜单）统一走 `src/watch.js`：一个 `MutationObserver(document.body, {childList, subtree})` 服务全部 watcher，回调合并到一帧一次，最后一个 watcher 释放时 observer 一并断开；每个 watcher 的首次检查仍是同步的，所以它装饰的元素在首帧就位。这样 React 挂载期的多次 commit 只换来一次整文档查询，而不是每个 commit 每个 watcher 各一次。账号菜单需要 `aria-expanded`，因此保留自己的 observer，但回调同样按帧合并。
 - 设置页的「预览」按钮把 `src/boot.js` 这份唯一定义再用一次：`splashInnerHtml()` 渲染同一个 `#dsh-smooth-splash`，时长仍取 `SPLASH_HOLD_MS` / `SPLASH_SETTLE_MS`，动画也来自同一份样式表，所以预览与真播不会各写一套。它 portal 到 `body`，只在点击后挂载，播完即卸载；若当前页面没有收到 Host 注入的样式表（旧 index、插件后装），客户端会补一份带 `data-plugin` 标记的副本，随插件卸载一起移除。系统开启「减少动态效果」时按钮禁用并在说明里写明原因——那种情况下启动也不会播。
 
 ## 开发
@@ -79,6 +80,7 @@ locale/{zh,en}.json  插件管理页显示的标题与描述
 src/shared.js     调色板、主题令牌映射、状态规范化、locale 词条
 src/skin.js       作用域样式表
 src/boot.js       启动动画唯一定义：注入 index 的样式/标记/脚本 + 设置页预览
+src/watch.js      等待宿主表面：一个共享的 body observer + 按帧合并的检查
 src/composer.js   真实 Git 分支读取、输入框信息栏与原生控件 portal
 src/account.js    账号资料、向下展开的真实余额与原生账号菜单扩展
 src/layout.js     原生导航标签、共享布局连接与三块外观选项

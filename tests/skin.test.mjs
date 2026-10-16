@@ -7,6 +7,7 @@ const read = (url) => readFile(new URL(url, import.meta.url), 'utf8');
 const shared = await read('../src/shared.js');
 const skin = await read('../src/skin.js');
 const boot = await read('../src/boot.js');
+const watch = await read('../src/watch.js');
 const client = await read('../src/client.js');
 const host = await read('../src/host.js');
 const layout = await read('../src/layout.js');
@@ -175,7 +176,7 @@ test('the built artifacts exist and agree with the sources', async () => {
   const index = await read('../lib/index.js');
   const bundle = await read('../lib/client.js');
   assert.equal(index, `${shared}\n${boot}\n${host}`, 'rebuild the Host artifact after changing its sources');
-  assert.equal(bundle, `window.__ModuleLoader__.load({id:'dsh-smooth-skin',factory:(require)=>{const exports={};\n${shared}\n${skin}\n${boot}\n${composer}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`, 'rebuild the Client artifact after changing its sources');
+  assert.equal(bundle, `window.__ModuleLoader__.load({id:'dsh-smooth-skin',factory:(require)=>{const exports={};\n${shared}\n${skin}\n${boot}\n${watch}\n${composer}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`, 'rebuild the Client artifact after changing its sources');
   assert.ok(index.includes(shared.trim().slice(0, 60)));
   assert.ok(index.includes('webserver/index-inject'));
   assert.ok(index.includes('export default plugin'));
