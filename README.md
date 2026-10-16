@@ -15,7 +15,7 @@ DSH 界面美化插件，依据 `样例图/index.html`、`settings.html` 及预�
 - 插件页保留原生布局、图标、列表和开关；整页设置不再沿用样例图的大画布比例，改用 Harness 自身的界面尺度（导航 32px 行高、13px 字，表单 52px 行高、14px 标题、13px 说明、30px 选择器、36×20 开关），外观选项仍为三列卡片。左侧导航按「账户 / 应用 / 扩展 / 外观」分为四组：宿主把 `settings.section` 渲染成一个扁平列表，导航项身上没有 id 或分组属性，因此分组标题是按位置锚定的，增删设置项会连带移动分组边界
 - 滚动条默认细线，滚动时在 160ms 内变粗，停止 650ms 后用 280ms 渐细；保持原生拖动和固定轨道宽度，减少动态效果模式下直接切换粗细。宿主没有全局滚动条规则，因此自定义样式只作用于应用自身的表层（会话滚动、侧栏、设置、菜单）：正文流内部的嵌套滚动容器保持平台叠加式滚动条，不为宽表格、代码块预留 8px 槽位
 - 强调色：`#8fb7ff`（品牌）与 `#ffcd96`（暖色点缀）
-- 启动动画随 index 一起注入，首帧直接显示宿主 FishLogo 的内联矢量鲸鱼。图标宽度为 112–176px，深色显示白鲸、浅色显示黑鲸，没有文字、图标底板、边框、进度线或彩色光晕；整个开场**只有一个动作**，是从「应用启动期间主线程很忙」这个前提出发的：CSS 摆动（`transform-origin:50% 60%`，`will-change:transform` 单独成层交给 compositor），周期 2.4s、幅度 `rotate(-2.4deg)/translate(-.3px,-.5px)` → `rotate(1deg)/translate(.2px,.15px)`，比英雄区 hover 时更慢更小，掉一帧也看不出来。曾经的 SMIL 摆尾已去掉：它每帧都要在主线程重算 `d`，正是启动窗口里最不该有的活，去掉后开场没有任何逐帧 JavaScript、没有任何几何动画，注入体积也从约 24KB 降到 6.9KB。鲸鱼自身没有入场或出场动画——开场层首帧就是最终样子，只在交接时 340ms 淡出一次，随后外壳各部件用同一组纯透明度淡入（错落靠延迟，没有位移）。最短停留 1500ms 并等应用挂载后淡出，保留启动动画开关和减少动态效果时自动跳过。`设置 → Smooth → 启动动画` 右侧的「预览」会就地重播一次：同一份标记、同一份样式、同一组时长，与真启动完全一致，点完即时可见，不用重开应用
+- 启动动画随 index 一起注入，首帧直接显示宿主 FishLogo 的内联矢量鲸鱼。图标宽度为 112–176px，深色显示白鲸、浅色显示黑鲸，没有文字、图标底板、边框、进度线或彩色光晕；整段开场**没有任何主线程动画**，这是被「应用启动期间主线程很忙」逼出来的结论：唯一动作是挂在**外层 HTML 盒子**上的 CSS 摆动（不是里面的 svg），`transform-origin:50% 60%` + `will-change:transform` 让它单独成层、交给 compositor——鲸鱼只光栅化一次，之后移动的是合成器里那张纹理，主线程被 bundle 解析和首次 mount 占满时它照跑；周期 2.4s、幅度 `rotate(-2.4deg)/translate(-.3px,-.5px)` → `rotate(1deg)/translate(.2px,.15px)`，比英雄区 hover 时更慢更小，掉一帧也看不出来。英雄区那套 SMIL 摆尾（`d` 变形）**没有采用**：它必须在主线程逐帧重算几何，正是启动窗口里最不该有的活。鲸鱼自身没有入场或出场动画——开场层首帧就是最终样子，只在交接时 340ms 淡出一次，随后外壳各部件用同一组纯透明度淡入（错落靠延迟，没有位移）。最短停留 1500ms 并等应用挂载后淡出，保留启动动画开关和减少动态效果时自动跳过。`设置 → Smooth → 启动动画` 右侧的「预览」会就地重播一次：同一份标记、同一份样式、同一组时长，与真启动完全一致，点完即时可见，不用重开应用
 - 光感集中在输入卡片、选中标签与导航项：左上方向的轻微渐变配合顶部内高光，输入框聚焦时增加柔和的强调色反光；按钮悬停和按下以 160ms 平滑明暗反馈，减少动态效果模式下直接切换
 - 原生任务清单采用紧凑标题栏与统一行距，进行中的任务有淡强调色背景；长任务标题自然换行，列表高度随窗口受限并保留内部滚动。展开与收起恢复原生即时切换，任务状态、计数和折叠继续由宿主处理
 - 原生问答卡片统一题目、选项及说明的文字层次，说明独立分行，选中项使用淡蓝底色；长问题和选项可分别滚动，底部翻页与提交区保持可见，窄卡片自动重排。保留原生单选、多选、自定义答案、倒计时、草稿与提交逻辑
@@ -43,7 +43,8 @@ DSH 界面美化插件，依据 `样例图/index.html`、`settings.html` 及预�
 - 首页权限选择通过 React portal 放入输入框顶部，模式选择放入底部；完整保留原生组件的 locale、store、inject 和确认交互。关闭皮肤时撤销插槽覆盖和 portal，恢复原生位置；不手动搬移宿主 React 管理的 DOM。
 - 顶部标签通过 `layout.selectPanel()`、`uiWorkspace.startSession()` / `openSession()` 和原生设置 store 导航。打开对话或页面先显示临时标签；在内容区输入、修改表单或点击操作控件后固定，单纯浏览不会累积标签，也不会自动加入其他历史会话。双击标签也可固定。点击关闭按钮或在标签上按 Delete 仅关闭标签，保留对话数据；关闭当前标签后切换到相邻标签，全部关闭时回到首页，且首页由页面本身承担，不占标签位也不作为固定目标。标签状态属于本次客户端生命周期。通过 slots 发布的共享 store 读取侧栏宽度和设置状态；在原生设置插槽内渲染标签，保留设置窗口的焦点管理。三块外观选项调用原生 `theme.setTheme()`，关闭时撤销插槽覆盖。
 - 配色通过 `theme.overrideTokens()` 提供 light / dark 两套值；样式以 `body[data-smooth-skin]` 为开关。选择器优先使用宿主的 `data-plugin-panel`、`data-plugin-package`、`data-composer-card` 等真实属性。没有公开属性的部位只匹配已核对的 CSS 模块语义后缀，不绑定构建哈希；宿主大版本升级后需重新检查这些部位。
-- 启动动画由 Host 半的 `bootInjections()` 注入 `style`、`html`、`script` 三行纯数据，服务端与桌面端使用相同内容。鲸鱼路径直接来自宿主 `FishLogo`（23.16 × 17.04），整段开场没有 SMIL、没有逐帧 JavaScript：唯一的动效是样式表里的 CSS 摆动，标记本身是静态剪影。注入脚本只做三件事——读 `localStorage` 与减少动态效果偏好（不满足就摘掉整层）、等 `#root` 挂载、最短停留后 340ms 淡出并在 640ms 后清理；应用未挂载时最多多等 8s。设置在下次页面加载时生效。
+- 启动动画由 Host 半的 `bootInjections()` 注入 `style`、`html`、`script` 三行纯数据，服务端与桌面端使用相同内容。鲸鱼路径直接来自宿主 `FishLogo`（23.16 × 17.04），坐标取 2 位小数（最坏偏差 0.005 用户单位 ≈ 176px 下的 0.04px）：三行合计 5.2 KB（gzip 2.4 KB）；样式行在注入时去掉注释与缩进（该表内没有任何字符串，所以只删读者才需要的东西），源码里的版本保持可读。标记里没有 SMIL，脚本里没有几何运算：注入脚本只做三件事——读 `localStorage` 与减少动态效果偏好（不满足就摘掉整层）、等 `#root` 挂载、最短停留后 340ms 淡出并在 640ms 后清理；应用未挂载时最多多等 8s。宿主 index 里的 `<div id="root">` 是静态节点（已在 app.asar 的 `dsh-web-frontend/dist/index.html` 核对），所以等待只观察它的直接子节点，不再把应用挂载期间的每一次 DOM 变更都收进来；只有 `#root` 尚未解析出来时才退回观察整个文档子树，行为与之前一致。设置在下次页面加载时生效。
+- 启动开销的可复现度量在 `tools/startup-profile.mjs`：产物字节与 gzip、Host/Client 两半的模块解析求值、`factory` 与 `apply` 耗时，以及样式表的规则数、选择器数、`:is(`/`:has(` 计数。它用 V8（与 Chromium 同引擎）测量并扣除新建上下文的固定开销，因此样式重算、首屏绘制与传输时间不在其内，那几项只能在浏览器 DevTools 里读。
 - 设置页的「预览」按钮把 `src/boot.js` 这份唯一定义再用一次：`splashInnerHtml()` 渲染同一个 `#dsh-smooth-splash`，时长仍取 `SPLASH_HOLD_MS` / `SPLASH_SETTLE_MS`，动画也来自同一份样式表，所以预览与真播不会各写一套。它 portal 到 `body`，只在点击后挂载，播完即卸载；若当前页面没有收到 Host 注入的样式表（旧 index、插件后装），客户端会补一份带 `data-plugin` 标记的副本，随插件卸载一起移除。系统开启「减少动态效果」时按钮禁用并在说明里写明原因——那种情况下启动也不会播。
 
 ## 开发
@@ -52,10 +53,14 @@ DSH 界面美化插件，依据 `样例图/index.html`、`settings.html` 及预�
 node build.mjs                # 生成 lib/index.js 与 lib/client.js
 node build.mjs --watch        # 监听 src/ 增量重建
 node tools/activate-host.mjs  # 激活试验台
+node tools/export-icons.mjs   # 从 src/boot.js 导出 assets/whale.svg
+node tools/startup-profile.mjs # 启动耗时与载荷剖析（改造前后对比用）
 node --test tests/*.test.mjs
 ```
 
-`tools/activate-host.mjs` 把 Cordis / 插件加载器里 `unwrapExports` → `resolve` → 读 `name`/`inject`/`Config` 的判定逐行抄出来，导入**构建产物**核对插件契约，并断言 Host 半没有多余的 `ctx` 访问——这两类问题都曾让 DSH 启动即失败或条目无法激活。
+`tools/activate-host.mjs` 把 Cordis / 插件加载器里 `unwrapExports` → `resolve` → 读 `name`/`inject`/`Config` 的判定逐行抄出来，导入**构建产物**核对插件契约，并断言 Host 半只订阅 `webserver/index-inject`、没有多余的 `ctx` 访问——这两类问题都曾让 DSH 启动即失败或条目无法激活。
+
+`tools/export-icons.mjs` 把开场鲸鱼从 `src/boot.js` 的常量导出成 `assets/whale.svg`。仓里只有一条鲸鱼：Host 半把路径当纯数据注入 index，不能运行时读文件，所以路径常量是唯一定义，`assets/` 下的文件是它的镜像；`node tools/export-icons.mjs --check` 只核对不写入，`tests/boot.test.mjs` 断言两者逐字节一致，改了 `src/boot.js` 忘了导出会直接测试失败。
 
 `src/shared.js` 被打包进两个产物，是配色与状态规范化的唯一来源。
 
@@ -69,6 +74,7 @@ node --test tests/*.test.mjs
 package.json      manifest：dsh.bundle.patch + dsh.client
 cordis.patch.yml  bundle 补丁，插入 smooth-skin 行
 样例图/           原始 HTML 设计参考，不参与插件运行
+assets/whale.svg  开场鲸鱼的独立 SVG 文件，从 src/boot.js 导出，同样不参与运行
 locale/{zh,en}.json  插件管理页显示的标题与描述
 src/shared.js     调色板、主题令牌映射、状态规范化、locale 词条
 src/skin.js       作用域样式表
@@ -78,8 +84,8 @@ src/account.js    账号资料、向下展开的真实余额与原生账号菜�
 src/layout.js     原生导航标签、共享布局连接与三块外观选项
 src/scrollbar.js  各滚动区域的粗细动画、空闲恢复与卸载清理
 src/client.js     Client 半：设置页 + 令牌覆盖 + 样式注入 + localStorage 状态
-src/host.js       Host 半：无依赖的插件壳
+src/host.js       Host 半：只订阅 webserver/index-inject 注入启动动画
 build.mjs         构建脚本
-tools/            激活试验台（复刻 cordis 的插件判定）
+tools/            激活试验台（复刻 cordis 的插件判定）与图标导出
 tests/            契约与样式作用域测试
 ```

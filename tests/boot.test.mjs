@@ -9,7 +9,7 @@ const boot = await read('../src/boot.js');
 
 /** The Host artifact is exactly these files, so the tests evaluate them together. */
 const hostHalf = runInNewContext(`${shared}\n${boot}\n({
-  injections: bootInjections, css: SPLASH_CSS, html: splashHtml(), inner: splashInnerHtml(), script: splashScript(),
+  injections: bootInjections, css: SPLASH_CSS, squash: squashCss, html: splashHtml(), inner: splashInnerHtml(), script: splashScript(),
   id: SPLASH_ID, attribute: BOOT_ATTRIBUTE, storageKey: STORAGE_KEY,
   hold: SPLASH_HOLD_MS, cap: SPLASH_CAP_MS, settle: SPLASH_SETTLE_MS,
   path: SPLASH_WHALE_PATH,
@@ -18,7 +18,7 @@ const hostHalf = runInNewContext(`${shared}\n${boot}\n({
 function createNode(tag) {
   return {
     tagName: String(tag).toUpperCase(), className: '', textContent: '', children: [], parent: undefined, parentNode: undefined,
-    childElementCount: 0, attributes: new Map(),
+    childElementCount: 0, attributes: new Map(), isConnected: true,
     setAttribute(name, value) { this.attributes.set(name, String(value)); },
     getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; },
     hasAttribute(name) { return this.attributes.has(name); },
@@ -39,7 +39,7 @@ function createNode(tag) {
 }
 
 /** Run the injected script against a fake document, clock and storage. */
-function runSplash({ stored, reduced = false, mounted = false, observe = true } = {}) {
+function runSplash({ stored, reduced = false, mounted = false, observe = true, rootPresent = true } = {}) {
   const body = createNode('body');
   const root = createNode('div');
   root.childElementCount = mounted ? 1 : 0;
@@ -47,8 +47,8 @@ function runSplash({ stored, reduced = false, mounted = false, observe = true } 
   const animate = { begun: 0, beginElement() { this.begun += 1; } };
   layer.querySelector = (selector) => (selector === 'animate' ? animate : null);
   const documentElement = createNode('html');
-  const nodes = { [hostHalf.id]: layer, root };
-  const calls = { observers: 0, disconnected: 0 };
+  const nodes = rootPresent ? { [hostHalf.id]: layer, root } : { [hostHalf.id]: layer };
+  const calls = { observers: 0, disconnected: 0, observed: [] };
   const timers = new Map();
   let now = 0;
   let nextTimer = 0;
@@ -62,7 +62,7 @@ function runSplash({ stored, reduced = false, mounted = false, observe = true } 
       matchMedia: () => ({ matches: reduced }),
       MutationObserver: observe ? class {
         constructor(fn) { this.fn = fn; calls.observers += 1; calls.instance = this; }
-        observe() {}
+        observe(target, options) { calls.observed.push({ target, options }); }
         disconnect() { this.disconnected = true; calls.disconnected += 1; }
       } : undefined,
     },
@@ -86,8 +86,9 @@ function runSplash({ stored, reduced = false, mounted = false, observe = true } 
     now = target;
   };
   return {
-    layer, animate, body, root, calls, advance,
-    mount: () => { root.childElementCount = 1; },
+    layer, animate, body, root, documentElement, calls, advance,
+    // The shell cannot mount before its container exists, so both appear together.
+    mount: () => { root.childElementCount = 1; nodes.root = root; },
     notify: () => calls.instance?.fn(),
     live: () => layer.getAttribute('data-smooth-splash-live'),
     phase: () => layer.getAttribute('data-smooth-splash-out'),
@@ -99,7 +100,7 @@ function runSplash({ stored, reduced = false, mounted = false, observe = true } 
 test('the splash rows are one style, one markup and one script, in that order', () => {
   const rows = hostHalf.injections();
   assert.deepEqual(Array.from(rows, (row) => String(row.kind)), ['style', 'html', 'script']);
-  assert.equal(rows[0].text, hostHalf.css);
+  assert.equal(rows[0].text, hostHalf.squash(hostHalf.css), 'the style row is the readable sheet with its comments and indentation dropped');
   assert.equal(rows[1].html, hostHalf.html);
   assert.equal(rows[1].placement, 'body');
   assert.equal(rows[2].text, hostHalf.script);
@@ -108,6 +109,64 @@ test('the splash rows are one style, one markup and one script, in that order', 
   assert.equal(JSON.stringify(rows), JSON.stringify(JSON.parse(JSON.stringify(rows))));
   assert.ok(!/<\/script/i.test(hostHalf.script) && !/<\/script/i.test(hostHalf.html), 'a raw </script would end the injected tag');
   assert.ok(!/[<]/.test(hostHalf.script), 'the script keeps no `<` so the inline tag cannot be cut short');
+});
+
+test('the style row carries no comments, newlines or strings the squash could damage', () => {
+  const [row] = hostHalf.injections();
+  // The squash drops comments and whitespace without understanding strings, which is
+  // only sound while no declaration carries one. Comments may hold an apostrophe —
+  // they are gone by then — so the precondition is checked on the sheet without them.
+  assert.ok(!/["']/.test(hostHalf.css.replace(/\/\*[\s\S]*?\*\//g, '')), 'the splash sheet holds no quoted value');
+  assert.ok(!/\/\*/.test(row.text) && !/\n/.test(row.text), 'nothing that only helps a reader travels in the row');
+  assert.ok(row.text.length < hostHalf.css.length * .8, `the row should shed its indentation: ${row.text.length} vs ${hostHalf.css.length}`);
+  // Each rule that has to survive the squash, checked on the shipped text.
+  for (const marker of [
+    `#${hostHalf.id}{`, `body[data-ds-dark-theme] #${hostHalf.id}{`, '[data-smooth-splash-live]{',
+    '[data-smooth-splash-out]{', 'width:clamp(112px,12vw,176px)', '--smooth-splash-ink:#000000',
+    '--smooth-splash-ink:#ffffff', 'will-change:transform', '@keyframes smooth-splash-swim{',
+    '@media(prefers-reduced-motion:reduce){', 'var(--dsh-boot-bg,',
+  ]) assert.ok(row.text.includes(marker), `the squashed row lost ${marker}`);
+  assert.equal(row.text, hostHalf.squash(row.text), 'squashing twice changes nothing');
+  assert.equal((row.text.match(/\{/g) || []).length, (row.text.match(/\}/g) || []).length, 'the row still balances its blocks');
+});
+
+test('the opening watches the mount point, not the whole document', () => {
+  const close = runSplash({});
+  assert.equal(close.calls.observed.length, 1, 'the opening waits with one observer');
+  assert.equal(close.calls.observed[0].target, close.root, 'the shell mounts into #root, so only its own children matter');
+  // Compared field by field: the options object comes from the VM realm, so a strict
+  // deep-equal would fail on prototypes rather than on content.
+  assert.equal(close.calls.observed[0].options.childList, true);
+  assert.equal(close.calls.observed[0].options.subtree, undefined, 'a subtree observer would hand over every mutation the shell makes');
+  // The narrow watch still reveals the shell exactly as before.
+  close.mount();
+  close.notify();
+  close.advance(hostHalf.hold);
+  assert.equal(close.phase(), '', 'the opening still starts fading once the shell is mounted');
+  assert.equal(close.body.getAttribute(hostHalf.attribute), 'reveal');
+
+  // A page whose mount point has not been parsed yet keeps the old fallback: it cannot
+  // watch a container it has never seen, and it still finds the shell when it appears.
+  const late = runSplash({ rootPresent: false });
+  assert.equal(late.calls.observed[0].target, late.documentElement);
+  assert.equal(late.calls.observed[0].options.subtree, true);
+  late.mount();
+  late.notify();
+  late.advance(hostHalf.hold);
+  assert.equal(late.phase(), '', 'the fallback reveals on the same schedule');
+});
+
+test('the whale path ships rounded, within a fraction of a pixel of the original', () => {
+  // Two decimals is what the injected row can afford: the worst-case coordinate shift
+  // is 0.005 user units, and the mark is drawn at most 176px wide out of 23.16 units.
+  for (const [, fraction] of hostHalf.path.matchAll(/\.(\d+)/g)) {
+    assert.ok(fraction.length <= 2, `a coordinate kept more than two decimals: .${fraction}`);
+  }
+  assert.ok(!/(?:^|[\sA-Za-z])-0(?:[\sA-Za-z]|$)/.test(hostHalf.path), 'rounding must not leave a negative zero');
+  assert.match(hostHalf.path, /^M[\d.\s-]+/, 'the silhouette still starts with a move');
+  assert.ok(hostHalf.path.endsWith('Z'), 'and still closes its outline');
+  assert.ok(hostHalf.path.length < 2400, `the silhouette should stay near 2.3 KB, got ${hostHalf.path.length}`);
+  assert.ok(!/SPLASH_SWIM|HERO_SWIM/.test(boot), 'the morph frames are gone, not just unused');
 });
 
 test('the first splash frame contains only the native whale with no text or controls', () => {
@@ -121,26 +180,30 @@ test('the first splash frame contains only the native whale with no text or cont
   assert.ok(!/<(button|a|input)\b/.test(html), 'the opening holds nothing focusable');
 });
 
-test('the whole motion is one compositor-driven sway, with no geometry animation', () => {
+test('the opening\u2019s only motion is a composited sway on the HTML box', () => {
   const html = hostHalf.html;
-  // The wag cost main-thread geometry work exactly while the app boots, so the opening
-  // carries no SMIL animation at all: the whale keeps the FishLogo silhouette.
+  // Morphing a path is main-thread work, and the opening is on screen exactly while the
+  // app's first mount owns that thread: no SMIL, no per-frame geometry, no JavaScript.
   assert.ok(!/<animate\b/.test(html), 'no SMIL animation remains in the markup');
-  assert.ok(!/attributeName|values=|beginElement/.test(html));
-  assert.ok(!/Swim|swim/i.test(html), 'and none of the morph data ships with it');
-  assert.match(html, new RegExp(`d="${hostHalf.path}"`), 'the static silhouette is drawn inline');
-  // The sway is a transform animation the compositor can keep running during the boot.
-  assert.match(hostHalf.css, /transform-origin:50% 60%/);
-  assert.match(hostHalf.css, /will-change:transform/);
-  assert.match(hostHalf.css, /animation:2\.4s ease-in-out infinite smooth-splash-swim/);
+  assert.ok(!/attributeName|beginElement|Swim|swim/i.test(html), 'and none of the morph data ships with it');
+  assert.match(html, new RegExp(`d="${hostHalf.path}"`), 'the silhouette is drawn inline and stays put');
+  assert.ok(!/<animate\b/.test(hostHalf.script), 'the script never animates the whale');
+  assert.ok(!/function swim|querySelector\("animate"\)/.test(hostHalf.script));
+  // The sway hangs on the HTML wrapper: that is the element Chromium promotes and hands
+  // to the compositor, so the motion survives a blocked main thread.
+  const mark = /#dsh-smooth-splash \.smooth-splash-mark\{([^}]*)\}/.exec(hostHalf.css);
+  assert.ok(mark, 'the whale box has its own rule');
+  assert.match(mark[1], /will-change:transform/);
+  assert.match(mark[1], /animation:2\.4s ease-in-out infinite smooth-splash-swim/);
+  assert.match(mark[1], /transform-origin:50% 60%/);
   assert.match(hostHalf.css, /@keyframes smooth-splash-swim\{0%,to\{transform:none\}35%\{transform:rotate\(-2\.4deg\) translate\(-\.3px,-\.5px\)\}70%\{transform:rotate\(1deg\) translate\(\.2px,\.15px\)\}\}/);
-  // The opening only ever fades out: no entrance animation on the mark, no second
-  // transform of its own during the fade.
+  const svg = /#dsh-smooth-splash \.smooth-splash-mark>svg\{([^}]*)\}/.exec(hostHalf.css);
+  assert.ok(svg, 'the whale itself keeps a plain rule');
+  assert.ok(!/animation|will-change|transform:/.test(svg[1]), 'the svg carries no animation of its own');
+  // The opening only ever fades out: no entrance animation on the mark, no exit one.
   assert.ok(!/smooth-splash-whale-(in|out)/.test(hostHalf.css), 'the whale has no entrance or exit animation of its own');
   assert.match(hostHalf.css, /#dsh-smooth-splash\[data-smooth-splash-out\]\{opacity:0;transition:opacity/);
   assert.ok(!/transition:opacity/.test(hostHalf.css.split('data-smooth-splash-out')[0]), 'appearing is instant, not a fade-in');
-  // The script has nothing to start: one animation, owned by CSS.
-  assert.ok(!/beginElement|querySelector|animate/i.test(hostHalf.script), 'the script never touches the whale');
 });
 
 test('the splash stylesheet is self-contained and never blocks the app', () => {
@@ -169,6 +232,7 @@ test('the whale is enlarged and monochrome without a backplate or a border', () 
   assert.match(hostHalf.css, /--smooth-splash-ink:#ffffff/);
   assert.match(hostHalf.css, /border:0;border-radius:0;background:transparent;box-shadow:none/);
   assert.ok(!/radial-gradient|smooth-splash-sweep|smooth-splash-draw/.test(hostHalf.css));
+  // The script only ever reaches into its own layer, and now not even for an animation.
   assert.ok(!/cloneNode|querySelector/.test(hostHalf.script), 'the first frame never waits for a sidebar icon');
 });
 
@@ -257,4 +321,14 @@ test('without a MutationObserver the opening still ends', () => {
   assert.equal(run.attached(), true);
   run.advance(hostHalf.settle);
   assert.equal(run.attached(), false);
+});
+
+test('the exported whale asset is the injected whale, not a second drawing', async () => {
+  const asset = await read('../assets/whale.svg');
+  const viewBox = /viewBox="([^"]+)"/.exec(hostHalf.inner)[1];
+  assert.ok(asset.includes(`viewBox="${viewBox}"`), 'the file scales with the same coordinate system');
+  assert.ok(asset.includes(`d="${hostHalf.path}"`), 'the exported path is byte-for-byte the injected one');
+  assert.match(asset, /fill="currentColor"/, 'the mark takes the surrounding ink colour');
+  assert.doesNotMatch(asset, /<(script|animate|animateTransform|set)\b/, 'the asset carries no script and no frame-by-frame geometry');
+  assert.match(asset, /tools\/export-icons\.mjs/, 'the file says how it is regenerated');
 });

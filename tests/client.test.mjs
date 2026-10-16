@@ -62,6 +62,8 @@ function loadClient({ stored, unavailable = [] } = {}) {
     },
   };
   for (const name of unavailable) delete services[name];
+  // Stand-in for the previewed layer the portal mounts, so the wag start is observable.
+  const swim = { begun: 0, beginElement() { this.begun += 1; } };
   runInNewContext(built, {
     window: {
       __ModuleLoader__: { load: (value) => { registration = value; } },
@@ -75,6 +77,7 @@ function loadClient({ stored, unavailable = [] } = {}) {
       createElement: () => { const style = { dataset: {}, remove: () => styles.delete(style) }; return style; },
       head: { append: (style) => styles.add(style) },
       styleSheets: [],
+      getElementById: (id) => (id === 'dsh-smooth-splash' ? { querySelector: (selector) => (selector === 'animate' ? swim : null) } : null),
       body: {
         toggleAttribute: (name, enabled) => enabled ? attributes.add(name) : attributes.delete(name),
         removeAttribute: (name) => attributes.delete(name),
@@ -94,7 +97,7 @@ function loadClient({ stored, unavailable = [] } = {}) {
     },
   });
   return {
-    plugin, ctx, styles, attributes, storage, timers,
+    plugin, ctx, styles, attributes, storage, timers, swim,
     get settings() { return settings; },
     get tokenLayers() { return tokenLayers; },
     get preference() { return preference; },
