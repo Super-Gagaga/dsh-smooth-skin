@@ -15,12 +15,33 @@ function loadClient({ stored, unavailable = [] } = {}) {
   const effects = [];
   const styles = new Set();
   const attributes = new Set();
+  const timers = new Map();
+  // Each component function gets one hook frame, reused across its renders, so a
+  // click's state survives until the component renders again.
+  const frames = new Map();
+  let currentFrame;
+  let nextTimer = 0;
   const storage = new Map(stored ? [['dsh-smooth-skin:state', JSON.stringify(stored)]] : []);
+  const renderComponent = (type, props) => {
+    const frame = frames.get(type) || { cells: [], at: 0 };
+    frame.at = 0;
+    frames.set(type, frame);
+    const previous = currentFrame;
+    currentFrame = frame;
+    try { return type(props); } finally { currentFrame = previous; }
+  };
   const react = {
     createElement: (type, props, ...children) => ({ type, props, children }),
     useReducer: () => [0, () => {}],
-    useEffect: () => {},
+    useEffect: (fn) => { const cleanup = fn(); if (typeof cleanup === 'function') effects.push(cleanup); },
+    useState: (initial) => {
+      assert.ok(currentFrame, 'useState ran outside a test render');
+      const index = currentFrame.at++;
+      const cell = currentFrame.cells[index] || (currentFrame.cells[index] = { value: initial });
+      return [cell.value, (next) => { cell.value = typeof next === 'function' ? next(cell.value) : next; }];
+    },
   };
+  const modules = { react, 'react-dom': { createPortal: (node) => ({ portal: node, props: node.props }) } };
   const services = {
     theme: {
       getTheme: () => ({ preference }),
@@ -31,7 +52,7 @@ function loadClient({ stored, unavailable = [] } = {}) {
       inject: (_name, callback) => callback(),
       register: (options, component) => {
         assert.equal(typeof options.label, 'string');
-        settings = { options, component };
+        settings = { options, component: () => renderComponent(component) };
         return () => { settings = undefined; };
       },
     },
@@ -45,11 +66,15 @@ function loadClient({ stored, unavailable = [] } = {}) {
     window: {
       __ModuleLoader__: { load: (value) => { registration = value; } },
       localStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+      matchMedia: () => ({ matches: false }),
+      setTimeout: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, at: delay || 0 }); return id; },
+      clearTimeout: (id) => timers.delete(id),
     },
     document: {
       addEventListener() {}, removeEventListener() {},
       createElement: () => { const style = { dataset: {}, remove: () => styles.delete(style) }; return style; },
       head: { append: (style) => styles.add(style) },
+      styleSheets: [],
       body: {
         toggleAttribute: (name, enabled) => enabled ? attributes.add(name) : attributes.delete(name),
         removeAttribute: (name) => attributes.delete(name),
@@ -58,8 +83,8 @@ function loadClient({ stored, unavailable = [] } = {}) {
   });
   assert.equal(registration.id, manifest.name);
   const plugin = registration.factory((name) => {
-    assert.equal(name, 'react');
-    return react;
+    assert.ok(modules[name], `unexpected require ${name}`);
+    return modules[name];
   });
   const ctx = new Proxy({}, {
     get: (_target, name) => {
@@ -69,11 +94,22 @@ function loadClient({ stored, unavailable = [] } = {}) {
     },
   });
   return {
-    plugin, ctx, styles, attributes, storage,
+    plugin, ctx, styles, attributes, storage, timers,
     get settings() { return settings; },
     get tokenLayers() { return tokenLayers; },
     get preference() { return preference; },
     get dictionaries() { return dictionaries; },
+    /** Render one child element the way React would (nested components are not
+     * auto-rendered by this stub). */
+    render: (element) => renderComponent(element.type, element.props),
+    /** Run the oldest pending timer, returning the delay it was scheduled with. */
+    fireTimer: () => {
+      const entry = timers.entries().next().value;
+      if (entry === undefined) return undefined;
+      timers.delete(entry[0]);
+      entry[1].fn();
+      return entry[1].at;
+    },
     dispose: () => { for (const fn of effects.reverse()) fn(); },
   };
 }
@@ -112,6 +148,59 @@ test('turning the skin off restores tokens and theme, then re-enabling reapplies
   runtime.dispose();
   assert.equal(runtime.preference, 'system');
   assert.equal(runtime.tokenLayers, 0);
+});
+
+test('the settings page carries the enable switch, the mode choice and the launch animation', async () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  const rows = runtime.settings.component().children[1].children;
+  assert.equal(rows[0].props.checked, true, 'the enable switch stays the first row');
+  assert.equal(rows[1].props.value, 'auto');
+  assert.equal(rows[2].props.checked, true, 'the launch animation is on by default');
+  assert.equal(rows[2].props.disabled, false);
+  await rows[2].props.onChange(false);
+  assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')), { enabled: true, theme: 'auto', boot: false });
+  assert.equal(runtime.settings.component().children[1].children[2].props.checked, false);
+  await runtime.settings.component().children[2].children[0].children[0].props.onClick();
+  assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')), { enabled: true, theme: 'auto', boot: true });
+  runtime.dispose();
+});
+
+test('the settings page replays the index opening without touching the stored state', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  const rowOf = (tree) => tree.children[1].children[2];
+  const preview = rowOf(runtime.settings.component()).props.action;
+  assert.equal(preview.children[0], '预览');
+  assert.equal(preview.props.disabled, false, 'the preview is available while the skin is on');
+  assert.equal(runtime.styles.size, 1, 'only the skin stylesheet is up so far');
+
+  preview.props.onClick();
+  const playing = rowOf(runtime.settings.component()).props.action;
+  assert.equal(playing.children[0], '播放中…', 'the button reports that it is busy');
+  assert.equal(playing.props.disabled, true);
+  const layerOf = (tree) => {
+    const element = tree.children[1].children[3];
+    return element ? runtime.render(element) : null;
+  };
+  const layer = layerOf(runtime.settings.component());
+  assert.ok(layer && layer.props.id === 'dsh-smooth-splash', 'the preview portals the same layer the index ships');
+  assert.equal(layer.props['data-smooth-splash-live'], '');
+  assert.equal(layer.props['data-smooth-splash-out'], undefined);
+  assert.match(layer.props.dangerouslySetInnerHTML.__html, /class="smooth-splash-mark"/);
+  assert.ok(!/<animate\b/.test(layer.props.dangerouslySetInnerHTML.__html), 'the preview carries the same static whale');
+  assert.equal(layer.props['aria-hidden'], 'true');
+  assert.equal(runtime.styles.size, 2, 'a page without the Host stylesheet gets a plugin copy');
+
+  assert.equal(runtime.fireTimer(), 1500, 'the whale holds for the same extended minimum as the real opening');
+  assert.equal(layerOf(runtime.settings.component()).props['data-smooth-splash-out'], '');
+  assert.equal(runtime.fireTimer(), 1500 + 640, 'the layer leaves once the shell transition is over');
+  assert.equal(layerOf(runtime.settings.component()), null);
+  assert.equal(rowOf(runtime.settings.component()).props.action.children[0], '预览');
+  // The replay is decoration: it never writes settings.
+  assert.equal(runtime.storage.has('dsh-smooth-skin:state'), false);
+  runtime.dispose();
+  assert.equal(runtime.styles.size, 0, 'disposing drops the preview stylesheet along with the skin sheet');
 });
 
 test('missing declared services degrade without an undeclared service access', () => {

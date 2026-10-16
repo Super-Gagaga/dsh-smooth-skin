@@ -1,9 +1,12 @@
 /**
  * Host half of the Smooth bundle.
  *
- * It deliberately touches no service and no `ctx` member at all. Cordis throws on
- * `ctx.<name>` for any name missing from `inject`, and this half has nothing to ask
- * the host for: the Client module owns both the rendering and the persisted state.
+ * It contributes exactly one thing: the launch animation's rows for the served
+ * index. Cordis surfaces the web server's `webserver/index-inject` event without
+ * an `inject` entry, and the listener is disposed with the plugin, so this half
+ * still reads no service, holds no state and touches no file. Painting the
+ * opening from the index is what makes it cover the interval before any bundle
+ * runs — a browser-side layer can only appear after the shell already did.
  *
  * Cordis decides a plugin's shape in `registry.resolve()`:
  *   1. a function is used as the callback directly — `name`, `inject` and `Config`
@@ -15,7 +18,11 @@
  * plugin object as its default export. `unwrapExports` collapses the namespace to
  * that default, which is what makes the metadata visible.
  */
-export function apply() {}
+export function apply(ctx) {
+  ctx.on('webserver/index-inject', (table) => {
+    table.push(...bootInjections());
+  });
+}
 
 /** No `Config`: cordis reads `Config["~standard"].validate`, which a plain object lacks. */
 const plugin = { name: PLUGIN_ID, inject: [], apply };

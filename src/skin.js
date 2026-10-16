@@ -11,6 +11,7 @@ const accountPart = (name) => `:is(${hostPart(name)},[class^="_${name}_"],[class
 const accountMenu = `body[data-smooth-skin]>[data-smooth-account-menu]`;
 // MarkdownText is a native primitive; compact reasoning keeps its own density.
 const chatMarkdown = `[data-conversation-scroll] [data-chat-flow-kind="assistant-step"]:not([data-chat-group-part="reasoning"]) ${accountPart('markdown')}:not([data-markdown-variant="compact"])`;
+const questionPanel = '[data-question-key]>section[aria-labelledby]';
 
 const SKIN_CSS = `
 body[data-smooth-skin]{
@@ -24,7 +25,13 @@ body[data-smooth-skin]{
   --dsw-focus-ring-color:var(--smooth-accent);
   font-family:"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;
+  position:fixed;inset:0;width:100%;height:100dvh;min-height:0;overflow:clip;overscroll-behavior:none;
 }
+/* The desktop is one viewport. Fix the body as well as clipping root overflow:
+   viewport overflow can still be scrolled programmatically even with clip.
+   Focusing an answer must move its inner pane, never the entire shell. */
+html:has(>body[data-smooth-skin]){overflow:clip;overscroll-behavior:none}
+body[data-smooth-skin]>#root{height:100%;min-height:0;overflow:clip}
 body[data-smooth-skin][data-ds-dark-theme]{color-scheme:dark}
 body[data-smooth-skin]:not([data-ds-dark-theme]){
   color-scheme:light;
@@ -38,7 +45,8 @@ body[data-smooth-skin]:not([data-ds-dark-theme]){
 /* Shell geometry continues to be owned by the host, including resize handles. */
 /* ChatView also uses a CSS-module class named frame. Only the application frame
    owns a sidebar column; keep its sidebar fill off the conversation canvas. */
-body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')}){background:var(--smooth-sidebar);--dsh-windows-content-radius:26px}
+body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')}){height:100%;min-height:0;max-height:100%;background:var(--smooth-sidebar);--dsh-windows-content-radius:26px}
+body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})>:is(${hostPart('sidebarCol')},${hostPart('centerCol')}){min-height:0}
 /* The desktop preload measures this body-level probe to synchronize the native
    caption buttons. Change its token locally, without recoloring the sidebar. */
 body[data-smooth-skin]>span[style*="--dsw-specific-sidebar-fill"][style*="--dsw-alias-label-primary"]{--dsw-specific-sidebar-fill:var(--smooth-surface)}
@@ -126,6 +134,76 @@ body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}:active:not(:d
 body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}:disabled{background:var(--smooth-surface-3);color:var(--smooth-muted);opacity:.6;cursor:default}
 body[data-smooth-skin] .smooth-composer-model{display:flex;align-items:center;min-width:0;max-width:100%;font-size:13px;line-height:20px}
 body[data-smooth-skin] .smooth-composer-model button{height:32px;min-height:32px;font-size:inherit;line-height:20px;padding-block:0}
+/* Keep TodoPanel's projection, native StateDot and conditional list rendering.
+   Scope every local name to its public panel hook so chat headers stay untouched. */
+body[data-smooth-skin] [data-testid="todo-panel"]{border:0;border-radius:16px;background:var(--smooth-surface);background-image:var(--smooth-light-wash);box-shadow:var(--smooth-light-edge),var(--smooth-shadow-1);backdrop-filter:none}
+body[data-smooth-skin] [data-testid="todo-panel"]>${hostPart('body')}{gap:0;padding:0}
+body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('header')}[aria-expanded]{box-sizing:border-box;min-height:40px;height:auto;gap:8px;padding:8px 14px;border:0;border-radius:0;background:transparent;color:var(--smooth-text);transition:background-color .16s ease}
+body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('header')}:hover{background:color-mix(in srgb,var(--smooth-text) 4%,transparent)}
+body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('header')}:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:-3px;border-radius:14px}
+body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('title')}{font-size:13px;line-height:20px;font-weight:600;color:var(--smooth-text)}
+body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('progress')}{font-size:12px;line-height:20px;color:var(--smooth-muted);font-variant-numeric:tabular-nums}
+body[data-smooth-skin] [data-testid="todo-panel"] :is(${hostPart('lead')},${hostPart('chevron')}){color:var(--smooth-muted);width:16px;height:20px}
+body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('list')}{gap:2px;max-height:min(224px,30vh);margin:0;padding:2px 8px 10px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('item')}{box-sizing:border-box;flex:none;align-items:flex-start;gap:10px;min-height:34px;padding:7px 10px;border-radius:9px;font-size:13px;line-height:20px;color:var(--smooth-muted)}
+body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('glyph')}{width:16px;height:20px}
+body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('content')}{min-width:0;flex:1;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip}
+body[data-smooth-skin] [data-testid="todo-panel"] [data-status="in_progress"]{background:color-mix(in srgb,var(--smooth-accent) 8%,transparent);color:var(--smooth-text);font-weight:500}
+body[data-smooth-skin] [data-testid="todo-panel"] [data-status="in_progress"] [data-state="ongoing"]{color:var(--smooth-accent)}
+body[data-smooth-skin] [data-testid="todo-panel"] [data-status="completed"]{color:var(--dsw-alias-label-tertiary)}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('header')}{transition:none}}
+/* Native question form: retain radio/checkbox semantics, draft mirrors, paging,
+   countdowns and submission. Only the question seat owns these local classes. */
+body[data-smooth-skin] [data-question-key]{container-type:inline-size;container-name:smooth-question}
+body[data-smooth-skin] ${questionPanel}{max-height:min(68vh,620px);padding:0;border-radius:20px;background:var(--dsw-specific-input-major);box-shadow:var(--smooth-light-edge),var(--smooth-shadow-1)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('header')}{display:flex;gap:16px;min-height:0;max-height:min(24vh,180px);padding:16px 18px 12px;border:0;background:var(--smooth-light-wash);overflow-y:auto;overscroll-behavior:contain}
+body[data-smooth-skin] ${questionPanel} ${hostPart('headingBlock')}{flex:1;overflow-wrap:anywhere}
+body[data-smooth-skin] ${questionPanel} ${hostPart('eyebrow')}{margin-bottom:6px;color:var(--smooth-muted);font-size:12px;line-height:18px}
+body[data-smooth-skin] ${questionPanel} h2${hostPart('title')}{margin:0;font-size:var(--dsh-content-font-size,14px);line-height:1.65;font-weight:550;color:var(--smooth-text);overflow-wrap:anywhere}
+body[data-smooth-skin] ${questionPanel} ${hostPart('headerActions')}{position:sticky;top:0;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:190px}
+body[data-smooth-skin] ${questionPanel} ${hostPart('waitStatus')}{font-size:12px;line-height:24px;color:var(--smooth-muted)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('iconButton')}{width:28px;height:28px;color:var(--smooth-muted);border-radius:8px}
+body[data-smooth-skin] ${questionPanel} ${hostPart('iconButton')}:disabled{color:var(--dsw-alias-label-tertiary);opacity:.4}
+body[data-smooth-skin] ${questionPanel} [data-question-scroll]{min-height:0;scrollbar-gutter:stable;overflow-x:hidden}
+body[data-smooth-skin] ${questionPanel} ${hostPart('detail')}{margin:0;padding:4px 18px 8px;font-size:var(--dsh-content-font-size,14px);line-height:1.65}
+body[data-smooth-skin] ${questionPanel} ${hostPart('options')}{margin:0;padding:8px 16px 12px;gap:6px}
+body[data-smooth-skin] ${questionPanel} :is(${hostPart('option')},${hostPart('customRow')}){gap:10px;min-height:44px;padding:10px 12px;border:1px solid transparent;border-radius:10px;transition:background-color .16s ease,border-color .16s ease}
+body[data-smooth-skin] ${questionPanel} ${hostPart('option')}:hover:not(:disabled){background:color-mix(in srgb,var(--smooth-accent) 4%,var(--dsw-specific-input-major))}
+body[data-smooth-skin] ${questionPanel} ${hostPart('option')}[aria-checked="true"]{background:color-mix(in srgb,var(--smooth-accent) 8%,var(--dsw-specific-input-major));border-color:color-mix(in srgb,var(--smooth-accent) 45%,var(--smooth-line))}
+body[data-smooth-skin] ${questionPanel} ${hostPart('number')}{margin-top:1px;width:22px;height:22px;flex-basis:22px;border-radius:6px;background:var(--smooth-app);color:var(--smooth-muted);font-size:12px;line-height:20px}
+body[data-smooth-skin] ${questionPanel} ${hostPart('option')}[aria-checked="true"] ${hostPart('number')}{background:color-mix(in srgb,var(--smooth-accent) 14%,var(--dsw-specific-input-major));color:var(--smooth-text)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('checkboxChecked')}{color:var(--smooth-ink)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('checkboxChecked')}::before{background:var(--smooth-accent);border-color:var(--smooth-accent)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('optionLine')}{gap:4px 8px}
+body[data-smooth-skin] ${questionPanel} ${hostPart('optionLabel')}{font-size:14px;line-height:22px;font-weight:550;color:var(--smooth-text);overflow-wrap:anywhere}
+body[data-smooth-skin] ${questionPanel} ${hostPart('description')}{display:block;flex-basis:100%;font-size:13px;line-height:1.65;color:var(--smooth-muted);overflow-wrap:anywhere}
+body[data-smooth-skin] ${questionPanel} ${hostPart('badge')}{padding:0 6px;border-radius:5px;background:color-mix(in srgb,var(--smooth-accent) 10%,var(--dsw-specific-input-major));color:var(--dsw-alias-link);font-size:11px;line-height:20px}
+body[data-smooth-skin] ${questionPanel} :is(${hostPart('customRow')},${hostPart('customBlock')}){border:1px solid var(--smooth-line);background:var(--smooth-surface-2)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('customRow')}{margin-top:4px}
+body[data-smooth-skin] ${questionPanel} ${hostPart('customRowActive')}{border-color:color-mix(in srgb,var(--smooth-accent) 45%,var(--smooth-line));background:color-mix(in srgb,var(--smooth-accent) 8%,var(--dsw-specific-input-major))}
+body[data-smooth-skin] ${questionPanel} ${hostPart('customBlock')}{margin-inline:0;border-radius:10px;--dsh-answer-field-padding:10px 12px}
+body[data-smooth-skin] ${questionPanel} :is(${hostPart('customRow')},${hostPart('customBlock')}):focus-within{border-color:var(--smooth-accent);background:var(--dsw-specific-input-major);box-shadow:var(--smooth-light-edge)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('field')}>*{font-size:14px;line-height:22px}
+body[data-smooth-skin] ${questionPanel} ${hostPart('fieldInput')}::placeholder{color:var(--smooth-muted)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('footer')}{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px 12px;align-items:center;flex-shrink:0;margin:0;padding:12px 16px;border-top:1px solid var(--smooth-line);background:var(--dsw-specific-input-major)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('footerActions')}{gap:8px}
+body[data-smooth-skin] ${questionPanel} ${hostPart('footerActions')}>button{height:34px;min-height:34px;padding:0 14px;border-radius:10px;font-size:13px;line-height:20px;font-weight:500}
+body[data-smooth-skin] ${questionPanel} ${hostPart('footerActions')}>button${accountPart('primary')}{background:var(--smooth-accent);color:var(--smooth-ink)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('progress')}{font-size:12px;line-height:20px;word-spacing:normal;font-variant-numeric:tabular-nums;color:var(--smooth-muted)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('feedback')}{min-width:0;text-align:left;font-size:12px;line-height:18px;overflow-wrap:anywhere}
+body[data-smooth-skin] ${questionPanel} ${hostPart('feedback')}:empty{min-height:0}
+body[data-smooth-skin] ${questionPanel} :is(button,textarea):focus-visible{outline:2px solid var(--smooth-accent);outline-offset:-2px}
+@container smooth-question (max-width:520px){
+  body[data-smooth-skin] ${questionPanel} ${hostPart('header')}{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:12px}
+  body[data-smooth-skin] ${questionPanel} ${hostPart('headingBlock')}{grid-row:2}
+  body[data-smooth-skin] ${questionPanel} ${hostPart('headerActions')}{grid-row:1;max-width:none;position:static}
+  body[data-smooth-skin] ${questionPanel} ${hostPart('options')}{padding:6px 10px 10px}
+  body[data-smooth-skin] ${questionPanel} ${hostPart('option')}{padding:9px 10px}
+  body[data-smooth-skin] ${questionPanel} ${hostPart('footer')}{grid-template-columns:1fr auto;padding:10px;gap:6px}
+  body[data-smooth-skin] ${questionPanel} ${hostPart('feedback')}{grid-row:2;grid-column:1/-1}
+  body[data-smooth-skin] ${questionPanel} ${hostPart('footerActions')}{grid-row:1;grid-column:2}
+}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] ${questionPanel} :is(${hostPart('option')},${hostPart('customRow')}){transition:none}}
 body[data-smooth-skin] [data-chat-flow-kind="assistant-step"]{color:var(--smooth-text)}
 body[data-smooth-skin] [data-chat-group-part="reasoning"]{color:var(--smooth-muted)}
 /* Keep the native transcript column, width handles, flow routing and renderers.
@@ -258,6 +336,24 @@ body[data-smooth-skin] :not([data-conversation-scroll] *)::-webkit-scrollbar-thu
 }
 @media(forced-colors:active){
   body[data-smooth-skin] :is([data-composer-card],[role="switch"]){border:1px solid CanvasText}
+}
+
+/* The shell arrives behind the launch animation: the splash script injected into
+   the index sets body[data-smooth-boot="reveal"] as the app mounts, and removes it
+   once the longest entrance is over. Every part of it is an opacity fade, and the
+   stagger lives in the delays: a move would re-anchor the fixed rail and sidebar
+   chrome to its column, and transforms on the big columns are exactly the kind of
+   work the opening must not add while the app is still mounting. */
+body[data-smooth-skin][data-smooth-boot="reveal"] ${hostPart('sidebarCol')}{animation:smooth-boot-fade .5s cubic-bezier(.2,0,0,1) backwards}
+body[data-smooth-skin][data-smooth-boot="reveal"] ${hostPart('centerCol')}{animation:smooth-boot-fade .56s cubic-bezier(.2,0,0,1) .03s backwards}
+body[data-smooth-skin][data-smooth-boot="reveal"] .smooth-workspace-bar{animation:smooth-boot-fade .5s cubic-bezier(.2,0,0,1) .05s backwards}
+/* A collapsed sidebar hides the rail buttons; animating their opacity there would
+   flash them in and out again as the fill releases. */
+body[data-smooth-skin][data-smooth-boot="reveal"]:not(:has([data-sidebar-collapsed])) :is(.smooth-rail-home,.smooth-rail-plugins){animation:smooth-boot-fade .5s cubic-bezier(.2,0,0,1) .08s backwards}
+body[data-smooth-skin][data-smooth-boot="reveal"] [data-composer-card]{animation:smooth-boot-fade .52s cubic-bezier(.2,0,0,1) .1s backwards}
+@keyframes smooth-boot-fade{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){
+  body[data-smooth-skin][data-smooth-boot="reveal"] :is(${hostPart('sidebarCol')},${hostPart('centerCol')},.smooth-workspace-bar,.smooth-rail-home,.smooth-rail-plugins,[data-composer-card]){animation:none}
 }
 
 /* Reference geometry. Units intentionally follow the supplied HTML rather than

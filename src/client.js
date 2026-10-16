@@ -19,6 +19,8 @@ const CSS = `/* injected through the package stylesheet; kept beside the skin ru
 .smooth-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:18px 0}
 .smooth-row--appearance{align-items:stretch;flex-direction:column;gap:16px;border-top:1px solid var(--dsw-alias-border-l1);margin-top:12px;padding-top:24px}
 .smooth-row-copy{min-width:0;flex:1}
+.smooth-row-action{display:flex;align-items:center;flex:none}
+.smooth-button--compact{font-size:12.5px;padding:6px 13px;border-radius:999px;white-space:nowrap}
 .smooth-row-copy small{display:block;margin-top:4px;color:var(--dsw-alias-label-secondary);font-size:12.5px;line-height:1.6}
 .smooth-switch{appearance:none;flex:none;width:44px;height:26px;margin:2px 0 0;border-radius:999px;border:1px solid var(--dsw-alias-border-l3);background:var(--smooth-surface-3,rgba(128,128,128,.25));position:relative;cursor:pointer;transition:background-color .18s ease}
 .smooth-switch::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--dsw-alias-switch-thumb,#fff);transition:transform .18s ease}
@@ -163,11 +165,50 @@ function apply(ctx) {
     return { state, ready, failure, update: writeState };
   }
 
+  /** The opening's stylesheet arrives with the index. A page that never received it
+   * (older index, plugin installed later) still previews with the same rules. */
+  let splashStyle;
+  function ensureSplashStyle() {
+    let injected = false;
+    for (const sheet of document.styleSheets || []) {
+      const text = sheet && sheet.ownerNode && sheet.ownerNode.textContent;
+      if (text && text.includes(SPLASH_ID)) { injected = true; break; }
+    }
+    if (injected || splashStyle) return;
+    splashStyle = document.createElement('style');
+    splashStyle.dataset.plugin = PLUGIN_ID;
+    splashStyle.dataset.smoothSplash = 'true';
+    splashStyle.textContent = SPLASH_CSS;
+    document.head.append(splashStyle);
+  }
+
+  /** Replay the index opening over the settings page: the same markup, the same
+   * stylesheet and the same timings, so the preview cannot drift from the real one. */
+  function SplashPreview(props) {
+    const [leaving, setLeaving] = React.useState(false);
+    React.useEffect(() => {
+      const timers = [
+        window.setTimeout(() => setLeaving(true), SPLASH_HOLD_MS),
+        window.setTimeout(props.onDone, SPLASH_HOLD_MS + SPLASH_SETTLE_MS),
+      ];
+      return () => { for (const id of timers) window.clearTimeout(id); };
+    }, []);
+    const { createPortal } = require('react-dom');
+    return createPortal(h('div', {
+      id: SPLASH_ID,
+      'aria-hidden': 'true',
+      'data-smooth-splash-live': '',
+      'data-smooth-splash-out': leaving ? '' : undefined,
+      dangerouslySetInnerHTML: { __html: splashInnerHtml() },
+    }), document.body);
+  }
+
   function ToggleRow(props) {
     return h('div', { className: 'smooth-row' },
       h('div', { className: 'smooth-row-copy' },
         h('h3', null, props.title),
         props.hint ? h('small', null, props.hint) : null),
+      props.action ? h('div', { className: 'smooth-row-action' }, props.action) : null,
       h('input', {
         className: 'smooth-switch',
         type: 'checkbox',
@@ -198,6 +239,8 @@ function apply(ctx) {
     const view = useSmoothState();
     const current = view.state;
     const disabled = !view.ready;
+    const [playing, setPlaying] = React.useState(false);
+    const reducedMotion = !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
     const modeOptions = [
       { value: 'auto', label: text('settings.theme.auto', 'Follow host') },
       { value: 'dark', label: text('settings.theme.dark', 'Dark') },
@@ -222,14 +265,32 @@ function apply(ctx) {
           disabled: disabled || !current.enabled,
           options: modeOptions,
           onChange: (value) => view.update({ ...current, theme: value }),
-        })),
+        }),
+        h(ToggleRow, {
+          title: text('settings.boot', 'Launch animation'),
+          hint: text('settings.bootHint', 'Plays the brand opening on page load; it applies on the next load.')
+            + (reducedMotion ? ` ${text('settings.bootReduced', 'Reduced motion is on, so the opening is skipped at startup.')}` : ''),
+          checked: current.boot,
+          disabled: disabled || !current.enabled,
+          action: h('button', {
+            type: 'button',
+            className: 'smooth-button smooth-button--compact',
+            disabled: disabled || !current.enabled || reducedMotion || playing,
+            'aria-label': text('settings.bootPreviewLabel', 'Preview the launch animation'),
+            onClick: () => { ensureSplashStyle(); setPlaying(true); },
+          }, text(playing ? 'settings.bootPlaying' : 'settings.bootPreview', playing ? 'Playing…' : 'Preview')),
+          onChange: (value) => view.update({ ...current, boot: value }),
+        }),
+        // The preview layer portals itself to the body; keeping it inside the section
+        // leaves the section order (and the reset row) where the layout expects it.
+        playing ? h(SplashPreview, { onDone: () => setPlaying(false) }) : null),
       h('section', null,
         h('div', { className: 'smooth-footer' },
           h('button', {
             type: 'button',
             className: 'smooth-button',
             disabled,
-            onClick: () => view.update({ enabled: true, theme: 'auto' }),
+            onClick: () => view.update({ enabled: true, theme: 'auto', boot: true }),
           }, text('settings.reset', 'Reset to defaults')),
           h('span', {
             className: 'smooth-status',
@@ -255,6 +316,8 @@ function apply(ctx) {
     restoreTheme();
     tokensDispose?.();
     styleDispose?.();
+    splashStyle?.remove?.();
+    splashStyle = undefined;
     document.body.removeAttribute(SKIN_ATTRIBUTE);
   }, 'smooth-skin');
 

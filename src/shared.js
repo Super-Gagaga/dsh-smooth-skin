@@ -7,12 +7,15 @@
 /** Must stay identical to package.json `name`: the client module table keys on it. */
 const PLUGIN_ID = 'dsh-smooth-skin';
 const SKIN_ATTRIBUTE = 'data-smooth-skin';
+/** Set while the launch animation owns the screen, and removed with its layer. */
+const BOOT_ATTRIBUTE = 'data-smooth-boot';
 /** The Client half's durable store. Reaching no host service is what keeps activation safe. */
 const STORAGE_KEY = 'dsh-smooth-skin:state';
 
 const DEFAULTS = {
   enabled: true,
   theme: 'auto',
+  boot: true,
 };
 
 /** Literal colours live here only: everything else references --dsw-alias-* tokens. */
@@ -177,11 +180,12 @@ function normalize(raw) {
   const state = { ...DEFAULTS };
   if (typeof source.enabled === 'boolean') state.enabled = source.enabled;
   if (source.theme === 'auto' || source.theme === 'dark' || source.theme === 'light') state.theme = source.theme;
+  if (typeof source.boot === 'boolean') state.boot = source.boot;
   return state;
 }
 
 function configFromState(state) {
-  return { enabled: state.enabled, theme: state.theme };
+  return { enabled: state.enabled, theme: state.theme, boot: state.boot };
 }
 
 function normalizeConfig(raw) {
@@ -189,6 +193,7 @@ function normalizeConfig(raw) {
   const config = {};
   if (typeof source.enabled === 'boolean') config.enabled = source.enabled;
   if (source.theme === 'auto' || source.theme === 'dark' || source.theme === 'light') config.theme = source.theme;
+  if (typeof source.boot === 'boolean') config.boot = source.boot;
   return config;
 }
 
@@ -231,6 +236,12 @@ const zhCN = {
   'settings.theme.dark': '固定深色',
   'settings.theme.light': '固定浅色',
   'settings.themeHint': '固定模式会同步宿主的主题偏好，退出登录或卸载后恢复。',
+  'settings.boot': '启动动画',
+  'settings.bootHint': '页面加载时播放黑白鲸鱼开场，随后侧栏、标签与输入框依次淡入；下次加载生效，系统开启“减少动态效果”时自动跳过。',
+  'settings.bootPreview': '预览',
+  'settings.bootPreviewLabel': '预览启动动画',
+  'settings.bootPlaying': '播放中…',
+  'settings.bootReduced': '（当前系统开启了“减少动态效果”，启动时不会播放，预览不可用。）',
   'settings.reset': '恢复默认',
   'settings.loading': '正在读取设置…',
   'settings.saved': '已保存',
@@ -274,6 +285,12 @@ const enUS = {
   'settings.theme.dark': 'Always dark',
   'settings.theme.light': 'Always light',
   'settings.themeHint': 'A fixed mode also syncs the host theme preference and restores it on unload.',
+  'settings.boot': 'Launch animation',
+  'settings.bootHint': 'Plays the monochrome whale opening on page load, then fades the sidebar, tabs and input card in. It applies on the next load and is skipped when the system asks for reduced motion.',
+  'settings.bootPreview': 'Preview',
+  'settings.bootPreviewLabel': 'Preview the launch animation',
+  'settings.bootPlaying': 'Playing…',
+  'settings.bootReduced': '(Reduced motion is on, so the opening is skipped at startup and cannot be previewed.)',
   'settings.reset': 'Reset to defaults',
   'settings.loading': 'Reading settings…',
   'settings.saved': 'Saved',

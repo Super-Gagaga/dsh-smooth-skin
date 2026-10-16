@@ -37,8 +37,9 @@ async function writeArtifact(url, content) {
 
 async function build() {
   const shared = await read('./src/shared.js');
-  const [skin, composer, account, layout, scrollbar, client, host] = await Promise.all([
+  const [skin, boot, composer, account, layout, scrollbar, client, host] = await Promise.all([
     read('./src/skin.js'),
+    read('./src/boot.js'),
     read('./src/composer.js'),
     read('./src/account.js'),
     read('./src/layout.js'),
@@ -47,8 +48,10 @@ async function build() {
     read('./src/host.js'),
   ]);
   await mkdir(OUT, { recursive: true });
-  const hostChanged = await writeArtifact(new URL('index.js', OUT), `${shared}\n${host}`);
-  const clientChanged = await writeArtifact(new URL('client.js', OUT), `${CLIENT_ARTIFACT}${shared}\n${skin}\n${composer}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`);
+  // boot.js is the opening's single definition: the Host half injects its rows, and
+  // the settings page replays the same markup and timings.
+  const hostChanged = await writeArtifact(new URL('index.js', OUT), `${shared}\n${boot}\n${host}`);
+  const clientChanged = await writeArtifact(new URL('client.js', OUT), `${CLIENT_ARTIFACT}${shared}\n${skin}\n${boot}\n${composer}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`);
   console.log(hostChanged || clientChanged ? `Built ${manifest.name}` : `${manifest.name}: artifacts unchanged`);
 }
 

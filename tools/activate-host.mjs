@@ -53,23 +53,27 @@ if (!callback) {
   if (plugin.Config !== undefined) note('a Config that is not a Standard Schema makes cordis read Config["~standard"].validate and throw');
 }
 
-// The Host half must stay dependency-free: cordis throws on `ctx.<name>` for a name
-// that is not in `inject`, so reaching for a service here is an activation failure.
+// The Host half contributes exactly one boot row table. Event subscription needs no
+// `inject` entry — the theme's own boot rows use the same seam — while any other
+// `ctx.<name>` access would throw "cannot get property ... without inject".
 const hostSource = await read('../src/host.js');
 const hostBody = hostSource.slice(hostSource.indexOf('export function apply'));
-if (/\bctx\s*\./.test(hostBody)) note('the Host apply body touches ctx; an undeclared service would throw "cannot get property ... without inject"');
+if (/\bctx\s*\.(?!on\b)/.test(hostBody)) note('the Host apply body reads a service; an undeclared name would throw "cannot get property ... without inject"');
 if (/\bhost\s*\.\s*call\b/.test(hostSource)) note('the Host half references the browser-only `host.call` bridge');
 
-// `apply` must also survive the degenerate contexts a dependency-free plugin gets.
+// `apply` must register the index-injection rows and survive them being rendered.
 try {
-  callback();
-  console.log('apply      no-argument call ok');
-} catch (error) {
-  note(`apply() threw with no arguments: ${error && error.message}`);
-}
-try {
-  callback({}, undefined);
-  console.log('apply      inert ctx ok');
+  const registered = new Map();
+  callback({ on(name, handler) { registered.set(name, handler); return () => registered.delete(name); } });
+  const rows = [];
+  const handler = registered.get('webserver/index-inject');
+  if (!handler) note('the Host half never subscribes to webserver/index-inject');
+  else {
+    handler(rows);
+    const kinds = rows.map((row) => row.kind).join(',');
+    if (kinds !== 'style,html,script') note(`the Host half injected ${kinds || 'nothing'}, expected style,html,script`);
+    else console.log(`apply      index rows ok (${kinds})`);
+  }
 } catch (error) {
   note(`apply(ctx) threw: ${error && error.message}`);
 }
