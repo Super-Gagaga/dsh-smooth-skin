@@ -189,6 +189,9 @@ test('closing tabs selects a neighbor only for the active tab and never deletes 
   assert.equal(nodes.filter(node => node.props.role === 'tab').length, 1);
   nodes.find(node => node.props['aria-label'] === '关闭标签页：B').props.onClick({ stopPropagation() {} });
   assert.deepEqual(r.calls, [['home']]);
+  // The welcome page is the surface itself, so the emptied strip must stay empty.
+  nodes = r.flatten(r.render());
+  assert.equal(nodes.filter(node => node.props.role === 'tab').length, 0, 'the home view must not publish a tab of its own');
   assert.ok(r.snapshot.byId.a && r.snapshot.byId.b);
   const tabs = r.sandbox.createTabs();
   for (const key of ['a', 'b', 'c']) { const tab = { key, title: key }; tabs.show(tab); tabs.pin(tab); }

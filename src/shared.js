@@ -19,14 +19,17 @@ const DEFAULTS = {
 const PALETTE = {
   dark: {
     app: '#292c2e',
+    rail: '#191b1d',
     sidebar: '#202123',
     layer1: '#303335',
     layer2: '#323537',
     layer3: '#393a3e',
+    selected: '#393a3e',
+    input: '#323537',
     overlay: '#2b2b2b',
-    text: '#e0e1e3',
-    muted: '#b3b5ba',
-    faint: '#a4a7af',
+    text: '#f1f2f4',
+    muted: '#c3c5ca',
+    faint: '#b4b7bf',
     solid: '#f7f7f8',
     solidText: '#181a1e',
     brand: '#8fb7ff',
@@ -42,7 +45,7 @@ const PALETTE = {
     code: '#242729',
     scrollbar: 'rgba(255,255,255,.14)',
     scrollbarHover: 'rgba(255,255,255,.24)',
-    error: '#ef3538',
+    error: '#ff8085',
     warn: '#e0a94a',
     success: '#7fb069',
     business: '#85b2ff',
@@ -50,14 +53,17 @@ const PALETTE = {
   },
   light: {
     app: '#f4f5f7',
+    rail: '#e2e5e9',
     sidebar: '#eceef1',
     layer1: '#ffffff',
     layer2: '#f5f6f8',
     layer3: '#f0f1f4',
+    selected: '#dce3ee',
+    input: '#ffffff',
     overlay: '#ffffff',
     text: '#31343a',
-    muted: '#63676e',
-    faint: '#83878e',
+    muted: '#535b65',
+    faint: '#5f656e',
     solid: '#26292e',
     solidText: '#f7f7f8',
     brand: '#3f6fd8',
@@ -68,7 +74,7 @@ const PALETTE = {
     line3: 'rgba(24,26,30,.24)',
     hover: 'rgba(24,26,30,.05)',
     active: 'rgba(24,26,30,.09)',
-    bubble: '#eef0f3',
+    bubble: '#e5eaf1',
     bubbleHighlight: '#e4e8ee',
     code: '#f4f5f7',
     scrollbar: 'rgba(24,26,30,.18)',
@@ -118,7 +124,7 @@ function buildTokens(state) {
   put('--dsw-alias-link', 'link');
 
   put('--dsw-specific-sidebar-fill', 'sidebar');
-  put('--dsw-specific-input-major', 'layer2');
+  put('--dsw-specific-input-major', 'input');
   put('--dsw-specific-bubble', 'bubble');
   put('--dsw-specific-bubble-highlight', 'bubbleHighlight');
 
@@ -149,10 +155,12 @@ function buildTokens(state) {
   // Plugin-local tokens consumed by the skin stylesheet. Plugin UI may carry its
   // own artwork colours, so these are literals and not host aliases.
   tokens['--smooth-app'] = pair('app');
+  tokens['--smooth-rail'] = pair('rail');
   tokens['--smooth-sidebar'] = pair('sidebar');
   tokens['--smooth-surface'] = pair('layer1');
   tokens['--smooth-surface-2'] = pair('layer2');
   tokens['--smooth-surface-3'] = pair('layer3');
+  tokens['--smooth-selected'] = pair('selected');
   tokens['--smooth-line'] = pair('line1');
   tokens['--smooth-line-strong'] = pair('line2');
   tokens['--smooth-text'] = pair('text');

@@ -64,6 +64,39 @@ test('buildTokens always carries both tones for every token', async () => {
   }
 });
 
+const luminance = hex => {
+  const rgb = hex.slice(1).match(/../g).map(value => Number.parseInt(value, 16) / 255)
+    .map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+  return rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722;
+};
+const contrastRatio = (first, second) => {
+  const values = [first, second].map(luminance).sort((a, b) => a - b);
+  return (values[1] + .05) / (values[0] + .05);
+};
+const readingSurfaces = ['--smooth-rail', '--smooth-sidebar', '--smooth-app', '--smooth-surface', '--smooth-selected', '--dsw-specific-input-major', '--dsw-specific-bubble'];
+
+for (const tone of ['light', 'dark']) {
+  test(`${tone} theme text remains readable across navigation, selected rows and message surfaces`, async () => {
+    const { buildTokens } = await loadHostHalf();
+    const tokens = buildTokens({ enabled: true, theme: tone });
+    for (const foreground of ['--dsw-alias-label-primary', '--dsw-alias-label-secondary', '--dsw-alias-label-tertiary']) {
+      for (const background of readingSurfaces) {
+        const contrast = contrastRatio(tokens[foreground][tone], tokens[background][tone]);
+        assert.ok(contrast >= 4.5, `${foreground} on ${background}: ${contrast.toFixed(2)}:1`);
+      }
+    }
+  });
+}
+
+test('dark error text is readable on content, input and selected backgrounds', async () => {
+  const { buildTokens } = await loadHostHalf();
+  const tokens = buildTokens({ enabled: true, theme: 'dark' });
+  for (const background of readingSurfaces) {
+    const contrast = contrastRatio(tokens['--dsw-alias-state-error-primary'].dark, tokens[background].dark);
+    assert.ok(contrast >= 4.5, `error on ${background}: ${contrast.toFixed(2)}:1`);
+  }
+});
+
 test('every CSS custom property the skin reads exists as a plugin token or a literal', async () => {
   const { buildTokens } = await loadHostHalf();
   const tokens = new Set(Object.keys(buildTokens({ enabled: true, theme: 'auto' })));

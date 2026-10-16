@@ -146,7 +146,8 @@ function installReferenceShell({ slots, layout, uiWorkspace, theme, remote, subs
   let composerDispose;
   let accountDispose;
   const disposers = [];
-  const recordOperation = (event) => { if (active && isWorkspaceOperation(event)) workspaceTabs.pin(currentView); };
+  // The home view is the page itself, not a tab, so it never becomes a pin target.
+  const recordOperation = (event) => { if (active && currentView && isWorkspaceOperation(event)) workspaceTabs.pin(currentView); };
   for (const type of ['input', 'change', 'click']) {
     document.addEventListener(type, recordOperation, true);
     disposers.push(() => document.removeEventListener(type, recordOperation, true));
@@ -207,7 +208,8 @@ function installReferenceShell({ slots, layout, uiWorkspace, theme, remote, subs
     const result = workspaceTabs.close(tab.key);
     if (!result?.active) return;
     if (result.next) activateTab(result.next);
-    else { openHome(); workspaceTabs.show({ key: 'home', kind: 'home', title: text('shell.home', '首页') }); }
+    // Closing the last tab leaves the strip empty; the welcome page stands on its own.
+    else openHome();
   }
   function Appearance() {
     const preference = React.useSyncExternalStore(subscribeTheme, () => theme.getTheme().preference);
@@ -239,8 +241,8 @@ function installReferenceShell({ slots, layout, uiWorkspace, theme, remote, subs
     const ownsSurface = skin.state.enabled && !!props.inSettings === settingsOpen;
     React.useEffect(() => {
       if (!ownsSurface) return;
-      currentView = view;
-      workspaceTabs.show(view);
+      currentView = view.kind === 'home' ? undefined : view;
+      if (currentView) workspaceTabs.show(view);
     }, [ownsSurface, view.key, view.title]);
     const scroll = React.useRef(null);
     const tabScroll = React.useRef(null);
