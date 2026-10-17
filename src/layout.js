@@ -8,6 +8,12 @@ function sharedSurfaceStore(slots, name, action) {
   }
 }
 
+/** The sidebar width the skin opens with. This is the 352px layout the user
+ * resized to and asked to keep: deriving 28.5vw on every enable overwrote that
+ * choice whenever the window width changed. The bounds still guard the native
+ * 264-420px clamp and the skin's 320-560px rail window. */
+const DEFAULT_SIDEBAR_WIDTH = 352;
+
 function currentWorkspaceTab(snapshot, panel, settingsOpen, panelTitle, text) {
   if (settingsOpen) return { key: 'settings', kind: 'settings', title: text('shell.settings', '设置') };
   if (panel) return { key: `panel:${panel}`, kind: 'panel', id: panel, title: panelTitle || (panel === 'plugins' ? text('shell.plugins', '插件') : panel) };
@@ -178,7 +184,7 @@ function installReferenceShell({ slots, layout, uiWorkspace, theme, remote, subs
     if (enabled) {
       previousWidth = current;
       if (current > 0) {
-        appliedWidth = Math.min(560, Math.max(320, Math.round(window.innerWidth * .285)));
+        appliedWidth = Math.min(560, Math.max(320, DEFAULT_SIDEBAR_WIDTH));
         layoutStore.actions.setSidebar(appliedWidth);
       }
     } else if (current === appliedWidth) layoutStore.actions.setSidebar(previousWidth);
@@ -261,6 +267,13 @@ function installReferenceShell({ slots, layout, uiWorkspace, theme, remote, subs
     };
     const tabs = [...tabState.pinned, ...(tabState.preview ? [tabState.preview] : [])];
     const tabSignature = `${tabState.activeKey}/${tabs.map(item => `${item.key}:${item.title}`).join('/')}`;
+    /* A workspace with no tab open has nothing to type into yet: the welcome page keeps
+     * its headline and drops the workspace picker, the second context line and the card.
+     * The flag is published on the body because the block belongs to the host's hero,
+     * outside this component's own tree; the rules that read it live in src/skin.js. As
+     * soon as a session, panel or settings tab exists the block comes back. */
+    const hasTabs = tabs.length > 0;
+    React.useEffect(() => { document.body.toggleAttribute(NO_TABS_ATTRIBUTE, !hasTabs); }, [hasTabs]);
     React.useEffect(() => {
       const node = scroll.current;
       if (!node) return;

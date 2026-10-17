@@ -35,13 +35,19 @@ const CSS = `/* injected through the package stylesheet; kept beside the skin ru
 .smooth-choice:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
 .smooth-choice:disabled{opacity:.5;cursor:default}
 .smooth-footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.smooth-size{display:flex;align-items:center;gap:10px;flex:none}
+.smooth-size label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dsw-alias-label-secondary)}
+.smooth-size input{font:inherit;font-size:13px;width:74px;padding:6px 9px;border-radius:10px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1,transparent);color:inherit;text-align:right}
+.smooth-size input:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:2px}
+.smooth-size input:disabled{opacity:.5}
+.smooth-size-times{color:var(--dsw-alias-label-secondary);font-size:12.5px}
 .smooth-button{font:inherit;font-size:13px;padding:8px 16px;border-radius:999px;border:1px solid var(--dsw-alias-border-l3);background:var(--dsw-alias-bg-layer-1,transparent);color:inherit;cursor:pointer}
 .smooth-button:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12))}
 .smooth-button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
 .smooth-button:disabled{opacity:.5;cursor:default}
 .smooth-status{font-size:12.5px;color:var(--dsw-alias-label-secondary)}
 .smooth-status[data-error="true"]{color:var(--dsw-alias-state-error-primary)}
-@media(max-width:600px){.smooth-choices{gap:8px}.smooth-choice{min-height:72px;font-size:12px;padding:16px 6px}.smooth-row{gap:14px}}
+@media(max-width:600px){.smooth-choices{gap:8px}.smooth-choice{min-height:72px;font-size:12px;padding:16px 6px}.smooth-row{gap:14px}.smooth-row--size{flex-direction:column;align-items:flex-start;gap:12px}.smooth-size input{width:64px}}
 @media(prefers-reduced-motion:reduce){.smooth-switch,.smooth-switch::after,.smooth-choice{transition:none}}
 `;
 
@@ -92,6 +98,10 @@ function apply(ctx) {
     failure = '';
     emit();
     sync();
+    // Only an edit moves the window. At launch the injected opening has already sized it
+    // while the window was still hidden, so repeating that here would move a window the
+    // user is already looking at.
+    applyWindowSize();
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (error) {
@@ -116,6 +126,36 @@ function apply(ctx) {
     theme.setTheme(state.theme);
   }
 
+  /**
+   * Put the desktop window into the configured size while the application loads.
+   *
+   * The desktop app creates its main window at 1280 x 820 with a 520 x 600 minimum and
+   * never persists bounds, and neither the renderer bridge (`dshDesktop`) nor the host
+   * process protocol carries a window size — but Electron does honour the renderer's own
+   * `window.resizeTo`, including on a window created hidden. That is exactly the window
+   * the app shows only after `loadURL` resolves, so the size is in place before the first
+   * visible frame and the user never sees the default. In a browser tab the call is a
+   * no-op, which is why this needs no platform check.
+   *
+   * Anything beyond the screen's work area is clamped: a window larger than the display
+   * would put its own controls out of reach, and there is no way to move it back from the
+   * renderer.
+   */
+  function applyWindowSize() {
+    const wanted = state.windowSize;
+    if (!state.enabled || !wanted?.enabled) return;
+    if (typeof window.resizeTo !== 'function') return;
+    // Frames keep the size their parent gave them; only the app's own window is ours.
+    try { if (window.top !== window.self) return; } catch (error) { return; }
+    const screen_ = window.screen || {};
+    const limitWidth = Number(screen_.availWidth) || WINDOW_SIZE.maxWidth;
+    const limitHeight = Number(screen_.availHeight) || WINDOW_SIZE.maxHeight;
+    const width = Math.max(WINDOW_SIZE.minWidth, Math.min(wanted.width, limitWidth));
+    const height = Math.max(WINDOW_SIZE.minHeight, Math.min(wanted.height, limitHeight));
+    if (window.outerWidth === width && window.outerHeight === height) return;
+    try { window.resizeTo(width, height); } catch (error) { failure = String(error && error.message ? error.message : error); }
+  }
+
   function attachStyle() {
     if (styleDispose) return;
     const style = document.createElement('style');
@@ -133,6 +173,9 @@ function apply(ctx) {
   function sync() {
     if (disposed) return;
     document.body.toggleAttribute(SKIN_ATTRIBUTE, !!state.enabled);
+    // The welcome block's flag is published by the chrome component while it is mounted,
+    // so a skin that is switched off has to take it down itself.
+    if (!state.enabled) document.body.removeAttribute(NO_TABS_ATTRIBUTE);
     scrollbarMotion.setEnabled(!!state.enabled);
     referenceShell?.setEnabled?.(!!state.enabled);
     syncHostTheme();
@@ -235,6 +278,43 @@ function apply(ctx) {
       }, option.label))));
   }
 
+  /** Two numbers and a switch: the size the desktop window is put into at launch. */
+  function SizeRow(props) {
+    const value = props.value;
+    const field = (key, label) => h('label', null,
+      h('span', null, label),
+      h('input', {
+        type: 'number',
+        inputMode: 'numeric',
+        min: key === 'width' ? WINDOW_SIZE.minWidth : WINDOW_SIZE.minHeight,
+        max: key === 'width' ? WINDOW_SIZE.maxWidth : WINDOW_SIZE.maxHeight,
+        step: 10,
+        value: value[key],
+        disabled: props.disabled,
+        'aria-label': label,
+        // An out-of-range value is repaired by `normalizeSize` before it reaches the
+        // window, so a half-typed number simply keeps the current size.
+        onChange: (event) => props.onChange({ ...value, [key]: Number(event.target.value) }),
+      }));
+    return h('div', { className: 'smooth-row smooth-row--size' },
+      h('div', { className: 'smooth-row-copy' },
+        h('h3', null, props.title),
+        props.hint ? h('small', null, props.hint) : null),
+      h('div', { className: 'smooth-size' },
+        field('width', text('settings.windowSizeWidth', 'Width')),
+        h('span', { className: 'smooth-size-times' }, '×'),
+        field('height', text('settings.windowSizeHeight', 'Height')),
+        h('input', {
+          className: 'smooth-switch',
+          type: 'checkbox',
+          role: 'switch',
+          'aria-label': props.title,
+          checked: value.enabled,
+          disabled: props.disabled,
+          onChange: (event) => props.onChange({ ...value, enabled: event.target.checked }),
+        })));
+  }
+
   function SmoothSettings() {
     const view = useSmoothState();
     const current = view.state;
@@ -283,14 +363,21 @@ function apply(ctx) {
         }),
         // The preview layer portals itself to the body; keeping it inside the section
         // leaves the section order (and the reset row) where the layout expects it.
-        playing ? h(SplashPreview, { onDone: () => setPlaying(false) }) : null),
+        playing ? h(SplashPreview, { onDone: () => setPlaying(false) }) : null,
+        h(SizeRow, {
+          title: text('settings.windowSize', 'Window size at launch'),
+          hint: text('settings.windowSizeHint', 'Sizes the desktop window while the application loads.'),
+          value: current.windowSize,
+          disabled: disabled || !current.enabled,
+          onChange: (value) => view.update({ ...current, windowSize: value }),
+        })),
       h('section', null,
         h('div', { className: 'smooth-footer' },
           h('button', {
             type: 'button',
             className: 'smooth-button',
             disabled,
-            onClick: () => view.update({ enabled: true, theme: 'auto', boot: true }),
+            onClick: () => view.update({ enabled: true, theme: 'auto', boot: true, windowSize: { enabled: true, ...DEFAULT_WINDOW_SIZE } }),
           }, text('settings.reset', 'Reset to defaults')),
           h('span', {
             className: 'smooth-status',
@@ -319,6 +406,10 @@ function apply(ctx) {
     splashStyle?.remove?.();
     splashStyle = undefined;
     document.body.removeAttribute(SKIN_ATTRIBUTE);
+    // The welcome block's flag is published while the chrome is mounted; a disabled
+    // skin must not leave it behind (it is gated on the skin attribute anyway, but the
+    // host body should come back exactly as it was).
+    document.body.removeAttribute(NO_TABS_ATTRIBUTE);
   }, 'smooth-skin');
 
   referenceShell = installReferenceShell({ slots, layout, uiWorkspace, theme, remote, useSmoothState, text,

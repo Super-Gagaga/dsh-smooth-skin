@@ -89,6 +89,9 @@ function splashHtml() {
  * document, and only falls back to the whole document when it is not. A subtree
  * observer on `documentElement` hands this script every mutation the mounting shell
  * makes, for a condition that only ever depends on one container.
+ *
+ * It also applies the launch window size, before anything has painted: see `sizeWindow`
+ * below for why the earliest possible moment is the one that matters.
  */
 function splashScript() {
   return `(function(){
@@ -97,11 +100,42 @@ if(!layer)return;
 var HOLD=${SPLASH_HOLD_MS},CAP=${SPLASH_CAP_MS},SETTLE=${SPLASH_SETTLE_MS};
 var started=Date.now(),done=false,capTimer=0;
 function remove(){if(layer.parentNode)layer.parentNode.removeChild(layer);}
-function still(){try{
+function read(){try{
   var raw=window.localStorage.getItem(${JSON.stringify(STORAGE_KEY)});
-  var stored=raw?JSON.parse(raw):null;
-  return !stored||(stored.enabled!==false&&stored.boot!==false);
-}catch(error){return true;}}
+  return raw?JSON.parse(raw):null;
+}catch(error){return null;}}
+function still(){var stored=read();return !stored||(stored.enabled!==false&&stored.boot!==false);}
+// The launch window size rides in the same stored state, and this script runs while the
+// document is still parsing. The desktop app creates its window hidden and only shows it
+// once the page has loaded, so sizing it here is what makes the first visible frame the
+// configured size — the module loader's own activation can be later than that. A state
+// saved before this setting existed carries no windowSize field; it takes the same default
+// the browser half normalizes to, so the later activation never has to move a visible
+// window. In a browser tab resizeTo is a no-op, so this needs no platform check.
+function sizeWindow(){try{
+  var stored=read();
+  if(stored&&stored.enabled===false)return;
+  var size=(stored&&stored.windowSize)||null;
+  if(size&&size.enabled===false)return;
+  if(typeof window.resizeTo!=='function')return;
+  if(window.top!==window.self)return;
+  var screen=window.screen||{};
+  var areaWidth=Number(screen.availWidth)||0;
+  var areaHeight=Number(screen.availHeight)||0;
+  var maxWidth=areaWidth||${WINDOW_SIZE.maxWidth};
+  var maxHeight=areaHeight||${WINDOW_SIZE.maxHeight};
+  var width=Math.max(${WINDOW_SIZE.minWidth},Math.min(Number(size&&size.width)||${DEFAULT_WINDOW_SIZE.width},maxWidth));
+  var height=Math.max(${WINDOW_SIZE.minHeight},Math.min(Number(size&&size.height)||${DEFAULT_WINDOW_SIZE.height},maxHeight));
+  if(window.outerWidth!==width||window.outerHeight!==height)window.resizeTo(width,height);
+  // Centre it in the work area rather than the full screen: that rectangle is what the
+  // app's own frame and caption buttons are drawn in, so it is the one "centred" means.
+  // moveTo travels the same renderer-to-main channel as resizeTo; when the work area is
+  // unknown it is skipped, since an invented origin is worse than the platform default.
+  if(areaWidth&&areaHeight&&typeof window.moveTo==='function'){
+    window.moveTo(Math.round((Number(screen.availLeft)||0)+(areaWidth-width)/2),Math.round((Number(screen.availTop)||0)+(areaHeight-height)/2));
+  }
+}catch(error){}}
+sizeWindow();
 if(!still()||(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)){remove();return;}
 layer.setAttribute('data-smooth-splash-live','');
 function out(){

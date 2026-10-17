@@ -9,13 +9,26 @@ const PLUGIN_ID = 'dsh-smooth-skin';
 const SKIN_ATTRIBUTE = 'data-smooth-skin';
 /** Set while the launch animation owns the screen, and removed with its layer. */
 const BOOT_ATTRIBUTE = 'data-smooth-boot';
+/** Set while the workspace has no tab open: the welcome block is not drawn then, because
+ * there is nothing to type into yet. Published by the chrome (src/layout.js) from its tab
+ * ledger, read by the stylesheet (src/skin.js), cleared with the skin (src/client.js). */
+const NO_TABS_ATTRIBUTE = 'data-smooth-no-tabs';
 /** The Client half's durable store. Reaching no host service is what keeps activation safe. */
 const STORAGE_KEY = 'dsh-smooth-skin:state';
+
+/** The size the desktop window is put into while the application loads. The bounds are
+ * the ones the renderer can ask for: the app itself is created at 1280 x 820 with a
+ * 520 x 600 minimum, and anything larger than the screen's work area is clamped when the
+ * request is made (see `applyWindowSize` in the browser half). */
+const WINDOW_SIZE = { minWidth: 520, minHeight: 600, maxWidth: 10000, maxHeight: 10000 };
+const DEFAULT_WINDOW_SIZE = { width: 1440, height: 900 };
 
 const DEFAULTS = {
   enabled: true,
   theme: 'auto',
   boot: true,
+  // The desktop window opens at 1440 x 900 unless the user changes it in settings.
+  windowSize: { enabled: true, ...DEFAULT_WINDOW_SIZE },
 };
 
 /** Literal colours live here only: everything else references --dsw-alias-* tokens. */
@@ -175,17 +188,34 @@ function buildTokens(state) {
   return tokens;
 }
 
+/** Keep a persisted size inside the range the renderer may ask for, falling back to the
+ * default per field rather than rejecting the whole record. */
+function normalizeSize(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const size = {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULTS.windowSize.enabled,
+    width: DEFAULTS.windowSize.width,
+    height: DEFAULTS.windowSize.height,
+  };
+  for (const [key, min, max] of [['width', WINDOW_SIZE.minWidth, WINDOW_SIZE.maxWidth], ['height', WINDOW_SIZE.minHeight, WINDOW_SIZE.maxHeight]]) {
+    const value = Math.round(Number(source[key]));
+    if (Number.isFinite(value) && value >= min && value <= max) size[key] = value;
+  }
+  return size;
+}
+
 function normalize(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const state = { ...DEFAULTS };
   if (typeof source.enabled === 'boolean') state.enabled = source.enabled;
   if (source.theme === 'auto' || source.theme === 'dark' || source.theme === 'light') state.theme = source.theme;
   if (typeof source.boot === 'boolean') state.boot = source.boot;
+  state.windowSize = normalizeSize(source.windowSize);
   return state;
 }
 
 function configFromState(state) {
-  return { enabled: state.enabled, theme: state.theme, boot: state.boot };
+  return { enabled: state.enabled, theme: state.theme, boot: state.boot, windowSize: state.windowSize };
 }
 
 function normalizeConfig(raw) {
@@ -194,6 +224,7 @@ function normalizeConfig(raw) {
   if (typeof source.enabled === 'boolean') config.enabled = source.enabled;
   if (source.theme === 'auto' || source.theme === 'dark' || source.theme === 'light') config.theme = source.theme;
   if (typeof source.boot === 'boolean') config.boot = source.boot;
+  config.windowSize = normalizeSize(source.windowSize);
   return config;
 }
 
@@ -242,6 +273,11 @@ const zhCN = {
   'settings.bootPreviewLabel': '预览启动动画',
   'settings.bootPlaying': '播放中…',
   'settings.bootReduced': '（当前系统开启了“减少动态效果”，启动时不会播放，预览不可用。）',
+  'settings.windowSize': '启动窗口尺寸',
+  'settings.windowSizeHint': '桌面应用启动时把窗口调整成这个尺寸并居中显示（窗口在页面加载完成前是隐藏的，所以第一眼就是这个大小和位置）；超出屏幕可用区域会自动收窄，最小 520 × 600。改完立即生效。',
+  'settings.windowSizeWidth': '宽',
+  'settings.windowSizeHeight': '高',
+  'settings.windowSizeDefault': '恢复 1440 × 900',
   'settings.reset': '恢复默认',
   'settings.loading': '正在读取设置…',
   'settings.saved': '已保存',
@@ -291,6 +327,11 @@ const enUS = {
   'settings.bootPreviewLabel': 'Preview the launch animation',
   'settings.bootPlaying': 'Playing…',
   'settings.bootReduced': '(Reduced motion is on, so the opening is skipped at startup and cannot be previewed.)',
+  'settings.windowSize': 'Window size at launch',
+  'settings.windowSizeHint': 'Sizes the desktop window and centres it while the application loads (the window is hidden until the page has loaded, so this is the first size and position you see). Requests beyond the screen work area are clamped; the minimum is 520 × 600. Changes apply immediately.',
+  'settings.windowSizeWidth': 'Width',
+  'settings.windowSizeHeight': 'Height',
+  'settings.windowSizeDefault': 'Reset to 1440 × 900',
   'settings.reset': 'Reset to defaults',
   'settings.loading': 'Reading settings…',
   'settings.saved': 'Saved',

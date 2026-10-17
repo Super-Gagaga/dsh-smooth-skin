@@ -39,7 +39,7 @@ function createNode(tag) {
 }
 
 /** Run the injected script against a fake document, clock and storage. */
-function runSplash({ stored, reduced = false, mounted = false, observe = true, rootPresent = true } = {}) {
+function runSplash({ stored, reduced = false, mounted = false, observe = true, rootPresent = true, screen, outer, framed = false } = {}) {
   const body = createNode('body');
   const root = createNode('div');
   root.childElementCount = mounted ? 1 : 0;
@@ -48,24 +48,34 @@ function runSplash({ stored, reduced = false, mounted = false, observe = true, r
   layer.querySelector = (selector) => (selector === 'animate' ? animate : null);
   const documentElement = createNode('html');
   const nodes = rootPresent ? { [hostHalf.id]: layer, root } : { [hostHalf.id]: layer };
-  const calls = { observers: 0, disconnected: 0, observed: [] };
+  const calls = { observers: 0, disconnected: 0, observed: [], resizes: [], moves: [] };
   const timers = new Map();
   let now = 0;
   let nextTimer = 0;
+  let outerWidth = outer ? outer[0] : 1280;
+  let outerHeight = outer ? outer[1] : 820;
+  const frameWindow = {
+    localStorage: { getItem: () => (stored === undefined ? null : JSON.stringify(stored)) },
+    matchMedia: () => ({ matches: reduced }),
+    MutationObserver: observe ? class {
+      constructor(fn) { this.fn = fn; calls.observers += 1; calls.instance = this; }
+      observe(target, options) { calls.observed.push({ target, options }); }
+      disconnect() { this.disconnected = true; calls.disconnected += 1; }
+    } : undefined,
+    resizeTo: (width, height) => { calls.resizes.push([width, height]); outerWidth = width; outerHeight = height; },
+    moveTo: (x, y) => { calls.moves.push([x, y]); },
+    get outerWidth() { return outerWidth; },
+    get outerHeight() { return outerHeight; },
+    screen: screen || { availWidth: 2560, availHeight: 1440 },
+  };
+  frameWindow.self = frameWindow;
+  frameWindow.top = framed ? {} : frameWindow;
   const sandbox = {
     document: {
       documentElement, body,
       getElementById: (id) => nodes[id] || null,
     },
-    window: {
-      localStorage: { getItem: () => (stored === undefined ? null : JSON.stringify(stored)) },
-      matchMedia: () => ({ matches: reduced }),
-      MutationObserver: observe ? class {
-        constructor(fn) { this.fn = fn; calls.observers += 1; calls.instance = this; }
-        observe(target, options) { calls.observed.push({ target, options }); }
-        disconnect() { this.disconnected = true; calls.disconnected += 1; }
-      } : undefined,
-    },
+    window: frameWindow,
     setTimeout: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, at: now + (delay || 0) }); return id; },
     clearTimeout: (id) => { timers.delete(id); },
     Date: { now: () => now },
@@ -167,6 +177,56 @@ test('the whale path ships rounded, within a fraction of a pixel of the original
   assert.ok(hostHalf.path.endsWith('Z'), 'and still closes its outline');
   assert.ok(hostHalf.path.length < 2400, `the silhouette should stay near 2.3 KB, got ${hostHalf.path.length}`);
   assert.ok(!/SPLASH_SWIM|HERO_SWIM/.test(boot), 'the morph frames are gone, not just unused');
+});
+
+test('the opening sizes the window before the app can show it', () => {
+  // The desktop app builds its window at 1280 x 820, hidden, and shows it only once the
+  // page has loaded: a request made from this inline script is therefore in place for the
+  // first visible frame, which the module loader's later activation cannot guarantee.
+  const sized = runSplash({ stored: { enabled: true, windowSize: { enabled: true, width: 1600, height: 1000 } } });
+  assert.deepEqual(sized.calls.resizes, [[1600, 1000]]);
+  assert.deepEqual(sized.calls.moves, [[480, 220]], 'and it is centred in the 2560 x 1440 work area');
+
+  // A state saved before this setting existed takes the default the browser half
+  // normalizes to, so the later activation never has to move a visible window.
+  const defaulted = runSplash({});
+  assert.deepEqual(defaulted.calls.resizes, [[1440, 900]], 'the documented default applies at launch');
+
+  const off = runSplash({ stored: { enabled: true, windowSize: { enabled: false, width: 1600, height: 1000 } } });
+  assert.deepEqual(off.calls.resizes, [], 'the switch is honoured');
+  const skinOff = runSplash({ stored: { enabled: false, windowSize: { enabled: true, width: 1600, height: 1000 } } });
+  assert.deepEqual(skinOff.calls.resizes, [], 'a disabled skin does not resize the window either');
+
+  // The opening itself can be skipped (reduced motion, or the animation switched off)
+  // without losing the window size: they are separate settings.
+  const quiet = runSplash({ reduced: true, stored: { enabled: true, boot: false, windowSize: { enabled: true, width: 1600, height: 1000 } } });
+  assert.deepEqual(quiet.calls.resizes, [[1600, 1000]], 'the size still applies when the animation does not play');
+  assert.equal(quiet.attached(), false, 'and the skipped opening is still removed');
+
+  // A display smaller than the request wins, and the app's own minimum is respected.
+  const small = runSplash({ stored: { windowSize: { enabled: true, width: 1600, height: 1000 } }, screen: { availWidth: 1280, availHeight: 720 } });
+  assert.deepEqual(small.calls.resizes, [[1280, 720]]);
+  const tiny = runSplash({ stored: { windowSize: { enabled: true, width: 100, height: 100 } } });
+  assert.deepEqual(tiny.calls.resizes, [[520, 600]], 'below the app minimum the request is raised to it');
+  assert.deepEqual(tiny.calls.moves, [[1020, 420]], 'the raised size is centred, not the requested one');
+
+  // A screen that does not start at the origin (a second monitor) offsets the centre.
+  const offset = runSplash({ stored: { windowSize: { enabled: true, width: 1600, height: 1000 } }, screen: { availWidth: 1920, availHeight: 1080, availLeft: 2560, availTop: 40 } });
+  assert.deepEqual(offset.calls.moves, [[2720, 80]], 'the work area origin is added to the centre');
+  // Without a usable work area there is no centre to aim at, so the window is left where
+  // the platform put it rather than moved to an invented origin.
+  const blind = runSplash({ stored: { windowSize: { enabled: true, width: 1600, height: 1000 } }, screen: { availWidth: 0, availHeight: 0 } });
+  assert.deepEqual(blind.calls.moves, []);
+
+  // A window already at the requested size is left alone: no pointless resize on every load.
+  const fitted = runSplash({ stored: { windowSize: { enabled: true, width: 1280, height: 820 } }, outer: [1280, 820] });
+  assert.deepEqual(fitted.calls.resizes, []);
+  assert.deepEqual(fitted.calls.moves, [[640, 310]], 'a window already the right size is still centred');
+
+  // In a browser tab the call is a no-op anyway, but a page inside an iframe must not
+  // resize the frame it happens to live in.
+  const framed = runSplash({ framed: true, stored: { windowSize: { enabled: true, width: 1600, height: 1000 } } });
+  assert.deepEqual(framed.calls.resizes, []);
 });
 
 test('the first splash frame contains only the native whale with no text or controls', () => {

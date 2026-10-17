@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 const built = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8');
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
-function loadClient({ stored, unavailable = [] } = {}) {
+function loadClient({ stored, unavailable = [], screen, outer, framed = false } = {}) {
   let registration;
   let settings;
   let dictionaries;
@@ -14,6 +14,9 @@ function loadClient({ stored, unavailable = [] } = {}) {
   let tokenLayers = 0;
   const effects = [];
   const styles = new Set();
+  const resizes = [];
+  let outerWidth = outer ? outer[0] : 1280;
+  let outerHeight = outer ? outer[1] : 820;
   const attributes = new Set();
   const timers = new Map();
   // Each component function gets one hook frame, reused across its renders, so a
@@ -64,14 +67,24 @@ function loadClient({ stored, unavailable = [] } = {}) {
   for (const name of unavailable) delete services[name];
   // Stand-in for the previewed layer the portal mounts, so the wag start is observable.
   const swim = { begun: 0, beginElement() { this.begun += 1; } };
+  const frameWindow = {
+    __ModuleLoader__: { load: (value) => { registration = value; } },
+    localStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+    matchMedia: () => ({ matches: false }),
+    setTimeout: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, at: delay || 0 }); return id; },
+    clearTimeout: (id) => timers.delete(id),
+    // The desktop window the half sizes at launch; the test observes the requests.
+    resizeTo: (width, height) => { resizes.push([width, height]); outerWidth = width; outerHeight = height; },
+    get outerWidth() { return outerWidth; },
+    get outerHeight() { return outerHeight; },
+    screen: screen || { availWidth: 2560, availHeight: 1440 },
+  };
+  // A frame reports the parent as a different window object, which is how the half tells
+  // the application's own window apart from an embedded one.
+  frameWindow.self = frameWindow;
+  frameWindow.top = framed ? {} : frameWindow;
   runInNewContext(built, {
-    window: {
-      __ModuleLoader__: { load: (value) => { registration = value; } },
-      localStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) },
-      matchMedia: () => ({ matches: false }),
-      setTimeout: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, at: delay || 0 }); return id; },
-      clearTimeout: (id) => timers.delete(id),
-    },
+    window: frameWindow,
     document: {
       addEventListener() {}, removeEventListener() {},
       createElement: () => { const style = { dataset: {}, remove: () => styles.delete(style) }; return style; },
@@ -104,7 +117,7 @@ function loadClient({ stored, unavailable = [] } = {}) {
     },
   });
   return {
-    plugin, ctx, styles, attributes, storage, timers, swim,
+    plugin, ctx, styles, attributes, storage, timers, swim, resizes,
     get settings() { return settings; },
     get tokenLayers() { return tokenLayers; },
     get preference() { return preference; },
@@ -142,12 +155,104 @@ test('built client exports an activatable plugin with every service declared', (
   assert.equal(runtime.dictionaries, undefined);
 });
 
+test('the launch window size is left to the opening and edited in settings', async () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  // The injected opening sizes the window while it is still hidden. Activating the module
+  // afterwards must not move a window the user can already see.
+  assert.deepEqual(runtime.resizes, [], 'activation leaves the launch size alone');
+  const stored = () => JSON.parse(runtime.storage.get('dsh-smooth-skin:state'));
+  // Rows are re-read after every change, the way React re-renders them.
+  const sizeRow = () => {
+    const rows = runtime.settings.component().children[1].children;
+    const element = rows[rows.length - 1];
+    const [width, times, height, toggle] = runtime.render(element).children[1].children;
+    return { element, width, times, height, toggle };
+  };
+
+  const first = sizeRow();
+  assert.equal(first.element.props.value.width, 1440);
+  assert.equal(first.element.props.value.height, 900);
+  assert.equal(first.times.children[0], '×');
+  assert.equal(first.width.children[0].children[0], '宽');
+  assert.equal(first.height.children[0].children[0], '高');
+  assert.equal(first.width.children[1].props.type, 'number');
+  assert.equal(first.width.children[1].props.min, 520, 'the app refuses anything narrower');
+  assert.equal(first.height.children[1].props.min, 600);
+  assert.equal(first.toggle.props.checked, true, 'the size is applied by default');
+  assert.equal(first.toggle.props.role, 'switch');
+
+  // A half-typed number is repaired into the current size instead of resizing anything,
+  // so the window settles as soon as a usable pair has been typed.
+  await first.width.children[1].props.onChange({ target: { value: '16' } });
+  assert.deepEqual(runtime.resizes, [[1440, 900]], 'an out-of-range edit keeps the window where it is');
+  assert.equal(stored().windowSize.width, 1440);
+  await sizeRow().width.children[1].props.onChange({ target: { value: '1600' } });
+  assert.deepEqual(runtime.resizes.at(-1), [1600, 900], 'a usable width is applied at once');
+  assert.equal(stored().windowSize.width, 1600);
+
+  await sizeRow().toggle.props.onChange({ target: { checked: false } });
+  assert.equal(stored().windowSize.enabled, false);
+  const before = runtime.resizes.length;
+  await sizeRow().height.children[1].props.onChange({ target: { value: '1000' } });
+  assert.equal(runtime.resizes.length, before, 'a disabled size row never touches the window');
+  assert.equal(stored().windowSize.enabled, false, 'and editing a number does not switch it back on');
+  assert.equal(stored().windowSize.height, 1000, 'the number itself is still remembered');
+
+  await runtime.settings.component().children[2].children[0].children[0].props.onClick();
+  assert.deepEqual(stored().windowSize, { enabled: true, width: 1440, height: 900 });
+  runtime.dispose();
+});
+
+test('an edited size is clamped to the screen work area and skipped when it fits', async () => {
+  const edit = async (runtime, value) => {
+    const rows = runtime.settings.component().children[1].children;
+    const element = rows[rows.length - 1];
+    const [width] = runtime.render(element).children[1].children;
+    await width.children[1].props.onChange({ target: { value } });
+  };
+
+  // A 1280 x 720 display cannot hold the request: it shrinks to fit instead of putting the
+  // window's own controls out of reach. Activation itself never moves the window.
+  const small = loadClient({ screen: { availWidth: 1280, availHeight: 720 } });
+  small.plugin.apply(small.ctx);
+  assert.deepEqual(small.resizes, [], 'activation leaves the launch size alone');
+  await edit(small, '1600');
+  assert.deepEqual(small.resizes, [[1280, 720]]);
+  small.dispose();
+
+  // A window already at the requested size is left alone.
+  const fitted = loadClient({ stored: { windowSize: { enabled: true, width: 1280, height: 820 } }, outer: [1280, 820] });
+  fitted.plugin.apply(fitted.ctx);
+  await edit(fitted, '1280');
+  assert.deepEqual(fitted.resizes, []);
+
+  // An embedded frame keeps the size its parent gave it.
+  const framed = loadClient({ framed: true });
+  framed.plugin.apply(framed.ctx);
+  await edit(framed, '1600');
+  assert.deepEqual(framed.resizes, []);
+
+  // Without the setting (or without the skin) the request is ignored.
+  const off = loadClient({ stored: { windowSize: { enabled: false, width: 1600, height: 1000 } } });
+  off.plugin.apply(off.ctx);
+  await edit(off, '1600');
+  assert.deepEqual(off.resizes, []);
+  const disabled = loadClient({ stored: { enabled: false, windowSize: { enabled: true, width: 1600, height: 1000 } } });
+  disabled.plugin.apply(disabled.ctx);
+  assert.deepEqual(disabled.resizes, [], 'a disabled skin never sizes the window');
+});
+
 test('turning the skin off restores tokens and theme, then re-enabling reapplies it', async () => {
   const runtime = loadClient({ stored: { enabled: true, theme: 'dark' } });
   runtime.plugin.apply(runtime.ctx);
   assert.equal(runtime.preference, 'dark');
   const getToggle = () => runtime.settings.component().children[1].children[0];
+  // The chrome publishes this flag while the workspace has no tab open; switching the
+  // skin off has to take it down with the rest of the plugin's marks on the host body.
+  runtime.attributes.add('data-smooth-no-tabs');
   await getToggle().props.onChange(false);
+  assert.equal(runtime.attributes.has('data-smooth-no-tabs'), false, 'a disabled skin leaves no welcome-block flag behind');
   assert.equal(runtime.preference, 'system');
   assert.equal(runtime.tokenLayers, 0);
   assert.equal(runtime.attributes.size, 0);
@@ -169,10 +274,12 @@ test('the settings page carries the enable switch, the mode choice and the launc
   assert.equal(rows[2].props.checked, true, 'the launch animation is on by default');
   assert.equal(rows[2].props.disabled, false);
   await rows[2].props.onChange(false);
-  assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')), { enabled: true, theme: 'auto', boot: false });
+  assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')),
+    { enabled: true, theme: 'auto', boot: false, windowSize: { enabled: true, width: 1440, height: 900 } });
   assert.equal(runtime.settings.component().children[1].children[2].props.checked, false);
   await runtime.settings.component().children[2].children[0].children[0].props.onClick();
-  assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')), { enabled: true, theme: 'auto', boot: true });
+  assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')),
+    { enabled: true, theme: 'auto', boot: true, windowSize: { enabled: true, width: 1440, height: 900 } });
   runtime.dispose();
 });
 

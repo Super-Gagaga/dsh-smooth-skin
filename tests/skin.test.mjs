@@ -17,7 +17,7 @@ const scrollbar = await read('../src/scrollbar.js');
 
 /** Evaluate the shared + boot + host half as an ESM module through a data: URL. */
 async function loadHostHalf() {
-  const module = await import(`data:text/javascript,${encodeURIComponent(`${shared}\n${boot}\n${host}\nexport { normalize, configFromState, normalizeConfig, buildTokens, DEFAULTS, SKIN_ATTRIBUTE, BOOT_ATTRIBUTE, bootInjections, SPLASH_ID, SPLASH_CSS, splashHtml, splashScript };`)}`);
+  const module = await import(`data:text/javascript,${encodeURIComponent(`${shared}\n${boot}\n${host}\nexport { normalize, configFromState, normalizeConfig, buildTokens, DEFAULTS, WINDOW_SIZE, DEFAULT_WINDOW_SIZE, SKIN_ATTRIBUTE, BOOT_ATTRIBUTE, bootInjections, SPLASH_ID, SPLASH_CSS, splashHtml, splashScript };`)}`);
   return module;
 }
 
@@ -53,16 +53,34 @@ test('normalize clamps unknown persisted values to the defaults', async () => {
   const { normalize, DEFAULTS } = await loadHostHalf();
   assert.deepEqual(normalize(null), DEFAULTS);
   assert.deepEqual(normalize({ enabled: 'yes', theme: 'neon' }), DEFAULTS);
-  assert.deepEqual(normalize({ enabled: false, theme: 'dark' }), { enabled: false, theme: 'dark', boot: true });
-  assert.deepEqual(normalize({ enabled: true, theme: 'auto', boot: false }), { enabled: true, theme: 'auto', boot: false });
+  assert.deepEqual(normalize({ enabled: false, theme: 'dark' }), { enabled: false, theme: 'dark', boot: true, windowSize: DEFAULTS.windowSize });
+  assert.deepEqual(normalize({ enabled: true, theme: 'auto', boot: false }), { enabled: true, theme: 'auto', boot: false, windowSize: DEFAULTS.windowSize });
+});
+
+test('the launch window size defaults to 1440 x 900 and repairs bad input', async () => {
+  const half = await loadHostHalf();
+  const { normalize, normalizeConfig, configFromState, DEFAULT_WINDOW_SIZE, WINDOW_SIZE } = half;
+  assert.deepEqual(DEFAULT_WINDOW_SIZE, { width: 1440, height: 900 });
+  assert.deepEqual(normalize({}).windowSize, { enabled: true, width: 1440, height: 900 });
+  // A stored record is repaired per field, not thrown away: one bad number must not
+  // reset the other, and the switch keeps whatever was stored.
+  assert.deepEqual(normalize({ windowSize: { enabled: false, width: 1600, height: 'tall' } }).windowSize, { enabled: false, width: 1600, height: 900 });
+  assert.deepEqual(normalize({ windowSize: { width: 0, height: -10 } }).windowSize, { enabled: true, width: 1440, height: 900 });
+  assert.deepEqual(normalize({ windowSize: { width: 100, height: 200 } }).windowSize, { enabled: true, width: 1440, height: 900 }, 'below the app minimum falls back to the default');
+  assert.deepEqual(normalize({ windowSize: { width: 99999, height: 99999 } }).windowSize, { enabled: true, width: 1440, height: 900 }, 'beyond the sane maximum falls back too');
+  assert.deepEqual(normalize({ windowSize: { width: 520.4, height: 600.6 } }).windowSize, { enabled: true, width: 520, height: 601 }, 'fractions are rounded into the allowed range');
+  assert.equal(WINDOW_SIZE.minWidth, 520, 'the app itself refuses anything narrower');
+  assert.equal(WINDOW_SIZE.minHeight, 600);
+  assert.deepEqual(configFromState(normalize({ windowSize: { width: 1600, height: 1000 } })).windowSize, { enabled: true, width: 1600, height: 1000 });
+  assert.deepEqual(normalizeConfig({ windowSize: { enabled: false } }).windowSize, { enabled: false, width: 1440, height: 900 });
 });
 
 test('normalizeConfig drops declared-default omissions', async () => {
-  const { normalizeConfig, configFromState } = await loadHostHalf();
-  assert.deepEqual(normalizeConfig({}), {});
-  assert.deepEqual(normalizeConfig({ enabled: true, theme: 'light', extra: 1 }), { enabled: true, theme: 'light' });
-  assert.deepEqual(normalizeConfig({ boot: false, extra: 1 }), { boot: false });
-  assert.deepEqual(configFromState({ enabled: true, theme: 'auto', boot: true }), { enabled: true, theme: 'auto', boot: true });
+  const { normalizeConfig, configFromState, DEFAULTS } = await loadHostHalf();
+  assert.deepEqual(normalizeConfig({}), { windowSize: DEFAULTS.windowSize });
+  assert.deepEqual(normalizeConfig({ enabled: true, theme: 'light', extra: 1 }), { enabled: true, theme: 'light', windowSize: DEFAULTS.windowSize });
+  assert.deepEqual(normalizeConfig({ boot: false, extra: 1 }), { boot: false, windowSize: DEFAULTS.windowSize });
+  assert.equal('windowSize' in configFromState({ enabled: true, theme: 'auto', boot: true }), true);
 });
 
 test('buildTokens always carries both tones for every token', async () => {
@@ -76,6 +94,26 @@ test('buildTokens always carries both tones for every token', async () => {
     assert.equal(typeof tokens[name].dark, 'string', `${name} lacks a dark value`);
     assert.match(tokens[name].light, /^(#|rgba?\()/, `${name} light value is not a literal colour`);
   }
+});
+
+test('the desktop update pill folds into the icon rail without catching the connection indicator', async () => {
+  // The host renders that pill only while the sidebar reports itself as wide, and its
+  // label is a bare text span: the rail keeps the icon and clips the label the same way
+  // the settings trigger's label is clipped, so aria-label and the tooltip keep the copy.
+  // The pill hangs in its own line above the footer, so its place does not depend on how
+  // the host nests it inside the settings row: the footer is the positioned ancestor and
+  // bottom:100% lands it directly above the account button.
+  assert.match(skin, /\$\{hostPart\('indicator'\)\}\[aria-disabled\]\{[^}]*position:absolute[^}]*bottom:calc\(100% \+ 8px\)[^}]*width:var\(--smooth-rail-button-size\)/);
+  assert.match(skin, /\$\{hostPart\('indicator'\)\}\[aria-disabled\]>span:last-child\{[^}]*clip-path:inset\(50%\)/);
+  // The rail buttons are transparent; the host's update pill is a brand-tinted call to
+  // action, so its box goes and only the blue status icon keeps the brand colour.
+  assert.match(skin, /\$\{hostPart\('indicator'\)\}\[aria-disabled\]\{[^}]*border:0;background:transparent;color:var\(--dsw-alias-brand-primary-new-colorprimary-new-color\)/);
+  assert.match(skin, /\$\{hostPart\('indicator'\)\}\[aria-disabled\]:hover:not\(\[aria-disabled="true"\]\)\{background:var\(--smooth-surface-3\);color:var\(--dsw-alias-brand-primary-new-colorprimary-new-color\)\}/);
+  // An error is status, not chrome: it keeps the native red dot on the neutral button.
+  assert.match(skin, /\$\{hostPart\('indicator'\)\}\[aria-disabled\] \$\{hostPart\('errorDot'\)\}\{background:var\(--dsw-alias-state-error-primary\)\}/);
+  // aria-disabled is the discriminator: the connection status beside it carries data-phase
+  // instead, so no rule may target every *_indicator node in the footer.
+  assert.ok(!/\$\{hostPart\('indicator'\)\}\{/.test(skin), 'a bare indicator rule would also restyle the connection status');
 });
 
 const luminance = hex => {
@@ -133,9 +171,16 @@ test('the skin stylesheet is scoped to the gating body attribute and never hides
     const trimmed = selector.trim();
     if (!trimmed.startsWith('body[data-smooth-skin]')) continue;
     rules += 1;
-    const contentRules = skin.replace(/body\[data-smooth-skin\] \$\{hostPart\('composerHero'\)\} \$\{hostPart\('previewBadge'\)\}\{display:none\}/, '')
-      .replace(/body\[data-smooth-skin\] \.smooth-account-balance\{[^}]*\}/, '');
-    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the decorative preview badge and the plugin-owned collapsible balance panel may be hidden');
+    // Four hides are allowed, each one replacing something this layout already provides:
+    // the plugin-owned collapsible balance panel, the settings close button (whose job the
+    // tab bar in the same header already does), the welcome row (the card's own info row
+    // already names the workspace and the branch) and the card itself while no tab is open
+    // (there is nowhere to type yet). The host's own preview badge is left alone.
+    const contentRules = skin.replace(/body\[data-smooth-skin\] \.smooth-account-balance\{[^}]*\}/, '')
+      .replace(/body\[data-smooth-skin\] \[data-shortcut-modal="settings"\] \$\{hostPart\('header'\)\}>\$\{accountPart\('close'\)\}\{display:none\}/, '')
+      .replace(/body\[data-smooth-skin\] \$\{hostPart\('composerHero'\)\} \$\{hostPart\('heroWorkspaceRow'\)\}\{[^}]*display:none[^}]*\}/, '')
+      .replace(/body\[data-smooth-skin\]\[data-smooth-no-tabs\][\s\S]*?\{display:none/, '');
+    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, the settings close button, the welcome row and the empty-workspace card may be hidden');
   }
   assert.ok(rules > 10, 'the skin stylesheet has almost no scoped rules');
 });

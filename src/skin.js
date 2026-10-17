@@ -70,10 +70,32 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostP
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')}{box-sizing:border-box;display:flex;align-items:center;align-self:center;flex:none;width:var(--smooth-rail-button-size);min-width:0;min-height:var(--smooth-rail-button-size);margin:0;padding:0;justify-content:center;border:0;border-radius:var(--smooth-rail-button-radius);corner-shape:round}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')} ${hostPart('panelTitle')}{position:absolute;width:1px;height:1px;padding:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelActive')}{background:var(--smooth-selected)}
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('footArea')}{position:fixed;bottom:12px;left:0;box-sizing:border-box;width:var(--smooth-rail-width);display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0;padding:0;z-index:29}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('footArea')}{position:fixed;bottom:12px;left:0;box-sizing:border-box;width:var(--smooth-rail-width);display:flex;flex-direction:column;align-items:center;gap:8px;margin:0;padding:0;z-index:29}
+/* The host stacks this footer as [account row] then [settings row: gear, connection,
+   update pill], and that second row is itself a flex row, so the pill cannot reach the top
+   of the column by ordering. It is lifted out of that row instead: the footer is the
+   positioned ancestor, so bottom:100% puts the pill in its own line directly above the
+   account button regardless of where the host nests it. */
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostPart('triggerRow')}{width:var(--smooth-rail-button-size);margin:0 auto}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostPart('trigger')}{width:var(--smooth-rail-button-size);min-width:var(--smooth-rail-button-size);height:var(--smooth-rail-button-size);padding:0;justify-content:center;border-radius:var(--smooth-rail-button-radius);corner-shape:round}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostPart('triggerLabel')}{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+/* The desktop update pill is a wide footer row (14px icon + the version label) and only
+   renders while the sidebar still reports itself as wide; this skin narrows the footer to
+   the rail, so the pill used to hang over the account button. It keeps the icon as one
+   more square rail button and hides its label exactly like the settings trigger's, which
+   leaves aria-label and the tooltip carrying the copy. The pill is the only footer node
+   with aria-disabled: the connection indicator next to it carries data-phase instead.
+   The host paints that pill as a brand-tinted call to action (blue border, blue wash and
+   blue icon); in the rail it sits beside the plain icon buttons, so it drops the box and
+   takes their transparent ground and hover fill, while the icon keeps the host's update
+   blue: it marks a pending version, not a selected panel. The error dot stays red: it is
+   status, not button chrome. */
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostPart('indicator')}[aria-disabled]{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);box-sizing:border-box;width:var(--smooth-rail-button-size);min-width:var(--smooth-rail-button-size);height:var(--smooth-rail-button-size);padding:0;justify-content:center;grid-template-columns:auto;column-gap:0;border:0;background:transparent;color:var(--dsw-alias-brand-primary-new-colorprimary-new-color);border-radius:var(--smooth-rail-button-radius);corner-shape:round}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostPart('indicator')}[aria-disabled]:hover:not([aria-disabled="true"]){background:var(--smooth-surface-3);color:var(--dsw-alias-brand-primary-new-colorprimary-new-color)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostPart('indicator')}[aria-disabled]>span:last-child{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostPart('indicator')}[aria-disabled] ${hostPart('icon')}{width:var(--smooth-rail-icon-size);height:var(--smooth-rail-icon-size)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostPart('indicator')}[aria-disabled] ${hostPart('icon')}>svg{width:var(--smooth-rail-icon-size);height:var(--smooth-rail-icon-size)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostPart('indicator')}[aria-disabled] ${hostPart('errorDot')}{background:var(--dsw-alias-state-error-primary)}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} button[data-signed-out]{box-sizing:border-box;display:flex;align-items:center;align-self:center;flex:none;width:var(--smooth-rail-button-size);min-width:var(--smooth-rail-button-size);height:var(--smooth-rail-button-size);margin:0 auto;padding:0;gap:0;justify-content:center;border:0;border-radius:var(--smooth-rail-button-radius);corner-shape:round}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} button[data-signed-out]>${hostPart('label')}{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"]{border-radius:11px}
@@ -96,7 +118,7 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}>:
 body[data-smooth-skin] [data-shortcut-modal="settings"] h2{font-size:24px;line-height:1.5;font-weight:600}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('row')}{padding-block:20px;min-height:76px;border-bottom:1px solid var(--smooth-line)}
 body[data-smooth-skin] [data-shortcut-modal="settings"] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),textarea,select){background:var(--smooth-surface);border-color:var(--smooth-line-strong);border-radius:12px;color:var(--smooth-text)}
-body[data-smooth-skin] [data-shortcut-modal="settings"] :is(input,textarea,select):focus-visible{outline:2px solid var(--smooth-accent);outline-offset:3px}
+body[data-smooth-skin] [data-shortcut-modal="settings"] :is(input,textarea,select):focus-visible{outline:2px solid var(--smooth-line-strong);outline-offset:3px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] [role="tab"]:not(.smooth-tab-label){border-radius:999px;padding:7px 15px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] [role="tab"][aria-selected="true"]:not(.smooth-tab-label){background:var(--smooth-surface-3)}
 
@@ -109,22 +131,28 @@ body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${host
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('tab')}{padding:6px 18px;border:1px solid var(--smooth-line);border-radius:999px;background:transparent;font-size:13px;font-weight:500}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('tabActive')}{background:var(--smooth-surface-3);border-color:var(--smooth-surface-3);color:var(--smooth-text);font-weight:600}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('tab')}::after{background:transparent}
-body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('headline')}{font-size:clamp(25px,2.7vw,38px);font-weight:650;letter-spacing:.01em}
-body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('stack')}{gap:24px}
+body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('headline')}{font-size:clamp(24px,2vw,30px);font-weight:600;letter-spacing:.01em}
+body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('stack')}{gap:14px}
 body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('workspaceRow')}{font-size:15px;color:var(--smooth-muted)}
-/* One outer frame owns the surface; the editor and toolbar share its background. */
-body[data-smooth-skin] [data-composer-card]{--dsw-radius-panel:20px;--dsh-composer-text-max-height:min(300px,40vh);border:1px solid var(--smooth-line-strong);border-radius:20px;background:var(--smooth-light-wash),var(--dsw-specific-input-major);padding-top:0;gap:0;box-shadow:var(--smooth-light-edge),var(--smooth-shadow-1);transition:border-color .18s cubic-bezier(.22,1,.36,1),box-shadow .18s cubic-bezier(.22,1,.36,1)}
-body[data-smooth-skin] [data-composer-card]:focus-within{border-color:color-mix(in srgb,var(--smooth-accent) 55%,var(--smooth-line-strong));box-shadow:var(--smooth-light-edge),var(--smooth-shadow-1),0 2px 10px color-mix(in srgb,var(--smooth-accent) 10%,transparent)}
+/* One outer frame owns the surface; the editor and toolbar share its background.
+   No stroke and no focus ring: the host's own card is borderless too, and the card is
+   held apart from the page by its drop shadow and the inset top highlight alone. */
+body[data-smooth-skin] [data-composer-card]{--dsw-radius-panel:20px;--dsh-composer-text-max-height:min(300px,40vh);border:0;border-radius:20px;background:var(--smooth-light-wash),var(--dsw-specific-input-major);padding-top:0;gap:0;box-shadow:var(--smooth-light-edge),var(--smooth-shadow-1)}
 body[data-smooth-skin] [data-composer-card]${hostPart('cardWorkspaceTrigger')}{border-style:dashed}
 body[data-smooth-skin] [data-composer-card]${hostPart('cardWorkspaceTrigger')}::after{border:0}
 body[data-smooth-skin] [data-composer-card] ${hostPart('scroll')}{box-sizing:border-box;padding:12px 16px 0;min-height:64px;max-height:var(--dsh-composer-text-max-height);margin:0;border:0;border-radius:0;background:transparent;flex:1 1 auto}
 body[data-smooth-skin] [data-composer-input]{min-height:48px;padding:0;font-size:var(--dsh-content-font-size,14px);line-height:1.65;color:var(--smooth-text)}
-body[data-smooth-skin] [data-composer-card] ${hostPart('placeholder')}{inset:0 0 auto;font-size:var(--dsh-content-font-size,14px);line-height:1.65;color:var(--smooth-muted)}
+body[data-smooth-skin] [data-composer-card] ${hostPart('placeholder')}{inset:0 0 auto;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset;font-size:var(--dsh-content-font-size,14px);line-height:1.65;color:var(--smooth-muted)}
 body[data-smooth-skin] [data-composer-card] [data-composer-placeholder][data-smooth-placeholder]{--smooth-composer-placeholder:"";color:transparent}
 body[data-smooth-skin] [data-composer-card] [data-composer-placeholder][data-smooth-placeholder]::after{position:absolute;inset:0;content:var(--smooth-composer-placeholder);font-size:var(--dsh-content-font-size,14px);color:var(--smooth-muted)}
 body[data-smooth-skin] [data-composer-card] ${hostPart('row')}{box-sizing:border-box;flex:none;min-height:48px;padding:8px 12px;gap:8px;border:0;border-radius:0;background:transparent;font-size:13px;line-height:20px}
 body[data-smooth-skin] [data-composer-card] :is(${hostPart('tools')},${hostPart('modes')},${hostPart('trailing')},${hostPart('standardControls')}){gap:8px}
 body[data-smooth-skin] [data-composer-card] ${hostPart('accessory')}{border-bottom:1px solid var(--smooth-line);padding:9px 16px;color:var(--smooth-muted)}
+/* The welcome page and a conversation show the same card on the same ground: the host
+   fades the strip behind the in-conversation card to its own base colour, which is not
+   this skin's ground, so the same card sat on two different greys. */
+body[data-smooth-skin] [data-phase="active"] ${hostPart('composerSeat')},
+body[data-smooth-skin] [data-content-phase="active"] ${hostPart('composerSeat')}{background:linear-gradient(180deg,color-mix(in srgb,var(--smooth-app) 0%,transparent) 0,var(--smooth-app) 36px)}
 body[data-smooth-skin] [data-composer-card] :is(${hostPart('primary')},${hostPart('add')}){box-sizing:border-box;flex:none;width:32px;height:32px;padding:0;border-radius:50%;transform:none}
 body[data-smooth-skin] [data-composer-card] ${hostPart('add')}{background:transparent;color:var(--smooth-muted)}
 body[data-smooth-skin] [data-composer-card] ${hostPart('add')}:hover:not(:disabled){background:var(--smooth-surface-3);color:var(--smooth-text)}
@@ -354,6 +382,7 @@ body[data-smooth-skin][data-smooth-boot="reveal"] [data-composer-card]{animation
 @keyframes smooth-boot-fade{from{opacity:0}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){
   body[data-smooth-skin][data-smooth-boot="reveal"] :is(${hostPart('sidebarCol')},${hostPart('centerCol')},.smooth-workspace-bar,.smooth-rail-home,.smooth-rail-plugins,[data-composer-card]){animation:none}
+  body[data-smooth-skin] ${hostPart('composerHero')}{animation:none}
 }
 
 /* Reference geometry. Units intentionally follow the supplied HTML rather than
@@ -372,7 +401,7 @@ body[data-smooth-skin]{
      width. The bar's own padding and corner radius stay on --smooth-u because they
      meet the shell curve drawn at --smooth-left-width + 35 * --smooth-u. */
   --smooth-tab-u:.65px;
-  --smooth-left-width:clamp(320px,28.5vw,560px);--smooth-rail-width:calc(54 * var(--smooth-l));
+  --smooth-left-width:352px;--smooth-rail-width:calc(54 * var(--smooth-l));
   --smooth-rail-button-size:calc(38 * var(--smooth-l));--smooth-rail-icon-size:calc(24 * var(--smooth-l));--smooth-rail-button-radius:calc(12 * var(--smooth-l));
   --smooth-rail-inset:calc((var(--smooth-rail-width) - var(--smooth-rail-button-size)) / 2);
   --smooth-rail-gap:calc(10 * var(--smooth-l));
@@ -427,42 +456,40 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} :is(${hostPart('panelRow')},${h
 body[data-smooth-skin]:has([data-sidebar-collapsed]) .smooth-rail-home{opacity:0;pointer-events:none}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:has(>${hostPart('logoRow')}):not(${hostPart('collapsed')}){padding:0 calc(18 * var(--smooth-l)) 10px calc(var(--smooth-rail-width) + 18 * var(--smooth-l))}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('logoRow')}{height:calc(32 * var(--smooth-l));min-height:calc(32 * var(--smooth-l));margin:0;padding:0}
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}{height:calc(46 * var(--smooth-l));min-height:calc(46 * var(--smooth-l));margin-top:calc(6 * var(--smooth-l));margin-bottom:calc(8 * var(--smooth-l) + 1px);border-radius:calc(15 * var(--smooth-l));font-size:calc(20 * var(--smooth-l))}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}{height:calc(46 * var(--smooth-l));min-height:calc(46 * var(--smooth-l));margin-top:calc(6 * var(--smooth-l));margin-bottom:calc(8 * var(--smooth-l) + 1px);border-radius:calc(15 * var(--smooth-l));font-size:calc(15 * var(--smooth-l))}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('panelList')}{position:fixed;top:var(--smooth-rail-panels-top);bottom:calc(24px + var(--smooth-rail-button-size));left:0;box-sizing:border-box;width:var(--smooth-rail-width);display:flex;flex-direction:column;align-items:center;gap:var(--smooth-rail-gap);margin:0;padding:0;overflow-x:hidden;overflow-y:auto;z-index:29}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')}{width:var(--smooth-rail-button-size);height:var(--smooth-rail-button-size);min-height:0}
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="tree"]{font-size:calc(19 * var(--smooth-l))}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('regionArea')}{border-top:1px solid var(--smooth-line);padding-top:10px;margin-inline:0;padding-inline:0}
 
-/* Blank-session welcome: headline, open spacing, centered native workspace picker,
-   a second context line and the two-tier input card at the reference position. */
-/* Keep the native blank header and its right-sidebar launcher in their original
-   position; its top border separates the workspace tabs from the content. */
-body[data-smooth-skin] [data-content-phase="hero"] [data-conversation-scroll]{justify-content:initial;position:relative}
-body[data-smooth-skin] [data-content-phase="hero"] [data-composer-seat]{flex:1;min-height:540px;position:relative}
-body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('composerHero')}{position:relative;display:block;width:100%;max-width:none;height:100%;flex:1;padding:0;align-self:stretch}
-body[data-smooth-skin] ${hostPart('composerHero')}>${hostPart('root')}:has(${hostPart('headline')}){
-  position:absolute;top:calc(40.65% - 58 * var(--smooth-u));left:50%;transform:translate(-50%,-50%);
-  width:min(calc(915 * var(--smooth-u)),calc(100% - 120 * var(--smooth-u)));height:auto;padding:0;
-}
-body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('stack')}{gap:0;max-width:none}
-body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('headline')}{width:100%;font-size:calc(44 * var(--smooth-u));line-height:1.5;font-weight:700;letter-spacing:calc(1 * var(--smooth-u));padding-bottom:calc(29 * var(--smooth-u));border-bottom:0}
+/* Blank-session welcome. The host keeps its own stacking and proportions — headline,
+   workspace chip, input card — and this skin centers that stack in the workspace instead
+   of placing each part by hand. The product name still joins the slogan. */
+body[data-smooth-skin] [data-content-phase="hero"] [data-conversation-scroll]{justify-content:center;position:relative}
+body[data-smooth-skin] [data-content-phase="hero"] [data-composer-seat]{flex:1;min-height:540px;position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center}
 /* The native headline carries the slogan alone, so the product name joins it as a
-   flexible sibling of the slogan span. The native 7px titleGroup gap was measured
-   for a 26px headline; at the reference size the pair needs the reference's .35em. */
+   flexible sibling of the slogan span. */
 body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('titleGroup')}{gap:.35em}
 body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('titleGroup')}::before{content:"DeepSeek"}
-body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('previewBadge')}{display:none}
-body[data-smooth-skin] ${hostPart('composerHero')}>${hostPart('heroWorkspaceRow')}{position:absolute;top:calc(40.65% + 22 * var(--smooth-u));left:50%;transform:translateX(-50%);justify-content:center;gap:calc(9 * var(--smooth-u));width:90%;margin:0;padding:0;font-size:calc(23 * var(--smooth-u));line-height:calc(41 * var(--smooth-u))}
-body[data-smooth-skin] ${hostPart('composerHero')}>${hostPart('heroWorkspaceRow')}::before{content:"工作区";color:var(--smooth-muted)}
-body[data-smooth-skin] ${hostPart('composerHero')}>${hostPart('heroWorkspaceRow')} button{font-size:inherit}
-body[data-smooth-skin] ${hostPart('composerHero')}::after{content:"在这里开始新的对话。";position:absolute;top:calc(40.65% + 63 * var(--smooth-u));left:0;right:0;text-align:center;color:var(--smooth-muted);font-size:calc(23 * var(--smooth-u));line-height:calc(41 * var(--smooth-u));pointer-events:none}
-body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('root')}${hostPart('hero')}{
-  --smooth-composer-top:max(51.5%,calc(40.65% + 122 * var(--smooth-u)));
-  position:absolute;top:var(--smooth-composer-top);left:7.45%;right:8.2%;width:auto;padding:0;
-  max-height:max(192px,calc(100% - var(--smooth-composer-top) - 16px));
-}
-body[data-smooth-skin] ${hostPart('composerHero')} [data-composer-card]{max-width:none;min-height:150px;padding-top:0}
+/* The welcome row — the skin's "工作区" label, the native workspace picker and the branch
+   it carries — and the line printed under it are not drawn: the input card's own info row
+   already names the workspace and the branch, so the row only repeated them. Hiding the
+   row takes its ::after with it; the label and the line stay defined below, so bringing
+   the row back is a one-line change. */
+body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow')}{position:relative;gap:9px;display:none}
+body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow')}::before{content:"工作区";color:var(--smooth-muted)}
+body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow')}::after{content:"在这里开始新的对话。";position:absolute;left:0;right:0;top:calc(100% + 3px);text-align:center;color:var(--smooth-muted);font-size:13px;line-height:18px;pointer-events:none}
 body[data-smooth-skin] ${hostPart('composerHero')} [data-composer-card]:has(.smooth-composer-meta){padding-top:34px}
+/* No tab is open, so there is nowhere to type yet: the headline stays and the card goes.
+   The browser half publishes the flag from its tab ledger (the data-smooth-no-tabs
+   attribute, src/layout.js); the moment any session, panel or settings tab exists the
+   card comes back. It is addressed by its own data-composer-card attribute rather than by
+   a child combinator, because the host mounts it through a slot wrapper of its own. The
+   way back is a short fade on the hero, so the card keeps the launch animation's own fade
+   (an animation on the card here would have replaced it). */
+body[data-smooth-skin][data-smooth-no-tabs] ${hostPart('composerHero')} [data-composer-card]{display:none}
+body[data-smooth-skin]:not([data-smooth-no-tabs]) ${hostPart('composerHero')}{animation:smooth-welcome-in .26s cubic-bezier(.2,0,0,1) both}
+@keyframes smooth-welcome-in{from{opacity:0}to{opacity:1}}
 body[data-smooth-skin] .smooth-composer-meta{position:absolute;top:0;left:0;right:0;box-sizing:border-box;height:34px;padding:0 14px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--smooth-line);border-radius:19px 19px 0 0;background:color-mix(in srgb,var(--smooth-surface-3) 50%,var(--dsw-specific-input-major));font-size:12px;line-height:18px;color:var(--smooth-muted);pointer-events:auto}
 body[data-smooth-skin] :is(.smooth-meta-workspace,.smooth-meta-branch){max-width:30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-smooth-skin] .smooth-meta-branch{display:inline-flex;align-items:center;gap:6px}
@@ -485,12 +512,15 @@ body[data-smooth-skin] .smooth-composer-preset button:hover:not(:disabled){backg
 body[data-smooth-skin] [data-shortcut-modal="settings"]{position:fixed;inset:var(--smooth-caption) 0 0 var(--smooth-rail-width);width:auto;height:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none}
 body[data-smooth-skin] [role="presentation"]:has(>[data-shortcut-modal="settings"])>[aria-hidden="true"]{background:transparent;backdrop-filter:none}
 body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{box-sizing:border-box;width:calc(var(--smooth-left-width) - var(--smooth-rail-width));min-width:0;min-height:0;padding:16px 10px 10px;gap:8px}
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navTitle')}{padding:0 10px;font-size:15px;line-height:22px;font-weight:600}
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}{flex:1;min-height:0;gap:1px;padding-top:18px;overflow-x:hidden;overflow-y:auto}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navTitle')}{padding:0 10px;font-size:20px;line-height:28px;font-weight:700;letter-spacing:-.01em}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}{flex:1;min-height:0;gap:2px;padding-top:34px;overflow-x:hidden;overflow-y:auto}
 /* Native icons and labels stay in separate cells, including plugin sections.
-   Keep each row's height; a short window scrolls the list instead of crushing it. */
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button{position:relative;box-sizing:border-box;display:grid;grid-template-columns:18px minmax(0,1fr);align-items:center;flex:none;width:100%;height:32px;min-height:32px;border-radius:8px;padding:0 10px;gap:9px;font-size:13px;line-height:20px;text-align:left;white-space:nowrap}
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button>:is(svg,${hostPart('navIcon')}){grid-column:1;grid-row:1;justify-self:center;width:16px;height:16px;min-width:16px}
+   Keep each row's height; a short window scrolls the list instead of crushing it.
+   The cells run at the size of the screenshot this panel follows — 15px labels on a
+   34px row with an 18px icon — so the column reads as text rather than as a list of
+   small print; the icon column is sized to the icon so the labels share one edge. */
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button{position:relative;box-sizing:border-box;display:grid;grid-template-columns:18px minmax(0,1fr);align-items:center;flex:none;width:100%;height:34px;min-height:34px;border-radius:8px;padding:0 10px;gap:13px;font-size:15px;line-height:22px;text-align:left;white-space:nowrap}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button>:is(svg,${hostPart('navIcon')}){grid-column:1;grid-row:1;justify-self:center;width:18px;height:18px;min-width:18px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button::before{grid-column:1;grid-row:1;justify-self:center;align-self:center}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button>${hostPart('navLabel')}{grid-column:2;grid-row:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button[aria-current="true"]{background:var(--smooth-selected);color:var(--smooth-text);font-weight:600}
@@ -499,18 +529,27 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>b
    account | application | extensions | appearance. Adding or removing a settings
    section moves the boundary with it. The label floats in the gap above the first
    cell of its group, inside navList's padding-top so the scroller cannot clip it.
+   It runs at the size of the cells (15px/500) and sits in a 34px gap: 4px under the
+   previous group, the label's own 20px line box, then 10px of air before its first
+   cell — the rhythm the reference settings panel uses, where a group is separated by
+   its heading rather than by empty rows.
    Keep ::before available for plugins that replace the native gear with a mask. */
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button::after{position:absolute;left:10px;top:-17px;font-size:11px;line-height:16px;font-weight:500;color:var(--smooth-muted);pointer-events:none}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button::after{position:absolute;left:10px;top:-30px;font-size:15px;line-height:20px;font-weight:500;color:var(--smooth-muted);pointer-events:none}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(1)::after{content:"账户"}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(2)::after{content:"应用"}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(4)::after{content:"扩展"}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(7)::after{content:"外观"}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(2),
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(4),
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(7){margin-top:21px}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(7){margin-top:34px}
 body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{position:relative;z-index:1;border-left:0;border-radius:0 0 0 calc(35 * var(--smooth-u));corner-shape:round;background:var(--smooth-app);box-shadow:var(--smooth-shadow-workspace);overflow:clip}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('header')}{height:52px;padding:14px 16px 8px}
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('header')} ${hostPart('action')}{position:absolute;top:12px;right:20px}
+/* The native close button would sit immediately right of whatever action the page itself
+   puts in this header (通用设置 puts its "打开配置文件" there), which reads as one button
+   with a stray ✕ stuck to it. In this full-workspace layout the tab bar already carries
+   every way out — a tab, the home button, Escape — so the ✕ is a second door drawn on
+   top of the first. The reference mock has none. */
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('header')}>${accountPart('close')}{display:none}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}{padding:0 28px 28px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}>:is(section,div){max-width:860px;margin-inline:auto}
 body[data-smooth-skin] [data-shortcut-modal="settings"] h2{font-size:17px;line-height:26px;font-weight:600}
@@ -573,8 +612,7 @@ body[data-smooth-skin] :is(.smooth-composer-preset,.smooth-composer-model) butto
   body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{width:160px}
   body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}{padding-inline:20px}
   body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('headline')}{font-size:26px}
-  body[data-smooth-skin] ${hostPart('composerHero')}>${hostPart('heroWorkspaceRow')}{font-size:14px}
-  body[data-smooth-skin] ${hostPart('composerHero')}::after{font-size:13px}
+  body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow')}{font-size:13px}
   body[data-smooth-skin] .smooth-composer-meta{gap:8px}
   body[data-smooth-skin] .smooth-meta-host{font-size:12px}
 }

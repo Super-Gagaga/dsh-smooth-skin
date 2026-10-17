@@ -36,9 +36,18 @@ function runtime({ width = 1282 } = {}) {
   };
   const h = (type, props, ...children) => ({ type, props: props || {}, children });
   const React = { Fragment: 'fragment', useState: value => [value, () => {}], useSyncExternalStore: (_subscribe, read) => read(), useEffect: fn => fn(), useRef: () => ({ current: null }) };
+  const bodyAttributes = new Set();
   const sandbox = {
-    React, h, PLUGIN_ID: 'smooth', hostPart: name => `.${name}`, window: { innerWidth: width }, installComposerLayout: () => () => {}, installAccountMenu: () => () => {},
-    document: { addEventListener: (type, fn) => events.set(type, fn), removeEventListener: type => events.delete(type), body: { style: { setProperty: (key, value) => properties.set(key, value), removeProperty: key => properties.delete(key) } } },
+    React, h, PLUGIN_ID: 'smooth', hostPart: name => `.${name}`, NO_TABS_ATTRIBUTE: 'data-smooth-no-tabs', window: { innerWidth: width }, installComposerLayout: () => () => {}, installAccountMenu: () => () => {},
+    document: {
+      addEventListener: (type, fn) => events.set(type, fn), removeEventListener: type => events.delete(type),
+      body: {
+        style: { setProperty: (key, value) => properties.set(key, value), removeProperty: key => properties.delete(key) },
+        toggleAttribute: (name, on) => { if (on) bodyAttributes.add(name); else bodyAttributes.delete(name); },
+        removeAttribute: name => bodyAttributes.delete(name),
+        hasAttribute: name => bodyAttributes.has(name),
+      },
+    },
     require: name => { assert.equal(name, '@deepseek-ai/dsh-client-ui-primitives'); return new Proxy({}, { get: (_t, key) => key }); },
   };
   runInNewContext(source + '\nglobalThis.install = installReferenceShell; globalThis.createTabs = createWorkspaceTabs; globalThis.currentTab = currentWorkspaceTab; globalThis.isOperation = isWorkspaceOperation; globalThis.installScroll = installTabScroll;', sandbox);
@@ -59,14 +68,36 @@ function runtime({ width = 1282 } = {}) {
   };
   const flatten = node => node ? [node, ...node.children.flat(Infinity).filter(x => x && typeof x === 'object').flatMap(flatten)] : [];
   const operate = () => events.get('input')({ type: 'input', target: { closest: selector => selector.includes('[data-slot="main"]') || selector.startsWith('input,') ? {} : null } });
-  return { shell, render, flatten, registrations, calls, layoutState, settingsState, settingsCloses, snapshot, panelState, events, operate, properties, subscriptions, sandbox };
+  return { shell, render, flatten, registrations, calls, layoutState, settingsState, settingsCloses, snapshot, panelState, events, operate, properties, subscriptions, sandbox, bodyAttributes };
 }
+
+test('the welcome block is flagged off while no tab is open, and back once one is', () => {
+  const r = runtime();
+  r.shell.setEnabled(true);
+  // Home: no session retained, no panel, settings closed — the ledger has no tab.
+  r.snapshot.current = undefined;
+  r.render();
+  assert.equal(r.bodyAttributes.has('data-smooth-no-tabs'), true, 'an empty ledger hides the welcome block');
+
+  // Opening a session (or any panel/settings tab) publishes a tab and clears the flag.
+  r.snapshot.current = 'a';
+  r.render();
+  r.render();
+  assert.equal(r.bodyAttributes.has('data-smooth-no-tabs'), false, 'a session tab brings it back');
+
+  // Closing that tab again puts the page back to the empty state.
+  const nodes = r.flatten(r.render());
+  nodes.find(n => n.props.className === 'smooth-tab-close').props.onClick({ stopPropagation() {} });
+  r.render();
+  r.render();
+  assert.equal(r.bodyAttributes.has('data-smooth-no-tabs'), true, 'and closing it hides the block again');
+});
 
 test('native shared stores drive width, real navigation and full-page settings', () => {
   const r = runtime();
   r.shell.setEnabled(true);
-  assert.equal(r.layoutState.layoutInfo.sidebar, 365);
-  assert.equal(r.properties.get('--smooth-left-width'), '365px');
+  assert.equal(r.layoutState.layoutInfo.sidebar, 352);
+  assert.equal(r.properties.get('--smooth-left-width'), '352px');
   let nodes = r.flatten(r.render());
   nodes.find(n => n.props.role === 'tab' && n.props.title === '实际会话').props.onClick();
   nodes.find(n => n.props.className === 'smooth-rail-home').props.onClick();
@@ -102,11 +133,13 @@ test('disabling preserves a subsequent manual sidebar resize', () => {
   r.shell.dispose();
 });
 
-test('reference sidebar width scales through desktop and ultrawide sizes', () => {
-  for (const [width, expected] of [[900, 320], [1282, 365], [1915, 546], [3000, 560]]) {
+test('the saved 352px sidebar width is the default at every window size', () => {
+  // The width comes from the layout the user resized to, not from 28.5vw: the
+  // skin must not overwrite it as the window grows or shrinks.
+  for (const width of [900, 1282, 1915, 3000]) {
     const r = runtime({ width });
     r.shell.setEnabled(true);
-    assert.equal(r.layoutState.layoutInfo.sidebar, expected);
+    assert.equal(r.layoutState.layoutInfo.sidebar, 352);
     r.shell.dispose();
     assert.equal(r.layoutState.layoutInfo.sidebar, 280);
   }
