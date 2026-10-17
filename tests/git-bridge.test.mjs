@@ -1,0 +1,104 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  checkoutBranchForTest,
+  ensureGitServerForTest,
+  gitStatusForTest,
+} from '../lib/index.js';
+
+function git(cwd, ...args) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+}
+
+function repository() {
+  const cwd = mkdtempSync(join(tmpdir(), 'smooth-git-'));
+  git(cwd, 'init', '-q');
+  git(cwd, 'config', 'user.email', 'smooth@example.invalid');
+  git(cwd, 'config', 'user.name', 'Smooth Test');
+  writeFileSync(join(cwd, 'readme.txt'), 'smooth\n');
+  git(cwd, 'add', 'readme.txt');
+  git(cwd, 'commit', '-q', '-m', 'initial');
+  return cwd;
+}
+
+test('the host bridge reports branches and uncommitted files', async () => {
+  const cwd = repository();
+  try {
+    const current = git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD');
+    const clean = await gitStatusForTest(cwd);
+    assert.equal(clean.root.toLowerCase(), cwd.toLowerCase());
+    assert.equal(clean.current, current);
+    assert.equal(clean.detached, false);
+    assert.equal(clean.dirty, 0, 'a fresh commit is clean');
+    assert.ok(clean.branches.includes(current));
+
+    writeFileSync(join(cwd, 'readme.txt'), 'changed\n');
+    writeFileSync(join(cwd, 'new.txt'), 'untracked\n');
+    const dirty = await gitStatusForTest(cwd);
+    assert.equal(dirty.dirty, 2, 'modified and untracked rows both count');
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('the host bridge creates and switches branches', async () => {
+  const cwd = repository();
+  try {
+    const status = await checkoutBranchForTest(cwd, 'feature/smooth', true);
+    assert.equal(status.current, 'feature/smooth');
+    assert.equal(git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD'), 'feature/smooth');
+    await assert.rejects(
+      () => checkoutBranchForTest(cwd, 'feature/smooth', true),
+      /already exists|已存在/i,
+      'creating an existing branch fails',
+    );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('the bridge listener authenticates and answers status with a capability token', async () => {
+  const cwd = repository();
+  const bridge = ensureGitServerForTest({});
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const injection = bridge.injection();
+    const token = /"token":"([^"]+)"/.exec(injection.text)?.[1];
+    const base = /"base":"([^"]+)"/.exec(injection.text)?.[1];
+    assert.ok(token, 'the index injection carries the capability token');
+    assert.match(base, /^http:\/\/127\.0\.0\.1:\d+$/);
+
+    const call = async (payload, headerToken) => {
+      for (let attempt = 0; attempt < 50; attempt++) {
+        try {
+          const response = await fetch(`${base}/smooth-skin/git`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-smooth-token': headerToken },
+            body: JSON.stringify(payload),
+          });
+          return { statusCode: response.status, body: await response.json() };
+        } catch (error) {
+          if (attempt === 49) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+      throw new Error('bridge did not start');
+    };
+
+    const ok = await call({ action: 'status', cwd }, token);
+    assert.equal(ok.statusCode, 200);
+    assert.equal(ok.body.ok, true);
+    assert.ok(ok.body.value.branches.length >= 1);
+
+    const denied = await call({ action: 'status', cwd }, 'wrong-token');
+    assert.equal(denied.statusCode, 403);
+    assert.equal(denied.body.ok, false);
+  } finally {
+    bridge.dispose();
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});

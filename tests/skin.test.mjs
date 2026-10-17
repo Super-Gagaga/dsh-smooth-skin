@@ -32,21 +32,24 @@ test('host half parses and exposes the plugin contract', async () => {
   assert.equal(module.default, module.plugin);
 });
 
-test('the host half injects the launch animation and reaches for no service', async () => {
-  // cordis throws on `ctx.<name>` for a name outside `inject`, and this half declares
-  // none: the one call it makes is the web server's own index-injection event.
+test('the host half injects the launch animation and the Git bridge', async () => {
   const module = await loadHostHalf();
   const rows = [];
   const listeners = new Map();
+  let disposed;
   module.plugin.apply({
     on(name, handler) { listeners.set(name, handler); return () => listeners.delete(name); },
+    effect(callback) { disposed = callback(); return disposed; },
   });
   assert.deepEqual([...listeners.keys()], ['webserver/index-inject']);
   listeners.get('webserver/index-inject')(rows);
-  assert.deepEqual(rows.map((row) => row.kind), ['style', 'html', 'script']);
-  assert.deepEqual(rows, module.bootInjections(), 'the listener pushes the splash rows');
+  assert.deepEqual(rows.slice(0, 3), module.bootInjections(), 'the listener still pushes the splash rows');
+  assert.deepEqual(rows.map((row) => row.kind), ['style', 'html', 'script', 'script']);
+  assert.match(rows[3].text, /__SMOOTH_GIT__/, 'the bridge token and origin ride the index');
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  disposed?.();
   const body = host.slice(host.indexOf('export function apply'));
-  assert.ok(!/\bctx\s*\.(?!on\b)/.test(body), 'the Host apply body may only subscribe, never read a service');
+  assert.ok(!/\bctx\s*\.(?!on\b|get\b|effect\b)/.test(body), 'the Host only subscribes and keeps its private listener');
   assert.ok(!/\bhost\s*\.\s*call\b/.test(host), 'the Host half must not reference the browser bridge');
 });
 

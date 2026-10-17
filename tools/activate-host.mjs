@@ -53,26 +53,38 @@ if (!callback) {
   if (plugin.Config !== undefined) note('a Config that is not a Standard Schema makes cordis read Config["~standard"].validate and throw');
 }
 
-// The Host half contributes exactly one boot row table. Event subscription needs no
-// `inject` entry — the theme's own boot rows use the same seam — while any other
-// `ctx.<name>` access would throw "cannot get property ... without inject".
+// The Host half injects the opening's rows and the Git bridge's token row. It may use
+// context members that are not services — `ctx.on` for the bus, `ctx.effect` to scope a
+// side effect — because those need no `inject` entry. Any *other* `ctx.<name>`, anywhere
+// in the file, would throw "cannot get property ... without inject".
 const hostSource = await read('../src/host.js');
-const hostBody = hostSource.slice(hostSource.indexOf('export function apply'));
-if (/\bctx\s*\.(?!on\b)/.test(hostBody)) note('the Host apply body reads a service; an undeclared name would throw "cannot get property ... without inject"');
+if (/\bctx\s*\.(?!on\b|effect\b)/.test(hostSource)) note('the Host half reads a ctx member that is not on/effect; an undeclared service would throw "cannot get property ... without inject"');
 if (/\bhost\s*\.\s*call\b/.test(hostSource)) note('the Host half references the browser-only `host.call` bridge');
 
 // `apply` must register the index-injection rows and survive them being rendered.
 try {
   const registered = new Map();
-  callback({ on(name, handler) { registered.set(name, handler); return () => registered.delete(name); } });
+  const disposers = [];
+  callback({
+    on(name, handler) { registered.set(name, handler); return () => registered.delete(name); },
+    effect(setup) { const dispose = setup(); if (typeof dispose === 'function') disposers.push(dispose); return () => {}; },
+  });
   const rows = [];
   const handler = registered.get('webserver/index-inject');
   if (!handler) note('the Host half never subscribes to webserver/index-inject');
   else {
     handler(rows);
     const kinds = rows.map((row) => row.kind).join(',');
-    if (kinds !== 'style,html,script') note(`the Host half injected ${kinds || 'nothing'}, expected style,html,script`);
+    // The opening is style,html,script. The Git bridge appends one extra script row that
+    // carries its loopback origin and per-activation token into the head.
+    const expected = rows.slice(0, 3).map((row) => row.kind).join(',');
+    const extra = rows.slice(3);
+    const extraOk = extra.every((row) => row.kind === 'script' && row.placement === 'head' && /__SMOOTH_GIT__/.test(String(row.text)));
+    if (expected !== 'style,html,script') note(`the Host half injected ${kinds || 'nothing'}, expected style,html,script first`);
+    else if (!extraOk) note(`the Host half appended ${kinds} — only the bridge's head script row may follow the opening`);
     else console.log(`apply      index rows ok (${kinds})`);
+    if (!disposers.length) note('the Host half registered no ctx.effect disposer: a listener would outlive the plugin');
+    else { for (const dispose of disposers) dispose(); console.log(`apply      scoped effects ok (${disposers.length})`); }
   }
 } catch (error) {
   note(`apply(ctx) threw: ${error && error.message}`);

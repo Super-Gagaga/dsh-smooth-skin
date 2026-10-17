@@ -7,7 +7,7 @@ const read = (name) => readFile(new URL(`../src/${name}`, import.meta.url), 'utf
 // The bundle order: composer.js watches surfaces through watch.js.
 const source = `${await read('watch.js')}\n${await read('composer.js')}`;
 const sandbox = { PLUGIN_ID: 'smooth', hostPart: name => `.${name}` };
-runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint;', sandbox);
+runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker;', sandbox);
 
 function files(entries) {
   const calls = [];
@@ -110,6 +110,27 @@ test('model wrappers preserve native state, child slots and actions, and yield w
     assert.equal(view.props, props);
   }
   dispose(); assert.equal(overrides.size, 0);
+});
+
+test('the metadata workspace chip toggles the native picker and anchors it to the visible chip', () => {
+  let clicked = 0;
+  const rect = { left: 10, top: 20, width: 30, height: 18 };
+  const chip = {
+    dataset: {},
+    click: () => { clicked += 1; },
+    getAttribute: () => 'false',
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }),
+  };
+  sandbox.document = {
+    querySelector: selector => selector.includes('heroWorkspaceRow') && selector.includes('button[aria-haspopup="menu"]') ? chip : null,
+  };
+  const button = { getBoundingClientRect: () => rect };
+  assert.equal(sandbox.findChip(), chip, 'the hidden native workspace chip is the picker owner');
+  assert.equal(sandbox.openPicker(button), chip);
+  assert.equal(clicked, 1, 'the visible metadata chip clicks the native control');
+  assert.equal(chip.getBoundingClientRect(), rect, 'the picker anchors to the visible chip, not the hidden row');
+  sandbox.openPicker(button);
+  assert.equal(clicked, 2, 'a second click still toggles the native picker');
 });
 
 test('relocated native controls retain injection, locale, store, child slots and clean up', () => {
