@@ -74,8 +74,9 @@ test('compact prompts preserve native unavailable, workspace, planning and runni
   assert.equal(sandbox.installHint(null, [], ''), undefined);
 });
 
-test('model wrappers preserve native state and actions and yield when disabled', () => {
-  const native = { component: () => 'native', options: { priority: 0 }, locale: 'native', inject: () => ({}), store: {} };
+test('model wrappers preserve native state, child slots and actions, and yield when disabled', () => {
+  const children = { 'conversation.input.model.label': { kind: 'single', scope: 'session', inline: true } };
+  const native = { component: () => 'native', options: { id: 'native-model-entry', priority: 0, children }, locale: 'native', inject: () => ({}), store: {} };
   const names = ['conversation.input.model'];
   const entries = new Map(names.map(name => [name, [native]]));
   const overrides = new Map();
@@ -93,6 +94,8 @@ test('model wrappers preserve native state and actions and yield when disabled',
     assert.equal(entry.options.inject, native.inject);
     assert.equal(entry.options.store, native.store);
     assert.equal(entry.options.locale, native.locale);
+    assert.equal(entry.options.children, children, 'the nested model-label slot must keep its declaration');
+    assert.equal(entry.options.id, undefined, 'the wrapper must not reuse the native registration id');
     assert.equal(entry.options.priority, -10);
   }
   assert.equal(overrides.has('conversation.composer.bar'), false, 'the native composer retains its child-slot ownership');
@@ -109,10 +112,11 @@ test('model wrappers preserve native state and actions and yield when disabled',
   dispose(); assert.equal(overrides.size, 0);
 });
 
-test('relocated native controls retain injection, locale, store and clean up', () => {
+test('relocated native controls retain injection, locale, store, child slots and clean up', () => {
   const entries = new Map();
   const listeners = new Map();
-  const native = { component: () => 'native', options: { priority: 0 }, locale: 'native', inject: () => ({}), store: {} };
+  const children = { 'conversation.hero.agentPreset.detail': { kind: 'single', scope: 'session', inline: true } };
+  const native = { component: () => 'native', options: { priority: 0, children }, locale: 'native', inject: () => ({}), store: {} };
   entries.set('conversation.hero.agentPreset', [native]);
   const registered = [];
   sandbox.require = name => name === 'react-dom' ? { createPortal() {} } : {};
@@ -133,6 +137,7 @@ test('relocated native controls retain injection, locale, store and clean up', (
   assert.equal(relocated.inject, native.inject);
   assert.equal(relocated.store, native.store);
   assert.equal(relocated.locale, native.locale);
+  assert.equal(relocated.options.children, children, 'the relocated entry keeps its nested slot declarations');
   assert.equal(relocated.options.priority, -10);
   dispose();
   assert.equal(entries.get('conversation.hero.agentPreset').length, 1);

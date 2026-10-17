@@ -133,7 +133,6 @@ function buildTokens(state) {
   put('--dsw-alias-brand-primary', 'brand');
   put('--dsw-alias-state-business-primary', 'business');
   put('--dsw-alias-state-error-primary', 'error');
-  put('--dsw-alias-state-negative-primary', 'error');
   put('--dsw-alias-state-warn-primary', 'warn');
   put('--dsw-alias-state-success-primary', 'success');
   put('--dsw-alias-state-idle-primary', 'idle');

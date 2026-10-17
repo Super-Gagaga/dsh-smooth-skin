@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 
 const source = await readFile(new URL('../src/layout.js', import.meta.url), 'utf8');
-function runtime({ width = 1282 } = {}) {
+function runtime({ width = 1282, overflow = null } = {}) {
   const registrations = new Map();
   const properties = new Map();
   const calls = [];
@@ -35,7 +35,7 @@ function runtime({ width = 1282 } = {}) {
     },
   };
   const h = (type, props, ...children) => ({ type, props: props || {}, children });
-  const React = { Fragment: 'fragment', useState: value => [value, () => {}], useSyncExternalStore: (_subscribe, read) => read(), useEffect: fn => fn(), useRef: () => ({ current: null }) };
+  const React = { Fragment: 'fragment', useState: value => [value && typeof value === 'object' && 'right' in value ? { left: false, right: false, ...overflow } : value, () => {}], useSyncExternalStore: (_subscribe, read) => read(), useEffect: fn => fn(), useRef: () => ({ current: null }) };
   const bodyAttributes = new Set();
   const sandbox = {
     React, h, PLUGIN_ID: 'smooth', hostPart: name => `.${name}`, NO_TABS_ATTRIBUTE: 'data-smooth-no-tabs', window: { innerWidth: width }, installComposerLayout: () => () => {}, installAccountMenu: () => () => {},
@@ -50,7 +50,7 @@ function runtime({ width = 1282 } = {}) {
     },
     require: name => { assert.equal(name, '@deepseek-ai/dsh-client-ui-primitives'); return new Proxy({}, { get: (_t, key) => key }); },
   };
-  runInNewContext(source + '\nglobalThis.install = installReferenceShell; globalThis.createTabs = createWorkspaceTabs; globalThis.currentTab = currentWorkspaceTab; globalThis.isOperation = isWorkspaceOperation; globalThis.installScroll = installTabScroll;', sandbox);
+  runInNewContext(source + '\nglobalThis.install = installReferenceShell; globalThis.createTabs = createWorkspaceTabs; globalThis.currentTab = currentWorkspaceTab; globalThis.isOperation = isWorkspaceOperation; globalThis.installScroll = installTabScroll; globalThis.tabOverflow = tabOverflow;', sandbox);
   const shell = sandbox.install({ slots, layout: { selectPanel: id => { panelState.activePanelId = id; calls.push(['panel', id]); } }, uiWorkspace: {
     clearMain: () => { snapshot.current = undefined; panelState.activePanelId = null; calls.push(['home']); },
     startSession: () => { snapshot.current = 'blank'; calls.push(['new']); },
@@ -195,7 +195,7 @@ test('the outlined Home button only dismisses other surfaces and is inert on the
   r.shell.dispose();
 });
 
-test('previews replace each other; operations pin without duplicates or a two-tab cap', () => {
+test('previews replace each other; new tabs take the front, duplicates stay single', () => {
   const r = runtime();
   const tabs = r.sandbox.createTabs();
   const a = { key: 'a', title: 'A' }, b = { key: 'b', title: 'B' };
@@ -204,12 +204,48 @@ test('previews replace each other; operations pin without duplicates or a two-ta
   assert.equal(tabs.getSnapshot().preview.key, 'b');
   tabs.pin(b); tabs.pin(b);
   for (const tab of [a, { key: 'c', title: 'C' }, { key: 'settings', title: '设置' }]) { tabs.show(tab); tabs.pin(tab); }
-  assert.deepEqual(Array.from(tabs.getSnapshot().pinned, tab => tab.key), ['b', 'a', 'c', 'settings']);
+  assert.deepEqual(Array.from(tabs.getSnapshot().pinned, tab => tab.key), ['settings', 'c', 'a', 'b'],
+    'pinning prepends: the newest tab sits at the front');
   tabs.show({ ...b, title: '改名后的 B' });
-  assert.equal(tabs.getSnapshot().pinned[0].title, '改名后的 B');
+  assert.equal(tabs.getSnapshot().pinned.find(tab => tab.key === 'b').title, '改名后的 B', 'an update keeps its slot');
   assert.equal(tabs.getSnapshot().preview, null);
   const state = tabs.getSnapshot(); tabs.show({ ...b, title: '改名后的 B' });
   assert.equal(tabs.getSnapshot(), state, 'unchanged routes keep an external-store snapshot stable');
+});
+
+test('pinned tabs reorder by insertion index and a moved preview leads or pins', () => {
+  const tabs = runtime().sandbox.createTabs();
+  const a = { key: 'a', title: 'A' }, b = { key: 'b', title: 'B' }, c = { key: 'c', title: 'C' }, d = { key: 'd', title: 'D' }, e = { key: 'e', title: 'E' }, f = { key: 'f', title: 'F' };
+  for (const tab of [a, b, c]) tabs.pin(tab);
+  // Array.from lands the comparison in this realm; the ledger's array comes from the VM.
+  const keys = () => Array.from(tabs.getSnapshot().pinned, tab => tab.key);
+  const order = () => Array.from([tabs.getSnapshot().preview, ...tabs.getSnapshot().pinned].filter(Boolean), tab => tab.key);
+  assert.deepEqual(keys(), ['c', 'b', 'a'], 'pinned tabs read newest first');
+
+  tabs.move('a', 0);
+  assert.deepEqual(keys(), ['a', 'c', 'b'], 'dropping before the first tab moves it to the front');
+  tabs.move('a', 3);
+  assert.deepEqual(keys(), ['c', 'b', 'a'], 'dropping after the last tab moves it to the end');
+  tabs.move('b', 0);
+  assert.deepEqual(keys(), ['b', 'c', 'a'], 'dropping at the front again');
+  tabs.move('b', 1);
+  assert.deepEqual(keys(), ['b', 'c', 'a'], 'dropping in place leaves the order alone');
+
+  tabs.show(d);
+  assert.deepEqual(order(), ['d', 'b', 'c', 'a'], 'a new tab leads the strip as the preview');
+  tabs.move('d', 2);
+  assert.equal(tabs.getSnapshot().preview, null, 'a dragged preview becomes pinned');
+  assert.deepEqual(keys(), ['b', 'd', 'c', 'a'], 'in the slot it was dropped into');
+
+  tabs.show(e);
+  assert.deepEqual(order(), ['e', 'b', 'd', 'c', 'a']);
+  tabs.move('e', 3);
+  assert.deepEqual(keys(), ['b', 'd', 'e', 'c', 'a'], 'a preview dragged into the middle pins there');
+
+  tabs.show(f);
+  tabs.move('a', 0);
+  assert.deepEqual(order(), ['f', 'a', 'b', 'd', 'e', 'c'], 'a pinned tab dropped at the front lands behind the preview');
+  assert.equal(tabs.getSnapshot().preview.key, 'f', 'the preview keeps the leading slot');
 });
 
 test('closing tabs selects a neighbor only for the active tab and never deletes a session', () => {
@@ -272,7 +308,8 @@ test('the tab wheel eases accumulated movement, normalizes units and cancels cle
     addEventListener(name, fn, options) { if (name === 'wheel') assert.equal(options.passive, false); listeners.set(name, fn); },
     removeEventListener(name, fn) { assert.equal(fn, listeners.get(name)); listeners.delete(name); },
   };
-  const controller = r.sandbox.installScroll(node);
+  let rests = 0;
+  const controller = r.sandbox.installScroll(node, () => { rests += 1; });
   const wheel = (deltaY, extra = {}) => {
     let prevented = false;
     listeners.get('wheel')({ deltaX: 0, deltaY, deltaMode: 0, ...extra, preventDefault() { prevented = true; } });
@@ -282,6 +319,7 @@ test('the tab wheel eases accumulated movement, normalizes units and cancels cle
   tick(); assert.ok(offset > 0 && offset < 120, 'an intermediate animation frame is visible');
   wheel(120); assert.equal(frames.size, 1, 'continuous input shares one animation loop');
   settle(); assert.equal(offset, 240, 'wheel deltas accumulate before the previous animation ends');
+  assert.equal(rests, 1, 'the strip reports the exact position it came to rest at');
   controller.scrollBy(240); settle(); assert.equal(offset, 480, 'right arrow still works after a wheel animation');
   controller.scrollBy(-240); settle(); assert.equal(offset, 240, 'left arrow still works after a wheel animation');
   wheel(120); tick(); controller.scrollBy(240); settle();
@@ -305,6 +343,47 @@ test('the tab wheel eases accumulated movement, normalizes units and cancels cle
   wheel(-120); assert.equal(frames.size, 1);
   controller.dispose(); assert.equal(listeners.size, 0); assert.equal(frames.size, 0);
   assert.equal(r.sandbox.installScroll(null), undefined);
+});
+
+test('each arrow exists only while its direction can still be scrolled', () => {
+  const arrows = r => r.flatten(r.render()).filter(node => node.props && node.props.className === 'smooth-tab-scroll');
+  const sides = r => arrows(r).map(node => node.props['data-side']);
+
+  // Something to reveal on both sides: both arrows are up.
+  const mid = runtime({ overflow: { left: true, right: true } });
+  mid.shell.setEnabled(true);
+  assert.deepEqual(sides(mid), ['left', 'right']);
+
+  // Wheeled to the right end: nothing is left to the right, so that arrow is gone.
+  const end = runtime({ overflow: { left: true, right: false } });
+  end.shell.setEnabled(true);
+  assert.deepEqual(sides(end), ['left'], 'the right arrow hides once the tabs reach the end');
+
+  // At the very start only the right arrow is there.
+  const start = runtime({ overflow: { left: false, right: true } });
+  start.shell.setEnabled(true);
+  assert.deepEqual(sides(start), ['right']);
+
+  // A strip that fits has no arrows at all.
+  const fits = runtime();
+  fits.shell.setEnabled(true);
+  assert.deepEqual(sides(fits), []);
+});
+
+test('each arrow is read from the strip extents and hides at its end', () => {
+  const r = runtime();
+  const node = { scrollLeft: 0, clientWidth: 400, scrollWidth: 528 };
+  const read = () => ({ ...r.sandbox.tabOverflow(node) });
+  assert.deepEqual(read(), { left: false, right: true }, 'content continues to the right');
+  node.scrollLeft = 128;
+  assert.deepEqual(read(), { left: true, right: false }, 'at the right end there is nothing left to scroll to');
+  node.scrollLeft = 126;
+  assert.deepEqual(read(), { left: true, right: false }, 'the last device pixel of rounding is not an overflow');
+  node.scrollLeft = 0;
+  node.scrollWidth = 400;
+  assert.deepEqual(read(), { left: false, right: false }, 'a strip that fits is arrowed in neither direction');
+  node.scrollWidth = 401;
+  assert.deepEqual(read(), { left: false, right: false }, 'one pixel of rounding is not an overflow either');
 });
 
 test('the tab wheel respects the reduced-motion preference', () => {

@@ -185,7 +185,7 @@ test('the launch window size is left to the opening and edited in settings', asy
   // A half-typed number is repaired into the current size instead of resizing anything,
   // so the window settles as soon as a usable pair has been typed.
   await first.width.children[1].props.onChange({ target: { value: '16' } });
-  assert.deepEqual(runtime.resizes, [[1440, 900]], 'an out-of-range edit keeps the window where it is');
+  assert.deepEqual(runtime.resizes, [], 'an edit repaired back to the stored size leaves the window alone');
   assert.equal(stored().windowSize.width, 1440);
   await sizeRow().width.children[1].props.onChange({ target: { value: '1600' } });
   assert.deepEqual(runtime.resizes.at(-1), [1600, 900], 'a usable width is applied at once');
@@ -201,6 +201,29 @@ test('the launch window size is left to the opening and edited in settings', asy
 
   await runtime.settings.component().children[2].children[0].children[0].props.onClick();
   assert.deepEqual(stored().windowSize, { enabled: true, width: 1440, height: 900 });
+  runtime.dispose();
+});
+
+test('theme and animation switches never move the window; only a size edit does', async () => {
+  // A manually resized window whose outer size no longer equals the configured size:
+  // before the guard, every write called resizeTo and nudged it.
+  const runtime = loadClient({
+    stored: { theme: 'dark', windowSize: { enabled: true, width: 1440, height: 900 } },
+    outer: [1469, 915],
+  });
+  runtime.plugin.apply(runtime.ctx);
+  assert.deepEqual(runtime.resizes, [], 'activation leaves a visible window alone');
+  const rows = () => runtime.settings.component().children[1].children;
+  await rows()[1].props.onChange('light');
+  assert.equal(runtime.preference, 'light');
+  assert.deepEqual(runtime.resizes, [], 'switching the theme must not resize or reposition the window');
+  await rows()[2].props.onChange(false);
+  assert.deepEqual(runtime.resizes, [], 'the launch-animation toggle must not touch the window either');
+
+  const size = runtime.render(rows()[rows().length - 1]);
+  const [width] = size.children[1].children;
+  await width.children[1].props.onChange({ target: { value: '1600' } });
+  assert.deepEqual(runtime.resizes, [[1600, 900]], 'a real size edit still applies');
   runtime.dispose();
 });
 

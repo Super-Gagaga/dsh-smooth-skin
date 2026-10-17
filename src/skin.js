@@ -266,7 +266,7 @@ body[data-smooth-skin] button[role="switch"]:not([data-plugin-panel] *){width:44
 body[data-smooth-skin] button[role="switch"]:not([data-plugin-panel] *)>span{width:20px;height:20px}
 body[data-smooth-skin] button[role="switch"]:not([data-plugin-panel] *)[aria-checked="true"]>span{transform:translateX(18px)}
 body[data-smooth-skin] [role="switch"]:not([data-plugin-panel] *)[aria-checked="true"]>span{background:var(--smooth-ink)}
-body[data-smooth-skin] :is([role="menu"],[data-popover]){border:1px solid var(--smooth-line-strong);border-radius:20px;background:var(--dsw-alias-bg-overlay);box-shadow:var(--smooth-shadow-2)}
+body[data-smooth-skin] [role="menu"]{border:1px solid var(--smooth-line-strong);border-radius:20px;background:var(--dsw-alias-bg-overlay);box-shadow:var(--smooth-shadow-2)}
 body[data-smooth-skin] [role="menuitem"]{border-radius:13px}
 /* Account popup follows the reference's .75px scale. Keep the native menu,
    focus handling, shortcuts, login state and action confirmations intact. */
@@ -412,32 +412,48 @@ body[data-smooth-skin]{
 body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})>${hostPart('centerCol')}{border-radius:0 0 0 calc(35 * var(--smooth-u));overflow:clip;corner-shape:round}
 body[data-smooth-skin] .smooth-workspace-bar{
   position:fixed;top:0;left:var(--smooth-left-width);right:132px;height:var(--smooth-caption);
-  display:flex;align-items:center;gap:4px;padding:0 calc(10 * var(--smooth-u));background:var(--smooth-surface);
+  display:flex;align-items:center;gap:4px;padding:0 calc(30px + 10 * var(--smooth-u)) 0 calc(10 * var(--smooth-u));background:var(--smooth-surface);
   border-radius:calc(35 * var(--smooth-u)) 0 0 0;corner-shape:round;pointer-events:auto;z-index:50;-webkit-app-region:drag;
 }
-body[data-smooth-skin] .smooth-workspace-tabs{display:flex;align-items:center;gap:calc(12 * var(--smooth-tab-u));min-width:0;overflow-x:auto;scrollbar-width:none;flex:1;-webkit-app-region:drag}
+body[data-smooth-skin] .smooth-workspace-tabs{position:relative;display:flex;align-items:center;gap:calc(12 * var(--smooth-tab-u));min-width:0;overflow-x:auto;scrollbar-width:none;flex:1;-webkit-app-region:drag}
 /* Electron's native caption drag region excludes every interactive tab/control. */
 body[data-smooth-skin] .smooth-workspace-bar :is(.smooth-workspace-tab,button){-webkit-app-region:no-drag}
 body[data-smooth-skin] .smooth-workspace-tab{
   position:relative;display:flex;align-items:center;justify-content:center;flex:none;max-width:calc(300 * var(--smooth-tab-u));min-width:0;
   height:calc(43 * var(--smooth-tab-u));padding:0;border:1px solid var(--smooth-line);border-radius:999px;
   background:transparent;color:var(--smooth-text);font-family:inherit;font-weight:500;font-size:max(12px,calc(20 * var(--smooth-tab-u)));line-height:1.4;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab;
 }
-body[data-smooth-skin] .smooth-tab-label{display:flex;align-items:center;justify-content:center;align-self:stretch;min-width:0;flex:1;padding:0 24px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;border-radius:999px}
+body[data-smooth-skin] .smooth-tab-label{display:flex;align-items:center;justify-content:center;align-self:stretch;min-width:0;flex:1;padding:0 24px;border:0;background:transparent;color:inherit;font:inherit;cursor:grab;border-radius:999px}
 /* Leave room inside the clipping box for italic glyphs extending past their advance. */
 body[data-smooth-skin] .smooth-tab-label>span{min-width:0;padding:.08em .2em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-smooth-skin] .smooth-workspace-tab[data-preview="true"] .smooth-tab-label{font-style:italic}
 body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]{background:color-mix(in srgb,var(--smooth-surface-3) 80%,var(--smooth-muted));border-color:transparent;font-weight:650}
 body[data-smooth-skin] .smooth-workspace-tab:hover{background:var(--smooth-surface-3)}
 body[data-smooth-skin] .smooth-tab-close{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--smooth-muted);cursor:pointer}
+/* Pointer reorder: a short | floats in the gap, not on a tab border. Tabs clip
+   their own overflow for the ellipsis, so the indicator is a nav child instead. */
+body[data-smooth-skin] .smooth-workspace-tabs[data-dragging="true"]{cursor:grabbing;user-select:none}
+body[data-smooth-skin] .smooth-workspace-tabs[data-dragging="true"] .smooth-tab-label{cursor:grabbing}
+body[data-smooth-skin] .smooth-workspace-tab.smooth-tab-dragging{opacity:.45}
+body[data-smooth-skin] .smooth-tab-drop{position:absolute;top:8px;bottom:8px;width:2px;margin-left:-1px;border-radius:999px;background:var(--smooth-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--smooth-accent) 16%,transparent);z-index:2;pointer-events:none}
 @media(hover:hover){
   body[data-smooth-skin] .smooth-tab-close{opacity:0;pointer-events:none;transition:opacity .12s ease}
   body[data-smooth-skin] .smooth-workspace-tab:is(:hover,:focus-within) .smooth-tab-close{opacity:1;pointer-events:auto}
 }
 @media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-tab-close{transition:none}}
 body[data-smooth-skin] .smooth-tab-close:hover{background:var(--smooth-line-strong);color:var(--smooth-text)}
-body[data-smooth-skin] .smooth-tab-scroll{display:flex;align-items:center;justify-content:center;flex:none;width:22px;height:28px;border:0;background:transparent;color:var(--smooth-muted);border-radius:50%;cursor:pointer}
+/* Scroll arrows float over the strip. As flex items they removed 22px + gap from the
+   nav whenever an edge overflowed, so every arrow toggle reflowed the tabs and could
+   bounce the overflow state; absolute positioning keeps the nav width stable. The
+   bar's own right padding reserves the right arrow's slot, so the strip ends a gap
+   before it and a tab's close button is never underneath the button being aimed at. */
+body[data-smooth-skin] .smooth-tab-scroll{position:absolute;top:50%;transform:translateY(-50%);z-index:3;display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:24px;height:24px;border:1px solid var(--smooth-line);background:var(--smooth-surface);color:var(--smooth-muted);border-radius:50%;box-shadow:var(--smooth-shadow-1);cursor:pointer}
+body[data-smooth-skin] .smooth-tab-scroll[data-side="left"]{left:calc(10 * var(--smooth-u))}
+body[data-smooth-skin] .smooth-tab-scroll[data-side="right"]{right:calc(10 * var(--smooth-u))}
+/* An arrow exists only while its direction can still be scrolled, so the strip never
+   shows one over the end of the list. */
+body[data-smooth-skin] .smooth-tab-scroll:hover{background:var(--smooth-surface-2);color:var(--smooth-text)}
 body[data-smooth-skin] :is(.smooth-tab-label,.smooth-tab-close,.smooth-tab-scroll,.smooth-rail-home,.smooth-rail-plugins):focus-visible{outline:2px solid var(--smooth-accent);outline-offset:-2px}
 body[data-smooth-skin] :is(.smooth-rail-home,.smooth-rail-plugins){
   position:fixed;left:var(--smooth-rail-inset);top:var(--smooth-rail-top);
@@ -587,6 +603,11 @@ body[data-smooth-skin] .smooth-rail-home[aria-pressed="true"],
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelActive')},
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button[aria-current="true"]{background-image:var(--smooth-light-wash);box-shadow:var(--smooth-light-edge)}
 body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-surface-3) 80%,var(--smooth-muted))}
+/* The caption bar is white in light mode, and mixing its surface with the dark
+   muted label turns the selected chip grey (almost black). Use the palette's
+   selection fill there — the same soft blue every other selected row gets. */
+body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab[data-selected="true"]{background-color:var(--smooth-selected)}
+body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-selected) 94%,var(--smooth-text))}
 body[data-smooth-skin] .smooth-composer-meta{background-image:var(--smooth-light-wash);box-shadow:var(--smooth-light-edge)}
 body[data-smooth-skin] :is(.smooth-workspace-tab,.smooth-rail-home,.smooth-rail-plugins),
 body[data-smooth-skin] ${hostPart('sidebarCol')} :is(${hostPart('newSession')},${hostPart('panelRow')}),

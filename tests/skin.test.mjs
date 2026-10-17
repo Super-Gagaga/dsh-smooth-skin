@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
 
 const read = (url) => readFile(new URL(url, import.meta.url), 'utf8');
 
@@ -96,6 +97,22 @@ test('buildTokens always carries both tones for every token', async () => {
   }
 });
 
+test('hostPart and accountPart match both host class-name conventions', () => {
+  const sandbox = {};
+  vm.runInNewContext(`${skin}\nglobalThis.__hostPart = hostPart; globalThis.__accountPart = accountPart;`, sandbox);
+  // A class list is one string, so the selector's [class$="…"] / [class*="… "]
+  // clauses can be exercised without a CSS engine. This is the seam the whole skin
+  // hangs on: the host uses `_hash_root` for some packages and `hash_root` for others.
+  const matches = (selector, className) => [...selector.matchAll(/\[class([$*^])="([^"]+)"\]/g)]
+    .some(([, operator, value]) => operator === '$' ? className.endsWith(value) : operator === '^' ? className.startsWith(value) : className.includes(value));
+  assert.equal(matches(sandbox.__hostPart('root'), '_2H3hWW_root'), true);
+  assert.equal(matches(sandbox.__hostPart('trigger'), 'wCInkW_trigger'), true);
+  assert.equal(matches(sandbox.__hostPart('root'), '_rooted'), false, 'the suffix must end at the local name');
+  assert.equal(matches(sandbox.__accountPart('card'), 'kh1pJG_card'), true);
+  assert.equal(matches(sandbox.__accountPart('card'), '_card_1p79o_9'), true);
+  assert.equal(matches(sandbox.__accountPart('card'), 'cardigan'), false);
+});
+
 test('the desktop update pill folds into the icon rail without catching the connection indicator', async () => {
   // The host renders that pill only while the sidebar reports itself as wide, and its
   // label is a bare text span: the rail keeps the icon and clips the label the same way
@@ -114,6 +131,28 @@ test('the desktop update pill folds into the icon rail without catching the conn
   // aria-disabled is the discriminator: the connection status beside it carries data-phase
   // instead, so no rule may target every *_indicator node in the footer.
   assert.ok(!/\$\{hostPart\('indicator'\)\}\{/.test(skin), 'a bare indicator rule would also restyle the connection status');
+});
+
+test('the tab scroll arrows float over the strip instead of squeezing its width', () => {
+  // As flex items, the arrows took 22px + gap out of the nav whenever an edge began
+  // to overflow, reflowing every tab and feeding the overflow observer. They are
+  // absolute overlays now, so showing/hiding one cannot change the strip width.
+  assert.match(skin, /\.smooth-tab-scroll\{[^}]*position:absolute[^}]*background:var\(--smooth-surface\)/);
+  assert.match(skin, /\.smooth-tab-scroll\[data-side="left"\]\{left:calc\(10 \* var\(--smooth-u\)\)\}/);
+  assert.match(skin, /\.smooth-tab-scroll\[data-side="right"\]\{right:calc\(10 \* var\(--smooth-u\)\)\}/);
+  assert.ok(!/\.smooth-tab-scroll\{[^}]*flex:none/.test(skin), 'the arrows no longer participate in the flex line');
+  // The bar reserves the right arrow's slot in its own padding, so the strip stops a
+  // gap short of the floating arrow and a tab's close button is never under it.
+  assert.match(skin, /\.smooth-workspace-bar\{[^}]*padding:0 calc\(30px \+ 10 \* var\(--smooth-u\)\) 0 calc\(10 \* var\(--smooth-u\)\)/);
+  assert.ok(!/\.smooth-tab-scroll:disabled\{/.test(skin), 'an arrow that cannot scroll is not drawn at all');
+});
+
+test('the light selected workspace tab uses the soft selection fill, not the muted grey', () => {
+  // Mixing the white caption surface with the dark muted label produced a grey chip
+  // that read as black in light mode; the palette's selected token is the blue the
+  // rest of the light selection states already use.
+  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]\{background-color:var\(--smooth-selected\)\}/);
+  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]:hover\{background-color:color-mix\(in srgb,var\(--smooth-selected\) 94%,var\(--smooth-text\)\)\}/);
 });
 
 const luminance = hex => {

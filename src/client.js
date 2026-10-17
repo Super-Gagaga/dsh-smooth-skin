@@ -93,15 +93,21 @@ function apply(ctx) {
     sync();
   }
 
+  function sameWindowSize(a, b) {
+    return a?.enabled === b?.enabled && a?.width === b?.width && a?.height === b?.height;
+  }
+
   function writeState(next) {
+    const previousSize = state.windowSize;
     state = normalize(next);
     failure = '';
     emit();
     sync();
-    // Only an edit moves the window. At launch the injected opening has already sized it
-    // while the window was still hidden, so repeating that here would move a window the
-    // user is already looking at.
-    applyWindowSize();
+    // Only a window-size edit moves the window. At launch the injected opening has
+    // already sized it while the window was still hidden; repeating that on a theme or
+    // animation toggle used to call resizeTo on every switch (outerWidth carries the
+    // window frame, so it rarely equals the configured width) and nudged the window.
+    if (!sameWindowSize(previousSize, state.windowSize)) applyWindowSize();
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (error) {

@@ -141,8 +141,22 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
         native = next;
         if (!native) return;
         const original = native;
-        disposeNative = slots.register({ name, priority: (native.options.priority || 0) - 10, registrant: PLUGIN_ID,
-          locale: native.locale, inject: native.inject, store: native.store }, wrap(original.component));
+        // Carry the native registration's options over, not just the three the skin
+        // used to need. DSH 0.3's model entry declares a child slot through `children`
+        // (`conversation.input.model.label`), and the runtime only supplies `renderSlot`
+        // to entries that declare it; dropping it made ModelSelect throw
+        // "renderSlot is not a function". `id` stays out so the re-registration cannot
+        // collide with the native entry; priority and registrant are ours.
+        const inherited = { ...(native.options || {}) };
+        delete inherited.id;
+        delete inherited.priority;
+        delete inherited.registrant;
+        // Native entries in the wild carry these on the entry as well as in options.
+        const locale = inherited.locale ?? native.locale;
+        const inject = inherited.inject ?? native.inject;
+        const store = inherited.store ?? native.store;
+        disposeNative = slots.register({ ...inherited, name, locale, inject, store, priority: (native.options?.priority || 0) - 10, registrant: PLUGIN_ID },
+          wrap(original.component));
       };
       refresh();
       const unsubscribe = slots.subscribe?.(name, refresh);

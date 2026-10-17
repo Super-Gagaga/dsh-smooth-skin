@@ -26,12 +26,14 @@ function currentWorkspaceTab(snapshot, panel, settingsOpen, panelTitle, text) {
 }
 
 /** UI-only ledger: one replaceable preview and an ordered list of operated tabs.
- * Closing an entry only changes this ledger; session lifetime belongs to DSH. */
+ * New tabs open at the front of the strip: the preview owns the leading slot while it
+ * exists, and pinning it keeps it there. Closing an entry only changes this ledger;
+ * session lifetime belongs to DSH. */
 function createWorkspaceTabs() {
   let state = { pinned: [], preview: null, activeKey: null };
   const listeners = new Set();
   const publish = (next) => { state = next; for (const listener of listeners) listener(); };
-  const items = () => [...state.pinned, ...(state.preview ? [state.preview] : [])];
+  const items = () => [...(state.preview ? [state.preview] : []), ...state.pinned];
   return {
     getSnapshot: () => state,
     subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
@@ -47,8 +49,28 @@ function createWorkspaceTabs() {
       const existing = state.pinned.find(item => item.key === tab.key);
       if (existing?.title === tab.title) return;
       publish({ ...state, activeKey: tab.key,
-        pinned: existing ? state.pinned.map(item => item.key === tab.key ? tab : item) : [...state.pinned, tab],
+        pinned: existing ? state.pinned.map(item => item.key === tab.key ? tab : item) : [tab, ...state.pinned],
         preview: state.preview?.key === tab.key ? null : state.preview });
+    },
+    /** Move one visible tab to `index`, counted from the leading slot. The replaceable
+     * preview owns that slot while it exists, so a pinned tab dropped in front of it
+     * lands directly behind it; a preview that is dragged becomes pinned where it was
+     * dropped instead of being discarded. */
+    move(key, index) {
+      const list = items();
+      const from = list.findIndex(item => item.key === key);
+      if (from < 0) return;
+      const movingPreview = state.preview?.key === key;
+      const target = Math.max(0, Math.min(Number.isFinite(index) ? Math.round(index) : list.length, list.length));
+      if (target === from || target === from + 1) return;
+      const next = [...list];
+      const [moving] = next.splice(from, 1);
+      // Removing one entry before the insertion point shifts it one slot left.
+      next.splice(target > from ? target - 1 : target, 0, moving);
+      const preview = movingPreview ? null : state.preview;
+      const pinned = preview ? next.filter(item => item.key !== preview.key) : next;
+      if (!movingPreview && pinned.every((item, i) => item.key === state.pinned[i]?.key)) return;
+      publish({ ...state, pinned, preview, activeKey: state.activeKey });
     },
     close(key) {
       const list = items();
@@ -75,8 +97,11 @@ function isWorkspaceOperation(event) {
 }
 
 /** One animation owns wheel and arrow movement, so neither can override the other.
- * Use a native non-passive listener so the content below cannot scroll with it. */
-function installTabScroll(node) {
+ * Use a native non-passive listener so the content below cannot scroll with it.
+ * `onSettle` runs when the animation actually comes to rest: the last assignment is
+ * made inside a frame callback, and the caller must re-read the strip at that exact
+ * position instead of trusting the scroll events the easing produced. */
+function installTabScroll(node, onSettle) {
   if (!node) return;
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   let frame = null;
@@ -87,6 +112,7 @@ function installTabScroll(node) {
     frame = null;
     lastTime = undefined;
   };
+  const rest = () => { frame = null; lastTime = undefined; onSettle?.(); };
   const animate = (time) => {
     const elapsed = lastTime === undefined ? 16 : Math.min(48, time - lastTime);
     lastTime = time;
@@ -94,8 +120,7 @@ function installTabScroll(node) {
     const distance = target - node.scrollLeft;
     if (Math.abs(distance) < .5 || reducedMotion?.matches) {
       node.scrollLeft = target;
-      frame = null;
-      lastTime = undefined;
+      rest();
       return;
     }
     // Time-based easing keeps the speed consistent on high refresh-rate screens.
@@ -105,8 +130,7 @@ function installTabScroll(node) {
     // becomes too small to move, instead of leaving a frame loop running forever.
     if (node.scrollLeft === previous) {
       node.scrollLeft = target;
-      frame = null;
-      lastTime = undefined;
+      rest();
       return;
     }
     frame = window.requestAnimationFrame(animate);
@@ -114,7 +138,7 @@ function installTabScroll(node) {
   const scrollBy = (delta) => {
     if (frame === null) target = node.scrollLeft;
     target = Math.max(0, Math.min(node.scrollWidth - node.clientWidth, target + delta));
-    if (reducedMotion?.matches) { stop(); node.scrollLeft = target; }
+    if (reducedMotion?.matches) { stop(); node.scrollLeft = target; onSettle?.(); }
     else if (frame === null) frame = window.requestAnimationFrame(animate);
   };
   const onWheel = (event) => {
@@ -134,6 +158,18 @@ function installTabScroll(node) {
       node.removeEventListener('wheel', onWheel);
       node.removeEventListener('pointerdown', stop);
     },
+  };
+}
+
+/** Scroll state of the tab strip, read from the strip's own scroll extents: each
+ * arrow exists only while that direction can still move the strip, so it is gone by
+ * the time the tabs reach the end. The two-pixel allowance absorbs the rounding of
+ * scrollWidth/clientWidth against a fractional scrollLeft at non-integer DPI, which
+ * otherwise leaves an arrow pointing at a strip that cannot move any further. */
+function tabOverflow(node) {
+  return {
+    left: node.scrollLeft > 2,
+    right: node.scrollLeft + node.clientWidth < node.scrollWidth - 2,
   };
 }
 
@@ -252,21 +288,91 @@ function installReferenceShell({ slots, layout, uiWorkspace, theme, remote, subs
     }, [ownsSurface, view.key, view.title]);
     const scroll = React.useRef(null);
     const tabScroll = React.useRef(null);
-    React.useEffect(() => {
-      if (!ownsSurface) return;
-      const controller = installTabScroll(scroll.current);
-      tabScroll.current = controller;
-      return () => { controller?.dispose(); tabScroll.current = null; };
-    }, [ownsSurface]);
+    // Declared before the scroll effect so its callbacks can re-read the strip.
     const [overflow, setOverflow] = React.useState({ left: false, right: false });
     const updateOverflow = () => {
       const node = scroll.current;
       if (!node) return;
-      const next = { left: node.scrollLeft > 1, right: node.scrollLeft + node.clientWidth < node.scrollWidth - 1 };
+      const next = tabOverflow(node);
       setOverflow((old) => old.left === next.left && old.right === next.right ? old : next);
     };
-    const tabs = [...tabState.pinned, ...(tabState.preview ? [tabState.preview] : [])];
+    React.useEffect(() => {
+      if (!ownsSurface) return;
+      const node = scroll.current;
+      // The strip is re-read when the eased scroll comes to rest and when the browser
+      // reports the end of any other scroll, so an arrow never outlives its direction.
+      const controller = installTabScroll(node, updateOverflow);
+      const sync = () => updateOverflow();
+      node?.addEventListener('scrollend', sync);
+      tabScroll.current = controller;
+      return () => { node?.removeEventListener('scrollend', sync); controller?.dispose(); tabScroll.current = null; };
+    }, [ownsSurface]);
+    // New tabs open at the front: the preview leads, pinned tabs follow newest first.
+    const tabs = [...(tabState.preview ? [tabState.preview] : []), ...tabState.pinned];
     const tabSignature = `${tabState.activeKey}/${tabs.map(item => `${item.key}:${item.title}`).join('/')}`;
+    /* Pointer-based reordering: the tab content is a native button, so HTML5 drag
+     * does not reliably start from it. A four-pixel threshold keeps clicks and the
+     * close action intact; the nav captures the pointer only after the drag begins.
+     * dropAt is an insertion index in the visible list; the preview stays last. */
+    const [drag, setDrag] = React.useState(null);
+    const dragRef = React.useRef(null);
+    const tabNodes = React.useRef(null);
+    const suppressClick = React.useRef(0);
+    if (!tabNodes.current) tabNodes.current = new Map();
+    const dropIndexAt = (clientX) => {
+      // The preview leads the strip, so a pinned tab can be dropped behind it but
+      // never in front of it; the preview itself is the only tab that may sit first.
+      const floor = tabState.preview ? 1 : 0;
+      for (let index = 0; index < tabs.length; index += 1) {
+        const node = tabNodes.current.get(tabs[index].key);
+        if (!node) continue;
+        const rect = node.getBoundingClientRect();
+        if (clientX < rect.left + rect.width / 2) return Math.max(floor, index);
+      }
+      return tabs.length;
+    };
+    /* Put the | in the gap rather than on a tab border: the tab clips its own
+     * overflow, so a pseudo-element at left:-N was cut to a border-like line. */
+    const dropLeftAt = (index) => {
+      if (!tabs.length) return 0;
+      if (index >= tabs.length) {
+        const last = tabNodes.current.get(tabs[tabs.length - 1].key);
+        return last ? last.offsetLeft + last.offsetWidth + 4 : 0;
+      }
+      const node = tabNodes.current.get(tabs[index].key);
+      if (!node) return 0;
+      return index === 0 ? 1 : Math.max(1, node.offsetLeft - 4);
+    };
+    const startDrag = (event, item) => {
+      if (event.button !== 0) return;
+      if (event.target.closest?.('.smooth-tab-close')) return;
+      dragRef.current = { key: item.key, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
+    };
+    const moveDrag = (event) => {
+      const current = dragRef.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      if (!current.active) {
+        if (Math.max(Math.abs(event.clientX - current.startX), Math.abs(event.clientY - current.startY)) < 4) return;
+        current.active = true;
+        try { event.currentTarget.setPointerCapture(event.pointerId); } catch (error) {}
+      }
+      event.preventDefault();
+      const dropAt = dropIndexAt(event.clientX);
+      const left = dropLeftAt(dropAt);
+      setDrag((old) => old && old.key === current.key && old.dropAt === dropAt && old.left === left ? old : { key: current.key, dropAt, left });
+    };
+    const endDrag = (event, drop) => {
+      const current = dragRef.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      try { event.currentTarget.releasePointerCapture(event.pointerId); } catch (error) {}
+      if (current.active) {
+        if (drop) workspaceTabs.move(current.key, dropIndexAt(event.clientX));
+        suppressClick.current = Date.now() + 300;
+        event.preventDefault();
+      }
+      setDrag(null);
+    };
     /* A workspace with no tab open has nothing to type into yet: the welcome page keeps
      * its headline and drops the workspace picker, the second context line and the card.
      * The flag is published on the body because the block belongs to the host's hero,
@@ -285,35 +391,55 @@ function installReferenceShell({ slots, layout, uiWorkspace, theme, remote, subs
       return () => observer.disconnect();
     }, [tabSignature, skin.state.enabled]);
     if (!ownsSurface) return null;
-    const tabItems = tabs.map(item => {
+    const tabItems = tabs.map((item, index) => {
       const selected = item.key === tabState.activeKey;
       const preview = item.key === tabState.preview?.key;
-      return h('div', { key: item.key, className: 'smooth-workspace-tab', 'data-selected': selected, 'data-preview': preview },
-        h('button', { role: 'tab', type: 'button', className: 'smooth-tab-label', 'aria-selected': selected, tabIndex: selected ? 0 : -1,
-          title: item.title, onClick: () => activateTab(item), onDoubleClick: () => workspaceTabs.pin(item), onKeyDown: event => {
-            if (event.key === 'Delete') { event.preventDefault(); event.stopPropagation(); closeTab(item); }
-          } }, h('span', null, item.title)),
-        h('button', { type: 'button', className: 'smooth-tab-close', tabIndex: selected ? 0 : -1,
-          'aria-label': `${text('shell.closeTab', '关闭标签页')}：${item.title}`, title: text('shell.closeTab', '关闭标签页'),
-          onClick: event => { event.stopPropagation(); closeTab(item); } },
-          h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, 'aria-hidden': true }, h('path', { d: 'm4 4 8 8M12 4l-8 8' }))));
+      const dragging = drag?.key === item.key;
+      return h('div', {
+        key: item.key,
+        ref: node => { if (node) tabNodes.current.set(item.key, node); else tabNodes.current.delete(item.key); },
+        className: `smooth-workspace-tab${dragging ? ' smooth-tab-dragging' : ''}`,
+        'data-selected': selected, 'data-preview': preview,
+        onPointerDown: event => startDrag(event, item),
+      },
+      h('button', { role: 'tab', type: 'button', className: 'smooth-tab-label', 'aria-selected': selected, tabIndex: selected ? 0 : -1,
+        title: item.title, onClick: event => {
+          if (Date.now() < suppressClick.current) { event.preventDefault(); event.stopPropagation(); return; }
+          activateTab(item);
+        }, onDoubleClick: () => { if (Date.now() < suppressClick.current) return; workspaceTabs.pin(item); }, onKeyDown: event => {
+          if (event.key === 'Delete') { event.preventDefault(); event.stopPropagation(); closeTab(item); }
+        } }, h('span', null, item.title)),
+      h('button', { type: 'button', className: 'smooth-tab-close', tabIndex: selected ? 0 : -1,
+        'aria-label': `${text('shell.closeTab', '关闭标签页')}：${item.title}`, title: text('shell.closeTab', '关闭标签页'),
+        onClick: event => { event.stopPropagation(); if (Date.now() < suppressClick.current) return; closeTab(item); } },
+        h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, 'aria-hidden': true }, h('path', { d: 'm4 4 8 8M12 4l-8 8' }))));
     });
     return h(React.Fragment, null,
       h('button', { type: 'button', className: 'smooth-rail-home', 'aria-pressed': !panel && !settingsOpen, title: text('shell.main', '主页面'), 'aria-label': text('shell.main', '主页面'), onClick: () => openMain(panel, settingsOpen) },
         h('svg', { width: 24, height: 24, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }, h('path', { d: 'm3 10.5 9-7.5 9 7.5M5 9v10a2 2 0 0 0 2 2h3v-7h4v7h3a2 2 0 0 0 2-2V9' }))),
       props.inSettings && h('button', { type: 'button', className: 'smooth-rail-plugins', title: '插件', 'aria-label': '插件', onClick: openPlugins }, h(ui.IconPluginPinwheelOutlineRegular, { size: 23, 'aria-hidden': true })),
       h('div', { className: 'smooth-workspace-bar' },
-        overflow.left && h('button', { type: 'button', className: 'smooth-tab-scroll', 'aria-label': '向左滚动标签页', onClick: () => tabScroll.current?.scrollBy(-240) }, h(ui.IconChevronLeftOutlineRegular, { size: 15 })),
-        h('nav', { ref: scroll, onScroll: updateOverflow, className: 'smooth-workspace-tabs', role: 'tablist', 'aria-label': '工作区标签页', onKeyDown: (event) => {
-          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-          const buttons = [...event.currentTarget.querySelectorAll('[role="tab"]')];
-          const current = event.target.closest('[role="tab"]') || event.target.closest('.smooth-workspace-tab')?.querySelector('[role="tab"]');
-          const index = buttons.indexOf(current);
-          const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
-          event.preventDefault(); buttons[next]?.focus(); buttons[next]?.click();
-        } },
+        overflow.left && h('button', { type: 'button', className: 'smooth-tab-scroll', 'data-side': 'left', 'aria-label': '向左滚动标签页', onClick: () => tabScroll.current?.scrollBy(-240) }, h(ui.IconChevronLeftOutlineRegular, { size: 15 })),
+        h('nav', { ref: scroll, onScroll: updateOverflow, className: 'smooth-workspace-tabs', role: 'tablist', 'aria-label': '工作区标签页',
+          'data-dragging': drag ? 'true' : undefined,
+          onPointerMove: moveDrag,
+          onPointerUp: event => endDrag(event, true),
+          onPointerCancel: event => endDrag(event, false),
+          onLostPointerCapture: event => endDrag(event, false),
+          onKeyDown: (event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            const buttons = [...event.currentTarget.querySelectorAll('[role="tab"]')];
+            const current = event.target.closest('[role="tab"]') || event.target.closest('.smooth-workspace-tab')?.querySelector('[role="tab"]');
+            const index = buttons.indexOf(current);
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+            event.preventDefault(); buttons[next]?.focus(); buttons[next]?.click();
+          } },
+          drag && h('span', { className: 'smooth-tab-drop', style: { left: `${drag.left}px` }, 'aria-hidden': 'true' }),
           ...tabItems),
-        overflow.right && h('button', { type: 'button', className: 'smooth-tab-scroll', 'aria-label': '向右滚动标签页', onClick: () => tabScroll.current?.scrollBy(240) }, h(ui.IconChevronRightOutlineRegular, { size: 15 })),
+        /* Both arrows only exist while that direction can still be scrolled, so an arrow
+           never sits over a strip with nothing left behind it. The bar keeps the right
+           arrow's slot as padding either way, so its appearance never moves a tab. */
+        overflow.right && h('button', { type: 'button', className: 'smooth-tab-scroll', 'data-side': 'right', 'aria-label': '向右滚动标签页', onClick: () => tabScroll.current?.scrollBy(240) }, h(ui.IconChevronRightOutlineRegular, { size: 15 })),
       ));
   }
   disposers.push(slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: `${PLUGIN_ID}.chrome`, order: 10 }, Chrome)));

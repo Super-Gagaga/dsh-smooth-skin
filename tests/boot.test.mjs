@@ -39,7 +39,10 @@ function createNode(tag) {
 }
 
 /** Run the injected script against a fake document, clock and storage. */
-function runSplash({ stored, reduced = false, mounted = false, observe = true, rootPresent = true, screen, outer, framed = false } = {}) {
+function runSplash({ stored, reduced = false, mounted = false, observe = true, rootPresent = true, screen, outer, framed = false, session } = {}) {
+  // One map stands for one renderer session: reuse it to model F5/Ctrl+R, omit it to
+  // model a fresh app window.
+  const sessionStore = session || new Map();
   const body = createNode('body');
   const root = createNode('div');
   root.childElementCount = mounted ? 1 : 0;
@@ -56,6 +59,11 @@ function runSplash({ stored, reduced = false, mounted = false, observe = true, r
   let outerHeight = outer ? outer[1] : 820;
   const frameWindow = {
     localStorage: { getItem: () => (stored === undefined ? null : JSON.stringify(stored)) },
+    sessionStorage: {
+      getItem: (key) => (sessionStore.has(key) ? sessionStore.get(key) : null),
+      setItem: (key, value) => sessionStore.set(key, String(value)),
+      removeItem: (key) => sessionStore.delete(key),
+    },
     matchMedia: () => ({ matches: reduced }),
     MutationObserver: observe ? class {
       constructor(fn) { this.fn = fn; calls.observers += 1; calls.instance = this; }
@@ -96,7 +104,7 @@ function runSplash({ stored, reduced = false, mounted = false, observe = true, r
     now = target;
   };
   return {
-    layer, animate, body, root, documentElement, calls, advance,
+    layer, animate, body, root, documentElement, calls, advance, session: sessionStore,
     // The shell cannot mount before its container exists, so both appear together.
     mount: () => { root.childElementCount = 1; nodes.root = root; },
     notify: () => calls.instance?.fn(),
@@ -227,6 +235,26 @@ test('the opening sizes the window before the app can show it', () => {
   // resize the frame it happens to live in.
   const framed = runSplash({ framed: true, stored: { windowSize: { enabled: true, width: 1600, height: 1000 } } });
   assert.deepEqual(framed.calls.resizes, []);
+});
+
+test('the launch size is applied once per renderer session, not on every reload', () => {
+  const session = new Map();
+  const stored = { windowSize: { enabled: true, width: 1600, height: 1000 } };
+  const launch = runSplash({ stored, session });
+  assert.deepEqual(launch.calls.resizes, [[1600, 1000]], 'the first load applies the launch size');
+  assert.deepEqual(launch.calls.moves, [[480, 220]], 'and centres it');
+  assert.equal(launch.session.size, 1, 'the session marker is set once the request has gone out');
+
+  // F5 / Ctrl+R keeps the same renderer session; the user has since dragged the window.
+  const reload = runSplash({ stored, session, outer: [1200, 900] });
+  assert.deepEqual(reload.calls.resizes, [], 'a reload must not restore the launch size');
+  assert.deepEqual(reload.calls.moves, [], 'a reload must not re-centre the window');
+  assert.equal(reload.session.size, 1);
+
+  // A new app window starts a fresh renderer session and applies the setting again.
+  const next = runSplash({ stored, outer: [1280, 820] });
+  assert.deepEqual(next.calls.resizes, [[1600, 1000]]);
+  assert.deepEqual(next.calls.moves, [[480, 220]]);
 });
 
 test('the first splash frame contains only the native whale with no text or controls', () => {
