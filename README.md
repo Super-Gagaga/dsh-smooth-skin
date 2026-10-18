@@ -66,7 +66,7 @@ node build.mjs                # 生成 lib/index.js 与 lib/client.js
 node build.mjs --watch        # 监听 src/ 增量重建
 node tools/activate-host.mjs  # 激活试验台
 node tools/export-icons.mjs   # 从 src/boot.js 导出 assets/whale.svg
-python tools/prepare-think.py # 从 assets/think/*.png 生成抠好的 cutout/*.webp（换图时才需要）
+python tools/prepare-think.py # 从 assets/think/*.png 生成抠好的 cutout/*.webp（原图不入库，换图时才需要）
 node tools/export-think.mjs   # 把 cutout 内联进 src/think.js（浏览器端无法运行时读文件）
 node tools/startup-profile.mjs # 启动耗时与载荷剖析（改造前后对比用）
 node tools/host-contract.mjs  # 更新 DSH 后核对宿主的类名、属性、插槽、令牌与方法
@@ -83,7 +83,7 @@ node --test tests/*.test.mjs
 
 `src/shared.js` 被打包进两个产物，是配色与状态规范化的唯一来源。
 
-思考强度面板的插图走一条和鲸鱼相同的“导出 → 内联”链路：`tools/prepare-think.py` 读取 `assets/think/<名字>-Off/Low/High/Max.png`，**优先使用源图自带的透明通道**（透明区里残留的白/黑 RGB 不会被当成底色而保留成不透明块），只有源图被压平成不透明背景时才从边框泛洪抠掉白色或黑色（角色内部的同色区域保留），再按文件名后缀生成 780px 宽的直通 alpha WebP 到 `assets/think/cutout/`；`tools/export-think.mjs` 再把它 base64 内联成 `src/think.js` 的 `THINK_ART`，`build.mjs` 把这份常量拼进 `lib/client.js`。`--check` 只核对不写入，`tests/think.test.mjs` 断言四张图存在、确实是 WebP、体积受限且与 cutout 逐字节一致——换图后忘了导出会直接测试失败。面板打开时按当前挡位显示对应插图（先匹配思考挡位 id，匹配不到按位置换算），拖动或点标签换挡时四张图常驻在 DOM 里交叉淡入。插图只属于 DeepSeek：只有模型目录里 DeepSeek、DeepSeek Account 这两组的模型才显示这块背景，其它 provider（例如 xiaomi）保持没有插图的纯面板；挡位文字和滑杆对所有带 reasoning 的模型照常显示。整块背景（插图连同底部虚化）比媒体区顶边低 6px，图片和渐变一起下移，不会出现“只有图动了、虚化没动”。
+思考强度面板的插图走一条和鲸鱼相同的“导出 → 内联”链路：`tools/prepare-think.py` 读取 `assets/think/<名字>-Off/Low/High/Max.png`（**四张原图不入库**：单张 3.5–4.5MB，且只在换图时才需要。把它们放回 `assets/think/` 再跑这条命令即可，`.gitignore` 只忽略这一层 PNG），**优先使用源图自带的透明通道**（透明区里残留的白/黑 RGB 不会被当成底色而保留成不透明块），只有源图被压平成不透明背景时才从边框泛洪抠掉白色或黑色（角色内部的同色区域保留），再按文件名后缀生成 780px 宽的直通 alpha WebP 到 `assets/think/cutout/`；`tools/export-think.mjs` 再把它 base64 内联成 `src/think.js` 的 `THINK_ART`，`build.mjs` 把这份常量拼进 `lib/client.js`。`--check` 只核对不写入，`tests/think.test.mjs` 断言四张图存在、确实是 WebP、体积受限且与 cutout 逐字节一致——换图后忘了导出会直接测试失败。面板打开时按当前挡位显示对应插图（先匹配思考挡位 id，匹配不到按位置换算），拖动或点标签换挡时四张图常驻在 DOM 里交叉淡入。插图只属于 DeepSeek：只有模型目录里 DeepSeek、DeepSeek Account 这两组的模型才显示这块背景，其它 provider（例如 xiaomi）保持没有插图的纯面板；挡位文字和滑杆对所有带 reasoning 的模型照常显示。整块背景（插图连同底部虚化）比媒体区顶边低 6px，图片和渐变一起下移，不会出现“只有图动了、虚化没动”。
 
 `tests/client.test.mjs` 直接执行浏览器构建产物，检查模块导出、依赖访问、设置页注册、启用/关闭和卸载清理。源码与构建产物必须完全一致，修改 `src/` 后需重新构建。`tests/git-bridge.test.mjs` 在临时 Git 仓库里验证分支列表、未提交计数、建分支和带能力令牌的 Host 监听。
 
@@ -99,7 +99,7 @@ package.json      manifest：dsh.bundle.patch + dsh.client
 cordis.patch.yml  bundle 补丁，插入 smooth-skin 行
 assets/样例图/     原始 HTML 设计参考，不参与插件运行
 assets/whale.svg  开场鲸鱼的独立 SVG 文件，从 src/boot.js 导出，同样不参与运行
-assets/think/     四挡思考强度插图：原始 PNG 与抠图缩放后的 cutout/*.webp（面板背景用）
+assets/think/     四挡思考强度插图：cutout/*.webp 入库用于生成面板背景；原始 PNG 不入库
 locale/{zh,en}.json  插件管理页显示的标题与描述
 src/shared.js     调色板、主题令牌映射、状态规范化、locale 词条
 src/think.js      由 tools/export-think.mjs 生成的 THINK_ART（四挡插图的内联 data URL），不要手改
