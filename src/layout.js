@@ -242,7 +242,7 @@ function tabOverflow(node) {
   };
 }
 
-function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, theme, remote, subscribeTheme, chooseTheme, useSmoothState, text }) {
+function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, theme, remote, useSmoothState, text }) {
   if (!slots || !layout || !uiWorkspace) return { dispose() {} };
   const ui = require('@deepseek-ai/dsh-client-ui-primitives');
   const layoutStore = sharedSurfaceStore(slots, 'root', 'setSidebar');
@@ -252,7 +252,6 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
   let active = false;
   const workspaceTabs = createWorkspaceTabs();
   let currentView;
-  let appearanceDispose;
   let headingDispose;
   let composerDispose;
   let accountDispose;
@@ -285,6 +284,63 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
     const info = layoutStore?.getSnapshot().layoutInfo;
     if (info) document.body.style.setProperty('--smooth-left-width', `${info.sidebar || 0}px`);
   };
+  // The host's toggle collapses to 0 and reopens at its own 280px, which silently replaces
+  // the width this skin (or the user) had set before collapsing. Remember the last wide
+  // width and restore it when that exact 0 -> 280 hop happens; a real drag to 280 is kept.
+  let lastWideSidebar;
+  let sidebarWidth;
+  let restoringSidebar = false;
+  const syncSidebarWidth = () => {
+    if (!layoutStore) return;
+    let width = layoutStore.getSnapshot().layoutInfo.sidebar || 0;
+    if (active && sidebarWidth === 0 && width === 280
+      && lastWideSidebar !== undefined && lastWideSidebar !== 280 && !restoringSidebar) {
+      restoringSidebar = true;
+      try { layoutStore.actions.setSidebar(lastWideSidebar); } finally { restoringSidebar = false; }
+      width = layoutStore.getSnapshot().layoutInfo.sidebar || 0;
+    }
+    if (!restoringSidebar && width > 0) lastWideSidebar = width;
+    sidebarWidth = width;
+    setLeftWidth();
+    scheduleCaptionLeading();
+  };
+  // A collapsed sidebar puts the native "应用 / 编辑" caption menu beside the toggle and
+  // the new-conversation button. Its width follows the locale and font, so the tab strip
+  // is told where the menu actually ends instead of guessing a pixel offset.
+  let captionFrame = 0;
+  let captionMenu;
+  const captionResize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => scheduleCaptionLeading()) : undefined;
+  const syncCaptionLeading = () => {
+    captionFrame = 0;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
+    const menu = document.querySelector('[data-windows-menu]');
+    if (captionResize && menu !== captionMenu) {
+      captionResize.disconnect();
+      if (menu) captionResize.observe(menu);
+      captionMenu = menu;
+    }
+    const collapsed = active && !!document.querySelector('[data-sidebar-collapsed]');
+    const rect = collapsed && menu ? menu.getBoundingClientRect?.() : undefined;
+    const right = rect && rect.width > 0 ? Math.round(rect.right + 8) : 0;
+    if (right > 0) document.body.style.setProperty('--smooth-caption-leading', `${right}px`);
+    else document.body.style.removeProperty('--smooth-caption-leading');
+  };
+  const scheduleCaptionLeading = () => {
+    if (captionFrame) return;
+    if (typeof requestAnimationFrame === 'function') captionFrame = requestAnimationFrame(syncCaptionLeading);
+    else syncCaptionLeading();
+  };
+  window.addEventListener?.('resize', scheduleCaptionLeading);
+  const menuObserver = typeof MutationObserver === 'function' ? new MutationObserver(scheduleCaptionLeading) : undefined;
+  if (menuObserver && document.body) menuObserver.observe(document.body, { childList: true });
+  document.fonts?.ready?.then?.(scheduleCaptionLeading);
+  disposers.push(() => {
+    window.removeEventListener?.('resize', scheduleCaptionLeading);
+    menuObserver?.disconnect();
+    captionResize?.disconnect();
+    if (captionFrame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(captionFrame);
+    document.body?.style.removeProperty('--smooth-caption-leading');
+  });
   function setEnabled(enabled) {
     if (enabled === active) return;
     active = enabled;
@@ -299,12 +355,13 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
       accountDispose?.(); accountDispose = undefined;
       usageDispose?.(); usageDispose = undefined;
     }
-    if (enabled && theme) {
-      appearanceDispose = slots.inject('settings.general.item', () => slots.register({ name: 'settings.general.item', id: 'appearance', order: 10, priority: -10 }, Appearance));
+    if (enabled) {
+      // The theme presets live in the skin's own settings page; the host's General page
+      // only gets the heading, so no second day/night control appears there.
       headingDispose = slots.inject('settings.general.item', () => slots.register({ name: 'settings.general.item', id: `${PLUGIN_ID}.heading`, order: -100 }, () => h('h1', { className: 'smooth-general-title' }, text('shell.general', '通用设置'))));
     } else {
-      appearanceDispose?.(); headingDispose?.();
-      appearanceDispose = headingDispose = undefined;
+      headingDispose?.();
+      headingDispose = undefined;
     }
     if (!layoutStore) return;
     const current = layoutStore.getSnapshot().layoutInfo.sidebar;
@@ -315,9 +372,12 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
         layoutStore.actions.setSidebar(appliedWidth);
       }
     } else if (current === appliedWidth) layoutStore.actions.setSidebar(previousWidth);
-    setLeftWidth();
+    syncSidebarWidth();
   }
-  if (layoutStore) { disposers.push(layoutStore.subscribe(setLeftWidth)); setLeftWidth(); }
+  if (layoutStore) {
+    disposers.push(layoutStore.subscribe(syncSidebarWidth));
+    syncSidebarWidth();
+  }
   function closeSettings() { settingsStore?.actions.close(); }
   function openSession(id) { closeSettings(); uiWorkspace.openSession(id); }
   function openHome() { closeSettings(); uiWorkspace.clearMain(); }
@@ -358,21 +418,6 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
     if (result.next) activateTab(result.next);
     // Closing the last tab leaves the strip empty; the welcome page stands on its own.
     else openHome();
-  }
-  function Appearance() {
-    const preference = React.useSyncExternalStore(subscribeTheme, () => theme.getTheme().preference);
-    const modes = [
-      ['light', 'shell.light', '浅色', ui.IconLightOutlineRegular],
-      ['dark', 'shell.dark', '深色', ui.IconDarkOutlineRegular],
-      ['system', 'shell.system', '跟随系统', ui.IconFollowsystemOutlineRegular],
-    ];
-    return h('section', { className: 'smooth-native-appearance' },
-      h('h3', null, text('shell.appearance', '外观')),
-      h('div', { className: 'smooth-native-appearance-options', role: 'radiogroup', 'aria-label': text('shell.appearance', '外观') },
-        ...modes.map(([id, key, fallback, icon]) => h('button', {
-          key: id, type: 'button', role: 'radio', 'aria-checked': preference === id,
-          onClick: () => chooseTheme(id),
-        }, h(icon, { size: 24, 'aria-hidden': true }), text(key, fallback)))));
   }
   function Chrome(props) {
     const skin = useSmoothState();

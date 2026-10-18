@@ -1,7 +1,7 @@
 {
   "name": "dsh-smooth-skin",
   "version": "0.1.0",
-  "description": "Smooth：DSH Web 界面的深色皮肤 —— 配色、圆角、列表卡片与设置页质感",
+  "description": "Smooth：DSH Web 界面皮肤 —— 统一配色、圆角与列表卡片，内置初雪白/玄铁黑等六种主题预设",
   "type": "module",
   "license": "MIT",
   "private": true,

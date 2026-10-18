@@ -21,7 +21,7 @@ const usage = await read('../src/usage.js');
 
 /** Evaluate the shared + boot + host half as an ESM module through a data: URL. */
 async function loadHostHalf() {
-  const module = await import(`data:text/javascript,${encodeURIComponent(`${shared}\n${boot}\n${host}\nexport { normalize, configFromState, normalizeConfig, buildTokens, DEFAULTS, WINDOW_SIZE, DEFAULT_WINDOW_SIZE, SKIN_ATTRIBUTE, BOOT_ATTRIBUTE, bootInjections, SPLASH_ID, SPLASH_CSS, splashHtml, splashScript };`)}`);
+  const module = await import(`data:text/javascript,${encodeURIComponent(`${shared}\n${boot}\n${host}\nexport { normalize, configFromState, normalizeConfig, buildTokens, DEFAULTS, WINDOW_SIZE, DEFAULT_WINDOW_SIZE, SKIN_ATTRIBUTE, BOOT_ATTRIBUTE, bootInjections, SPLASH_ID, SPLASH_CSS, splashHtml, splashScript, PALETTE, THEME_PRESETS, themeTone };`)}`);
   return module;
 }
 
@@ -60,8 +60,36 @@ test('normalize clamps unknown persisted values to the defaults', async () => {
   const { normalize, DEFAULTS } = await loadHostHalf();
   assert.deepEqual(normalize(null), DEFAULTS);
   assert.deepEqual(normalize({ enabled: 'yes', theme: 'neon' }), DEFAULTS);
-  assert.deepEqual(normalize({ enabled: false, theme: 'dark' }), { enabled: false, theme: 'dark', boot: true, windowSize: DEFAULTS.windowSize });
+  assert.deepEqual(normalize({ enabled: false, theme: 'iron' }), { enabled: false, theme: 'iron', boot: true, windowSize: DEFAULTS.windowSize });
   assert.deepEqual(normalize({ enabled: true, theme: 'auto', boot: false }), { enabled: true, theme: 'auto', boot: false, windowSize: DEFAULTS.windowSize });
+  // The old day/night values and the previous preset ids map onto the new presets.
+  assert.equal(normalize({ theme: 'dark' }).theme, 'iron');
+  assert.equal(normalize({ theme: 'light' }).theme, 'snow');
+  assert.equal(normalize({ theme: 'paper' }).theme, 'snow');
+  assert.equal(normalize({ theme: 'obsidian' }).theme, 'iron');
+  assert.equal(normalize({ theme: 'celadon' }).theme, 'moss');
+  assert.equal(normalize({ theme: 'amber' }).theme, 'sunset');
+  assert.equal(normalize({ theme: 'azure' }).theme, 'deepsea');
+  for (const preset of ['snow', 'iron', 'moss', 'sunset', 'deepsea']) {
+    assert.equal(normalize({ theme: preset }).theme, preset);
+  }
+});
+
+test('the named theme presets are complete palettes with their own tone', async () => {
+  const { buildTokens, PALETTE, THEME_PRESETS, themeTone } = await loadHostHalf();
+  assert.deepEqual(THEME_PRESETS, ['auto', 'snow', 'iron', 'moss', 'sunset', 'deepsea']);
+  const base = Object.keys(PALETTE.dark).sort();
+  for (const id of ['snow', 'iron', 'moss', 'sunset', 'deepsea']) {
+    assert.deepEqual(Object.keys(PALETTE[id]).sort(), base, `${id} is missing palette keys`);
+    assert.ok(['light', 'dark'].includes(themeTone(id)), `${id} has no host tone`);
+    const tokens = buildTokens({ theme: id });
+    assert.equal(tokens['--smooth-app'].light, PALETTE[id].app);
+    assert.equal(tokens['--smooth-app'].dark, PALETTE[id].app, `${id} paints both tones with its palette`);
+  }
+  assert.equal(themeTone('auto'), undefined);
+  assert.equal(themeTone('snow'), 'light');
+  assert.equal(themeTone('iron'), 'dark');
+  assert.equal(themeTone('deepsea'), 'dark');
 });
 
 test('the launch window size defaults to 1440 x 900 and repairs bad input', async () => {
@@ -85,14 +113,17 @@ test('the launch window size defaults to 1440 x 900 and repairs bad input', asyn
 test('normalizeConfig drops declared-default omissions', async () => {
   const { normalizeConfig, configFromState, DEFAULTS } = await loadHostHalf();
   assert.deepEqual(normalizeConfig({}), { windowSize: DEFAULTS.windowSize });
-  assert.deepEqual(normalizeConfig({ enabled: true, theme: 'light', extra: 1 }), { enabled: true, theme: 'light', windowSize: DEFAULTS.windowSize });
+  assert.deepEqual(normalizeConfig({ enabled: true, theme: 'snow', extra: 1 }), { enabled: true, theme: 'snow', windowSize: DEFAULTS.windowSize });
   assert.deepEqual(normalizeConfig({ boot: false, extra: 1 }), { boot: false, windowSize: DEFAULTS.windowSize });
   assert.equal('windowSize' in configFromState({ enabled: true, theme: 'auto', boot: true }), true);
 });
 
 test('buildTokens always carries both tones for every token', async () => {
-  const { buildTokens } = await loadHostHalf();
+  const { buildTokens, PALETTE } = await loadHostHalf();
   const tokens = buildTokens({ enabled: true, theme: 'auto' });
+  // Following the theme is exactly the snow/iron pair.
+  assert.equal(tokens['--smooth-app'].light, PALETTE.snow.app);
+  assert.equal(tokens['--smooth-app'].dark, PALETTE.iron.app);
   const names = Object.keys(tokens);
   assert.ok(names.includes('--dsw-alias-bg-base'));
   assert.ok(names.includes('--dsw-alias-label-secondary'));
@@ -203,6 +234,19 @@ test('the tab scroll arrows float over the strip instead of squeezing its width'
   assert.ok(!/\.smooth-tab-scroll:disabled\{/.test(skin), 'an arrow that cannot scroll is not drawn at all');
 });
 
+test('a collapsed sidebar keeps its caption buttons clear of the tab strip', () => {
+  // The expand toggle (12px) and the new-conversation button (48px) are fixed in the
+  // caption's left corner when the sidebar collapses. The strip starts after both, so
+  // they are neither covered by its surface nor squeezed by its tabs.
+  assert.match(skin, /body\[data-smooth-skin\]:has\(\[data-sidebar-collapsed\]\) \.smooth-workspace-bar\{left:var\(--smooth-caption-leading,100px\);padding-left:5px\}/);
+  assert.match(skin, /\[data-sidebar-collapsed\]\) :is\(\.smooth-rail-home,\.smooth-rail-plugins\)\{opacity:0;pointer-events:none\}/);
+  // The host pins both collapsed buttons at 28px; the skin keeps that box and only
+  // recolours it, so the new-conversation icon stays aligned with the expand toggle.
+  const collapsedSession = skin.match(/\[data-sidebar-collapsed\][^\n]*\{[^}]*height:28px[^}]*\}/)?.[0] || '';
+  assert.match(collapsedSession, /width:28px;height:28px;min-height:28px/);
+  assert.match(collapsedSession, /left:48px;top:calc\(\(var\(--smooth-caption\) - 28px\) \/ 2\)/);
+});
+
 test('the light selected workspace tab uses the soft selection fill, not the muted grey', () => {
   // Mixing the white caption surface with the dark muted label produced a grey chip
   // that read as black in light mode; the palette's selected token is the blue the
@@ -242,6 +286,23 @@ test('the workspace list keeps the reference list rhythm and its leading dot', (
   assert.match(skin, /\$\{hostPart\('projectRow'\)\}\{height:29px;border-radius:8px\}/);
   assert.match(skin, /\$\{hostPart\('projectRow'\)\} \$\{hostPart\('title'\)\}\{font-size:13\.5px;line-height:19px;font-weight:500\}/);
   assert.match(skin, /\$\{hostPart\('sectionLabel'\)\}\{font-size:12px;line-height:18px\}/);
+});
+
+test('inline code borrows the reference blue while fenced blocks keep their palette', () => {
+  // The native file chips paint themselves with the business colour; inline code is the
+  // same kind of reference, so it takes that blue instead of the body text colour.
+  assert.match(skin, /body\[data-smooth-skin\] \[data-conversation-scroll\] :not\(pre\)>code\{color:var\(--dsw-alias-state-business-primary\)\}/);
+  assert.ok(!/\[data-conversation-scroll\] pre\s*\{[^}]*color:/.test(skin), 'fenced code blocks are not recoloured');
+});
+
+test('the answer field keeps its quiet border while focused', () => {
+  // The host paints the answer block's border business-blue on :focus-within; the caret
+  // already communicates focus, so the skin restores the idle border colour.
+  assert.match(skin, /\$\{hostPart\('customBlock'\)\}:focus-within\{border-color:var\(--smooth-line\)\}/);
+  // The surrounding custom-answer row may still take the accent ring; the inner field does not.
+  assert.match(skin, /\$\{hostPart\('customRow'\)\}:focus-within\{border-color:var\(--smooth-accent\)/);
+  assert.ok(!/customBlock'\)[^}]*:focus-within\{border-color:var\(--smooth-accent\)/.test(skin),
+    'the inner answer block never paints an accent focus border');
 });
 
 test('the conversation header follows the reference: chips under the title, tabs centred', () => {
@@ -304,6 +365,8 @@ test('every CSS custom property the skin reads exists as a plugin token or a lit
   for (const [, name] of skin.matchAll(/@property\s+(--smooth-[a-z0-9-]+)/g)) localProperties.add(name);
   // The active workspace title is supplied as a CSS string by the native tabs.
   localProperties.add('--smooth-workspace-label');
+  // The chrome measures the native caption menu and publishes where the tab strip starts.
+  localProperties.add('--smooth-caption-leading');
   // The composer bakes each max-stop spark inline: travel, speed and size per particle.
   for (const spark of ['--spark-size', '--spark-opacity', '--spark-dx', '--spark-dy', '--spark-duration', '--spark-delay']) localProperties.add(spark);
   for (const glow of ['--glow-opacity', '--glow-dx', '--glow-dy', '--glow-duration', '--glow-delay']) localProperties.add(glow);

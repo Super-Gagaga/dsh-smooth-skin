@@ -249,7 +249,7 @@ test('theme and animation switches never move the window; only a size edit does'
   runtime.plugin.apply(runtime.ctx);
   assert.deepEqual(runtime.resizes, [], 'activation leaves a visible window alone');
   const rows = () => settingRows(runtime);
-  await rows()[1].props.onChange('light');
+  await rows()[1].props.onChange('snow');
   assert.equal(runtime.preference, 'light');
   assert.deepEqual(runtime.resizes, [], 'switching the theme must not resize or reposition the window');
   await rows()[2].props.onChange(false);
@@ -415,6 +415,30 @@ test('turning the skin off restores tokens and theme, then re-enabling reapplies
   runtime.dispose();
   assert.equal(runtime.preference, 'system');
   assert.equal(runtime.tokenLayers, 0);
+});
+
+test('the settings page replaces the day/night choice with the six theme presets', async () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  const row = () => settingRows(runtime)[1];
+  const value = () => row().props.value;
+  assert.equal(value(), 'auto', 'following the theme is the default');
+  assert.deepEqual(Array.from(row().props.options, option => option.value),
+    ['auto', 'snow', 'iron', 'moss', 'sunset', 'deepsea']);
+  const element = runtime.render(row());
+  const buttons = element.children[1].children;
+  assert.deepEqual(buttons.map(button => button.props['aria-checked']), [true, false, false, false, false, false]);
+  assert.deepEqual(buttons.map(button => button.props['data-theme']), ['auto', 'snow', 'iron', 'moss', 'sunset', 'deepsea']);
+  await row().props.onChange('sunset');
+  assert.equal(value(), 'sunset');
+  assert.equal(runtime.preference, 'light', 'the sunset preset reads as a light tone');
+  assert.equal(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')).theme, 'sunset');
+  await row().props.onChange('deepsea');
+  assert.equal(runtime.preference, 'dark', 'the clear-blue preset reads as a dark tone');
+  await row().props.onChange('auto');
+  assert.equal(value(), 'auto');
+  assert.equal(runtime.preference, 'system', 'following the theme restores the host preference');
+  runtime.dispose();
 });
 
 test('the settings page carries the enable switch, the mode choice and the launch animation', async () => {

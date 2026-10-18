@@ -203,7 +203,7 @@ body[data-smooth-skin] [data-composer-card]{--dsw-radius-panel:20px;--dsh-compos
 body[data-smooth-skin] [data-composer-card]::before{content:"";position:absolute;z-index:-1;left:0;right:0;top:0;bottom:var(--smooth-composer-footer-h);border:1px solid var(--smooth-line-strong);border-radius:14px;background:var(--dsw-specific-input-major);pointer-events:none}
 body[data-smooth-skin] [data-composer-card]${hostPart('cardWorkspaceTrigger')}{border-style:dashed}
 body[data-smooth-skin] [data-composer-card]${hostPart('cardWorkspaceTrigger')}::after{border:0}
-body[data-smooth-skin] [data-composer-card] ${hostPart('scroll')}{box-sizing:border-box;padding:12px 54px 12px 14px;min-height:46px;max-height:var(--dsh-composer-text-max-height);margin:0;border:0;border-radius:0;background:transparent;flex:1 1 auto}
+body[data-smooth-skin] [data-composer-card] ${hostPart('scroll')}{box-sizing:border-box;padding:10px 54px 10px 14px;min-height:42px;max-height:var(--dsh-composer-text-max-height);margin:0;border:0;border-radius:0;background:transparent;flex:1 1 auto}
 /* Attached previews sit inside the same well, above the placeholder; they carry no border
    of their own so there is no line beside the image. */
 body[data-smooth-skin] [data-composer-card] ${hostPart('rail')}{box-sizing:border-box;min-width:0;margin:0;padding:10px 12px 0;border:0;border-radius:0;background:transparent;overflow:hidden;contain:layout paint;animation:smooth-composer-open .15s cubic-bezier(.2,0,0,1) both}
@@ -248,7 +248,7 @@ body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}:disabled{back
    primary button in the trailing group is the send/queue key, so it is lifted out of the
    row and pinned over the well. It keeps the skin's accent ball: a 32px round key. A stop
    key rendered while a turn runs sits before it and stays in the footer. */
-body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type{position:absolute;top:auto;bottom:calc(var(--smooth-composer-footer-h) + 7px);right:8px;z-index:3;width:32px;height:32px;border:0;border-radius:50%;background:var(--smooth-accent);color:var(--smooth-ink);box-shadow:none;transform:none}
+body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type{position:absolute;top:auto;bottom:calc(var(--smooth-composer-footer-h) + 5px);right:8px;z-index:3;width:32px;height:32px;border:0;border-radius:50%;background:var(--smooth-accent);color:var(--smooth-ink);box-shadow:none;transform:none}
 body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type:hover:not(:disabled){background:color-mix(in srgb,var(--smooth-accent) 85%,var(--smooth-text))}
 body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type:disabled{background:var(--smooth-surface-3);color:var(--smooth-muted);opacity:.6}
 /* The host's own bottom dock (the three status groups: rounds/steps and tok/s, the token
@@ -373,6 +373,9 @@ body[data-smooth-skin] ${questionPanel} ${hostPart('headerActions')}{position:st
 body[data-smooth-skin] ${questionPanel} ${hostPart('waitStatus')}{font-size:12px;line-height:24px;color:var(--smooth-muted)}
 body[data-smooth-skin] ${questionPanel} ${hostPart('iconButton')}{width:28px;height:28px;color:var(--smooth-muted);border-radius:8px}
 body[data-smooth-skin] ${questionPanel} ${hostPart('iconButton')}:disabled{color:var(--dsw-alias-label-tertiary);opacity:.4}
+/* Focusing the free-text answer turns the block's border business-blue; the caret already
+   shows focus, so the block keeps the same quiet border it has when idle. */
+body[data-smooth-skin] ${questionPanel} ${hostPart('customBlock')}:focus-within{border-color:var(--smooth-line)}
 body[data-smooth-skin] ${questionPanel} [data-question-scroll]{min-height:0;scrollbar-gutter:stable;overflow-x:hidden}
 body[data-smooth-skin] ${questionPanel} ${hostPart('detail')}{margin:0;padding:4px 18px 8px;font-size:var(--dsh-content-font-size,14px);line-height:1.65}
 body[data-smooth-skin] ${questionPanel} ${hostPart('options')}{margin:0;padding:8px 16px 12px;gap:6px}
@@ -391,7 +394,7 @@ body[data-smooth-skin] ${questionPanel} :is(${hostPart('customRow')},${hostPart(
 body[data-smooth-skin] ${questionPanel} ${hostPart('customRow')}{margin-top:4px}
 body[data-smooth-skin] ${questionPanel} ${hostPart('customRowActive')}{border-color:color-mix(in srgb,var(--smooth-accent) 45%,var(--smooth-line));background:color-mix(in srgb,var(--smooth-accent) 8%,var(--dsw-specific-input-major))}
 body[data-smooth-skin] ${questionPanel} ${hostPart('customBlock')}{margin-inline:0;border-radius:10px;--dsh-answer-field-padding:10px 12px}
-body[data-smooth-skin] ${questionPanel} :is(${hostPart('customRow')},${hostPart('customBlock')}):focus-within{border-color:var(--smooth-accent);background:var(--dsw-specific-input-major);box-shadow:var(--smooth-light-edge)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('customRow')}:focus-within{border-color:var(--smooth-accent);background:var(--dsw-specific-input-major);box-shadow:var(--smooth-light-edge)}
 body[data-smooth-skin] ${questionPanel} ${hostPart('field')}>*{font-size:14px;line-height:22px}
 body[data-smooth-skin] ${questionPanel} ${hostPart('fieldInput')}::placeholder{color:var(--smooth-muted)}
 body[data-smooth-skin] ${questionPanel} ${hostPart('footer')}{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px 12px;align-items:center;flex-shrink:0;margin:0;padding:12px 16px;border-top:1px solid var(--smooth-line);background:var(--dsw-specific-input-major)}
@@ -435,6 +438,9 @@ body[data-smooth-skin] ${chatMarkdown}>:last-child{margin-bottom:0}
 body[data-smooth-skin] ${chatMarkdown} blockquote{border-left:1px solid var(--smooth-line-strong);padding-left:16px;color:var(--smooth-muted)}
 body[data-smooth-skin] ${chatMarkdown} hr{height:1px;margin-block:24px;background:var(--smooth-line)}
 body[data-smooth-skin] ${chatMarkdown} a{text-underline-offset:3px}
+/* Inline code reads as a reference, not as body text: the same business blue the native
+   file chips use, while fenced blocks keep their syntax colours. */
+body[data-smooth-skin] [data-conversation-scroll] :not(pre)>code{color:var(--dsw-alias-state-business-primary)}
 body[data-smooth-skin] [data-conversation-scroll] ::selection{background:color-mix(in srgb,var(--smooth-accent) 28%,transparent);color:var(--smooth-text)}
 /* Flow rows include attachments and actions and span the conversation column.
    Paint only the native bubble, retaining its content-sized, right-aligned stack. */
@@ -601,6 +607,11 @@ body[data-smooth-skin] .smooth-workspace-bar{
   display:flex;align-items:center;gap:4px;padding:0 35px 0 5px;background:var(--smooth-surface);
   border-radius:18px 0 0 0;corner-shape:round;pointer-events:auto;z-index:50;-webkit-app-region:drag;
 }
+/* A collapsed sidebar parks the expand toggle (12px), the new-conversation button (48px)
+   and the native caption menu in the caption's left corner. The chrome measures where the
+   menu ends and publishes --smooth-caption-leading, so the strip starts to the right of
+   "编辑" instead of guessing a pixel offset; its own 92px narrow-window padding is dropped. */
+body[data-smooth-skin]:has([data-sidebar-collapsed]) .smooth-workspace-bar{left:var(--smooth-caption-leading,100px);padding-left:5px}
 body[data-smooth-skin] .smooth-workspace-tabs{position:relative;display:flex;align-items:center;gap:calc(12 * var(--smooth-tab-u));min-width:0;overflow-x:auto;scrollbar-width:none;flex:1;-webkit-app-region:drag}
 /* Electron's native caption drag region excludes every interactive tab/control. */
 body[data-smooth-skin] .smooth-workspace-bar :is(.smooth-workspace-tab,button){-webkit-app-region:no-drag}
@@ -655,10 +666,20 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} :is(${h
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} :is(${hostPart('trigger')},button[data-signed-out]) img{width:100%;height:100%;object-fit:cover}
 body[data-smooth-skin] :is(.smooth-rail-home,.smooth-rail-plugins):hover,
 body[data-smooth-skin] ${hostPart('sidebarCol')} :is(${hostPart('panelRow')},${hostPart('footArea')} button[data-signed-out]):hover{background:var(--smooth-surface-3);color:var(--dsw-alias-button-primary-fill)}
-body[data-smooth-skin]:has([data-sidebar-collapsed]) .smooth-rail-home{opacity:0;pointer-events:none}
+body[data-smooth-skin]:has([data-sidebar-collapsed]) :is(.smooth-rail-home,.smooth-rail-plugins){opacity:0;pointer-events:none}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:has(>${hostPart('logoRow')}):not(${hostPart('collapsed')}){padding:0 calc(18 * var(--smooth-l)) 10px calc(var(--smooth-rail-width) + 18 * var(--smooth-l))}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('logoRow')}{height:calc(32 * var(--smooth-l));min-height:calc(32 * var(--smooth-l));margin:0;padding:0}
+/* The collapsed rail has no room for the brand row; the host removes it, so the skin's
+   fixed logo-row height must not leave an empty band above the fixed caption buttons. */
+body[data-smooth-skin]:has([data-sidebar-collapsed]) ${hostPart('sidebarCol')} ${hostPart('logoRow')}{height:0;min-height:0;margin:0;padding:0;overflow:hidden}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}{height:calc(46 * var(--smooth-l));min-height:calc(46 * var(--smooth-l));margin-top:calc(6 * var(--smooth-l));margin-bottom:calc(8 * var(--smooth-l) + 1px);border-radius:calc(15 * var(--smooth-l));font-size:calc(15 * var(--smooth-l))}
+/* Collapsed, the host turns the new-conversation row into a 28px icon button next to the
+   expand toggle. Keep its box on the host's fixed 28px geometry so the two stay aligned. */
+body[data-smooth-skin]:has([data-sidebar-collapsed]) ${hostPart('sidebarCol')} ${hostPart('newSession')}{
+  box-sizing:border-box;position:fixed;left:48px;top:calc((var(--smooth-caption) - 28px) / 2);
+  width:28px;height:28px;min-height:28px;margin:0;padding:0;border:0;
+  border-radius:calc(9 * var(--smooth-l));background:transparent;color:var(--smooth-muted);
+}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('panelList')}{position:fixed;top:var(--smooth-rail-panels-top);bottom:calc(24px + var(--smooth-rail-button-size));left:0;box-sizing:border-box;width:var(--smooth-rail-width);display:flex;flex-direction:column;align-items:center;gap:var(--smooth-rail-gap);margin:0;padding:0;overflow-x:hidden;overflow-y:auto;z-index:29}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')}{width:var(--smooth-rail-button-size);height:var(--smooth-rail-button-size);min-height:0}
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="tree"]{font-size:calc(19 * var(--smooth-l))}
@@ -845,11 +866,6 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}>:
 body[data-smooth-skin] [data-shortcut-modal="settings"] h2{font-size:17px;line-height:26px;font-weight:600}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('row')}{box-sizing:border-box;min-height:52px;padding-block:12px}
 body[data-smooth-skin] .smooth-general-title{margin:4px 0 14px;font-size:20px;line-height:30px;font-weight:600}
-body[data-smooth-skin] .smooth-native-appearance{padding:14px 0;border-bottom:1px solid var(--smooth-line)}
-body[data-smooth-skin] .smooth-native-appearance h3{margin:0 0 10px;font-size:14px;line-height:22px;font-weight:600}
-body[data-smooth-skin] .smooth-native-appearance-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-body[data-smooth-skin] .smooth-native-appearance-options button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:72px;padding:12px 10px;border:1px solid var(--smooth-line-strong);border-radius:12px;background:transparent;color:var(--smooth-text);font:inherit;font-size:13px;line-height:20px;cursor:pointer}
-body[data-smooth-skin] .smooth-native-appearance-options button[aria-checked="true"]{background:var(--smooth-surface-2);border-color:var(--smooth-muted)}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('row')} ${hostPart('title')}{font-size:14px;line-height:22px;font-weight:600}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('row')} :is(${hostPart('desc')},${hostPart('description')}){font-size:13px;line-height:20px}
 
@@ -868,7 +884,7 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.gen
 body[data-smooth-skin] [data-shortcut-modal="settings"] button[role="switch"]{width:36px;height:20px;padding:2px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] button[role="switch"]>span{width:16px;height:16px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] button[role="switch"][aria-checked="true"]>span{transform:translateX(16px)}
-body[data-smooth-skin] :is(.smooth-workspace-tab,.smooth-native-appearance-options button,[data-composer-card]){corner-shape:round}
+body[data-smooth-skin] :is(.smooth-workspace-tab,[data-composer-card]){corner-shape:round}
 /* Local reflections share an upper-left light source; the reading canvas stays flat.
    Inset highlights do not restore the removed rail shadow or panel dividers. */
 body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"],

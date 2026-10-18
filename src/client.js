@@ -34,12 +34,14 @@ const CSS = `/* injected through the package stylesheet; kept beside the skin ru
 .smooth-switch:checked::after{transform:translateX(18px);background:var(--dsw-alias-label-primary-foreground,#181a1e)}
 .smooth-switch:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
 .smooth-switch:disabled{opacity:.5;cursor:default}
-.smooth-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;flex:none}
-.smooth-choice{font:inherit;font-size:14px;padding:20px 10px;min-height:84px;border-radius:18px;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;transition:background-color .16s ease,border-color .16s ease}
-.smooth-choice:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
-.smooth-choice[aria-pressed="true"]{background:var(--dsw-alias-interactive-bg-active,rgba(128,128,128,.16));border-color:var(--dsw-alias-label-secondary);color:var(--dsw-alias-label-primary);font-weight:600}
-.smooth-choice:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
-.smooth-choice:disabled{opacity:.5;cursor:default}
+.smooth-themes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;width:100%;flex:none}
+.smooth-theme{display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px 6px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12.5px;line-height:18px;cursor:pointer;transition:background-color .16s ease,border-color .16s ease,color .16s ease}
+.smooth-theme:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
+.smooth-theme[aria-checked="true"]{background:var(--dsw-alias-interactive-bg-active,rgba(128,128,128,.16));border-color:var(--dsw-alias-label-secondary);color:var(--dsw-alias-label-primary);font-weight:600}
+.smooth-theme:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
+.smooth-theme:disabled{opacity:.5;cursor:default}
+.smooth-theme-swatch{display:flex;align-items:center;gap:4px}
+.smooth-theme-swatch i{display:block;width:12px;height:12px;border-radius:50%;border:1px solid rgba(128,128,128,.28)}
 .smooth-footer{display:flex;align-items:center;justify-content:space-between;gap:10px 20px;flex-wrap:wrap}
 .smooth-footer-copy{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .smooth-note{font-size:12px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
@@ -60,8 +62,8 @@ const CSS = `/* injected through the package stylesheet; kept beside the skin ru
 .smooth-button:disabled{opacity:.5;cursor:default}
 .smooth-status{font-size:12.5px;color:var(--dsw-alias-label-secondary)}
 .smooth-status[data-error="true"]{color:var(--dsw-alias-state-error-primary)}
-@media(max-width:600px){.smooth-choices{gap:8px}.smooth-choice{min-height:72px;font-size:12px;padding:16px 6px}.smooth-row{gap:14px}.smooth-row--size{flex-direction:column;align-items:stretch;gap:12px}.smooth-size{justify-content:flex-start}.smooth-size input{width:64px}}
-@media(prefers-reduced-motion:reduce){.smooth-switch,.smooth-switch::after,.smooth-choice{transition:none}}
+@media(max-width:600px){.smooth-themes{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.smooth-theme{padding:10px 4px;font-size:12px}.smooth-row{gap:14px}.smooth-row--size{flex-direction:column;align-items:stretch;gap:12px}.smooth-size{justify-content:flex-start}.smooth-size input{width:64px}}
+@media(prefers-reduced-motion:reduce){.smooth-switch,.smooth-switch::after,.smooth-theme{transition:none}}
 `;
 
 function apply(ctx) {
@@ -143,10 +145,15 @@ function apply(ctx) {
   function syncHostTheme() {
     if (!theme) return;
     if (!state.enabled || state.theme === 'auto') { restoreTheme(); return; }
+    // A fixed preset paints its own palette; ask the host for the tone that palette reads
+    // as so native surfaces outside the skin's own tokens agree with it. Following the
+    // theme leaves the host preference exactly as the user set it.
+    const tone = themeTone(state.theme);
+    if (!tone) { restoreTheme(); return; }
     const current = theme.getTheme().preference;
     if (!appliedPreference || current !== appliedPreference) previousPreference = current;
-    appliedPreference = state.theme;
-    theme.setTheme(state.theme);
+    appliedPreference = tone;
+    theme.setTheme(tone);
   }
 
   /** Electron's frame adds a pixel around the requested outer size (a 1440 x 900 request
@@ -321,19 +328,36 @@ function apply(ctx) {
       }));
   }
 
-  function ChoiceRow(props) {
+  /** One palette chip: three dots for a preset, the two host tones for following it. */
+  function ThemeSwatch(props) {
+    if (props.id === 'auto') {
+      return h('span', { className: 'smooth-theme-swatch', 'aria-hidden': true },
+        h('i', { style: { background: PALETTE.snow.app } }),
+        h('i', { style: { background: PALETTE.iron.app } }));
+    }
+    const palette = PALETTE[props.id];
+    return h('span', { className: 'smooth-theme-swatch', 'aria-hidden': true },
+      h('i', { style: { background: palette.app } }),
+      h('i', { style: { background: palette.layer1 } }),
+      h('i', { style: { background: palette.brand } }));
+  }
+
+  function ThemeRow(props) {
     return h('div', { className: 'smooth-row smooth-row--appearance' },
       h('div', { className: 'smooth-row-copy' },
         h('h3', null, props.title),
         props.hint ? h('small', null, props.hint) : null),
-      h('div', { className: 'smooth-choices' }, props.options.map((option) => h('button', {
-        key: option.value,
-        type: 'button',
-        className: 'smooth-choice',
-        'aria-pressed': props.value === option.value,
-        disabled: props.disabled,
-        onClick: () => props.onChange(option.value),
-      }, option.label))));
+      h('div', { className: 'smooth-themes', role: 'radiogroup', 'aria-label': props.title },
+        ...props.options.map((option) => h('button', {
+          key: option.value,
+          type: 'button',
+          role: 'radio',
+          'aria-checked': props.value === option.value,
+          className: 'smooth-theme',
+          'data-theme': option.value,
+          disabled: props.disabled,
+          onClick: () => props.onChange(option.value),
+        }, h(ThemeSwatch, { id: option.value }), h('span', null, option.label)))));
   }
 
   /** The outer size of the window the settings page is drawn in, or an empty string when
@@ -405,11 +429,14 @@ function apply(ctx) {
     const disabled = !view.ready;
     const [playing, setPlaying] = React.useState(false);
     const reducedMotion = !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-    const modeOptions = [
-      { value: 'auto', label: text('settings.theme.auto', 'Follow host') },
-      { value: 'dark', label: text('settings.theme.dark', 'Dark') },
-      { value: 'light', label: text('settings.theme.light', 'Light') },
-    ];
+    const themeOptions = [
+      ['auto', 'Follow theme'],
+      ['snow', 'First snow'],
+      ['iron', 'Iron black'],
+      ['moss', 'Moss green'],
+      ['sunset', 'Sunset orange'],
+      ['deepsea', 'Deep sea blue'],
+    ].map(([value, fallback]) => ({ value, label: text(`settings.theme.${value}`, fallback) }));
     return h('div', { className: 'smooth-settings' },
       h('header', null,
         h('div', { className: 'smooth-page-title' },
@@ -428,12 +455,12 @@ function apply(ctx) {
           disabled,
           onChange: (value) => view.update({ ...current, enabled: value }),
         }),
-        h(ChoiceRow, {
-          title: text('settings.theme', 'Appearance'),
-          hint: text('settings.themeHint', 'A fixed mode also syncs the host theme preference.'),
+        h(ThemeRow, {
+          title: text('settings.theme', 'Theme'),
+          hint: text('settings.themeHint', 'Following the theme uses First snow in light and Iron black in dark.'),
           value: current.theme,
           disabled: disabled || !current.enabled,
-          options: modeOptions,
+          options: themeOptions,
           onChange: (value) => view.update({ ...current, theme: value }),
         })),
       h('section', null,
@@ -506,10 +533,7 @@ function apply(ctx) {
     document.body.removeAttribute(HOME_ATTRIBUTE);
   }, 'smooth-skin');
 
-  referenceShell = installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, theme, remote, useSmoothState, text,
-    subscribeTheme: (listener) => ctx.on('theme/change', listener),
-    chooseTheme: (preference) => { writeState({ ...state, theme: 'auto' }); theme?.setTheme(preference); },
-  });
+  referenceShell = installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, theme, remote, useSmoothState, text });
   readState();
 }
 

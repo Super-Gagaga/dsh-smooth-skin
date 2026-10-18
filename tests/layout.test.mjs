@@ -38,9 +38,16 @@ function runtime({ width = 1282, overflow = null } = {}) {
   const React = { Fragment: 'fragment', useState: value => [value && typeof value === 'object' && 'right' in value ? { left: false, right: false, ...overflow } : value, () => {}], useSyncExternalStore: (_subscribe, read) => read(), useEffect: fn => fn(), useRef: () => ({ current: null }) };
   const bodyAttributes = new Set();
   const sandbox = {
-    React, h, PLUGIN_ID: 'smooth', hostPart: name => `.${name}`, HOME_ATTRIBUTE: 'data-smooth-home', window: { innerWidth: width }, installComposerLayout: () => () => {}, installAccountMenu: () => () => {}, installUsage: () => () => {},
+    React, h, PLUGIN_ID: 'smooth', hostPart: name => `.${name}`, HOME_ATTRIBUTE: 'data-smooth-home',
+    window: {
+      innerWidth: width,
+      addEventListener: (type, fn) => events.set(`window:${type}`, fn),
+      removeEventListener: type => events.delete(`window:${type}`),
+    },
+    installComposerLayout: () => () => {}, installAccountMenu: () => () => {}, installUsage: () => () => {},
     document: {
       addEventListener: (type, fn) => events.set(type, fn), removeEventListener: type => events.delete(type),
+      querySelector: () => null,
       body: {
         style: { setProperty: (key, value) => properties.set(key, value), removeProperty: key => properties.delete(key) },
         toggleAttribute: (name, on) => { if (on) bodyAttributes.add(name); else bodyAttributes.delete(name); },
@@ -55,7 +62,7 @@ function runtime({ width = 1282, overflow = null } = {}) {
     clearMain: () => { snapshot.current = undefined; panelState.activePanelId = null; calls.push(['home']); },
     startSession: () => { snapshot.current = 'blank'; calls.push(['new']); },
     openSession: id => { snapshot.current = id; panelState.activePanelId = null; calls.push(['session', id]); },
-  }, theme: { getTheme: () => ({ preference: 'system' }) }, subscribeTheme: () => () => {}, chooseTheme: id => calls.push(['theme', id]), useSmoothState: () => ({ state: { enabled: true } }), text: (_key, fallback) => fallback });
+  }, theme: { getTheme: () => ({ preference: 'system' }) }, useSmoothState: () => ({ state: { enabled: true } }), text: (_key, fallback) => fallback });
   const render = (inSettings = false) => {
     const registration = registrations.get(inSettings ? 'settings.action/smooth.tabs' : 'shell.overlay/smooth.chrome');
     const props = { useSessions: fn => fn(snapshot), usePanelInfo: fn => fn(panelState) };
@@ -110,12 +117,6 @@ test('native shared stores drive width, real navigation and full-page settings',
   nodes.find(n => n.props.role === 'tab' && n.props.title === '设置').props.onClick();
   assert.deepEqual(r.calls, [['session', 'a'], ['panel', 'plugins'], ['settings', 'general']]);
   assert.equal(r.render(), null, 'main chrome yields to the settings focus trap');
-  const appearance = r.registrations.get('settings.general.item/appearance');
-  assert.equal(appearance.options.priority, -10);
-  const modes = r.flatten(appearance.component()).filter(n => n.props.role === 'radio');
-  assert.deepEqual(modes.map(n => n.props['aria-checked']), [false, false, true]);
-  modes[1].props.onClick();
-  assert.deepEqual(r.calls.at(-1), ['theme', 'dark']);
   r.shell.dispose();
   assert.equal(r.layoutState.layoutInfo.sidebar, 280);
   assert.equal(r.properties.size, 0);
@@ -130,7 +131,7 @@ test('disabling preserves a subsequent manual sidebar resize', () => {
   r.layoutState.layoutInfo.sidebar = 400;
   r.shell.setEnabled(false);
   assert.equal(r.layoutState.layoutInfo.sidebar, 400);
-  assert.ok(!r.registrations.has('settings.general.item/appearance'));
+  assert.ok(!r.registrations.has('settings.general.item/smooth-skin.heading'));
   r.shell.dispose();
 });
 
@@ -144,6 +145,32 @@ test('the saved 352px sidebar width is the default at every window size', () => 
     r.shell.dispose();
     assert.equal(r.layoutState.layoutInfo.sidebar, 280);
   }
+});
+
+test('collapsing and reopening the sidebar restores the width it had', () => {
+  const r = runtime();
+  const notify = () => { for (const fn of [...r.subscriptions]) fn(); };
+  r.shell.setEnabled(true);
+  assert.equal(r.layoutState.layoutInfo.sidebar, 352);
+  r.layoutState.layoutInfo.sidebar = 0; notify();
+  assert.equal(r.properties.get('--smooth-left-width'), '0px', 'the collapsed column publishes zero');
+  // The host's toggle reopens at its own 280px rather than the width that was there.
+  r.layoutState.layoutInfo.sidebar = 280; notify();
+  assert.equal(r.layoutState.layoutInfo.sidebar, 352, 'the pre-collapse width comes back');
+  assert.equal(r.properties.get('--smooth-left-width'), '352px', 'the left column keeps its size');
+  r.shell.dispose();
+});
+
+test('a genuinely dragged 280px sidebar is not mistaken for the toggle default', () => {
+  const r = runtime();
+  const notify = () => { for (const fn of [...r.subscriptions]) fn(); };
+  r.shell.setEnabled(true);
+  r.layoutState.layoutInfo.sidebar = 280; notify();
+  assert.equal(r.layoutState.layoutInfo.sidebar, 280, 'a real 280px choice is kept');
+  r.layoutState.layoutInfo.sidebar = 0; notify();
+  r.layoutState.layoutInfo.sidebar = 280; notify();
+  assert.equal(r.layoutState.layoutInfo.sidebar, 280, 'reopening at 280 stays 280 when that was the width');
+  r.shell.dispose();
 });
 
 test('tab descriptors only use the current surface, never unrelated sessions', () => {
@@ -205,6 +232,22 @@ test('with nothing stored, the measured conversation width is adopted as the def
   r.sandbox.applyWidth();
   assert.equal(store.get('dsh.smooth.conversationWidth'), '744');
   assert.equal(store.get('dsh.conversation.contentWidth'), '744');
+});
+
+test('a collapsed caption measures the native menu so the strip clears 编辑', () => {
+  const r = runtime();
+  r.shell.setEnabled(true);
+  const menu = { getBoundingClientRect: () => ({ right: 180.4, width: 96 }) };
+  r.sandbox.document.querySelector = selector => selector === '[data-windows-menu]' ? menu
+    : selector === '[data-sidebar-collapsed]' ? { getAttribute: () => 'true' } : null;
+  const resize = r.events.get('window:resize');
+  assert.equal(typeof resize, 'function', 'the chrome listens for caption relayouts');
+  resize();
+  assert.equal(r.properties.get('--smooth-caption-leading'), '188px', 'the strip starts 8px after the menu');
+  r.sandbox.document.querySelector = () => null;
+  resize();
+  assert.equal(r.properties.has('--smooth-caption-leading'), false, 'an expanded sidebar drops the caption override');
+  r.shell.dispose();
 });
 
 test('the outlined Home button only dismisses other surfaces and is inert on the main page', () => {

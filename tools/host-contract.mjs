@@ -109,6 +109,12 @@ const OWN_ATTRIBUTES = new Set([
   'data-view',
 ]);
 
+/** Host attributes written through `element.dataset`, so the kebab-case spelling never
+ * appears in the source corpus; the camelCase property is what the host file contains. */
+const DATASET_ATTRIBUTES = new Map([
+  ['data-windows-menu', 'dataset.windowsMenu'],
+]);
+
 const EMPTY_MISSING = () => ({
   packages: [], classes: [], attributes: [], slots: [], methods: [], events: [], tokens: [], values: [],
 });
@@ -183,6 +189,9 @@ export async function readHost(asarPath) {
       if (match) packageNames.add(match[1]);
     }
     const selected = files.filter((file) => {
+      // The preload owns the Windows caption menubar; it mounts the native 应用 / 编辑 menu
+      // through `dataset.windowsMenu`, which is the hook a collapsed caption is measured by.
+      if (file.path === '/lib/preload-app.cjs') return true;
       // The front-end bundle also lives under CLIENT_PREFIX, so match it first.
       if (FRONTEND_CSS.test(file.path) || FRONTEND_JS.test(file.path)) return true;
       if (file.path.startsWith(CLIENT_PREFIX)) {
@@ -266,7 +275,10 @@ export function checkContract(corpus, contract, packages = new Set()) {
 
   const presentClass = (name) => new RegExp(`_${name}(?=[^A-Za-z0-9]|$)`).test(corpus);
   for (const name of contract.classes) if (!presentClass(name)) missing.classes.push(name);
-  for (const name of contract.attributes) if (!corpus.includes(name)) missing.attributes.push(name);
+  for (const name of contract.attributes) {
+    const dataset = DATASET_ATTRIBUTES.get(name);
+    if (!corpus.includes(name) && !(dataset && corpus.includes(dataset))) missing.attributes.push(name);
+  }
   for (const name of contract.slots) if (!corpus.includes(name)) missing.slots.push(name);
   for (const name of contract.methods) if (!corpus.includes(name)) missing.methods.push(name);
   for (const name of contract.events) if (!corpus.includes(name)) missing.events.push(name);
