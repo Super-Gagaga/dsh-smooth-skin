@@ -139,6 +139,20 @@ test('the effort thumb is a glider that slides between stops and follows a drag'
   assert.ok(zOf(dot) < zOf(glider), 'the ball must paint over the dots');
 });
 
+test('the top-stop wash stays on the blue fill and its core lands on the strip', () => {
+  // The wash used to sit on the whole track with blobs hundreds of px tall whose centre
+  // fell far below the 24px strip: only their almost transparent edge showed, so the
+  // pale light was invisible. It is now clipped to the fill's own width and every blob
+  // is centred with translate, so the gradient core actually lands inside the bar.
+  const glow = skin.match(/\.smooth-model-glow\{[^}]*\}/)?.[0] || '';
+  const blob = skin.match(/\.smooth-model-glow-blob\{[^}]*\}/)?.[0] || '';
+  assert.match(glow, /width:calc\(13px \+ \(100% - 26px\) \* var\(--smooth-model-ratio\)\)/, 'the wash must be clipped to the filled width, never the empty track');
+  assert.match(glow, /z-index:1/);
+  assert.match(blob, /translate:-50% -50%/, 'without centring, the gradient core falls below the strip and the wash reads as nothing');
+  assert.match(blob, /mix-blend-mode:screen/);
+  assert.match(skin, /\.smooth-model-sparks\{[^}]*z-index:2/, 'the particles paint over the wash');
+});
+
 test('hostPart and accountPart match both host class-name conventions', () => {
   const sandbox = {};
   vm.runInNewContext(`${skin}\nglobalThis.__hostPart = hostPart; globalThis.__accountPart = accountPart;`, sandbox);
@@ -185,7 +199,7 @@ test('the tab scroll arrows float over the strip instead of squeezing its width'
   assert.ok(!/\.smooth-tab-scroll\{[^}]*flex:none/.test(skin), 'the arrows no longer participate in the flex line');
   // The bar reserves the right arrow's slot in its own padding, so the strip stops a
   // gap short of the floating arrow and a tab's close button is never under it.
-  assert.match(skin, /\.smooth-workspace-bar\{[^}]*padding:0 calc\(30px \+ 10 \* var\(--smooth-u\)\) 0 calc\(10 \* var\(--smooth-u\)\)/);
+  assert.match(skin, /\.smooth-workspace-bar\{[^}]*padding:0 35px 0 5px/);
   assert.ok(!/\.smooth-tab-scroll:disabled\{/.test(skin), 'an arrow that cannot scroll is not drawn at all');
 });
 
@@ -195,6 +209,55 @@ test('the light selected workspace tab uses the soft selection fill, not the mut
   // rest of the light selection states already use.
   assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]\{background-color:var\(--smooth-selected\)\}/);
   assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]:hover\{background-color:color-mix\(in srgb,var\(--smooth-selected\) 94%,var\(--smooth-text\)\)\}/);
+});
+
+test('the selected workspace tab keeps the same weight as the others', () => {
+  // Selection is carried by the fill; a heavier label made the strip jump when the
+  // active tab changed.
+  assert.ok(!/\.smooth-workspace-tab\[data-selected="true"\]\{[^}]*font-weight/.test(skin), 'the selected tab adds no weight');
+  assert.match(skin, /\.smooth-workspace-tab\{[^}]*font-weight:500/);
+});
+
+test('the workspace list keeps the reference list rhythm and its leading dot', () => {
+  // The reference draws a tighter list than the host: 28px session rows and 29px
+  // workspace rows, session titles one size under the workspace names, and the time
+  // sharing the title's colour instead of a dimmer step. The leading cell carries the
+  // reference's hollow dot as a background ring: a running session paints the host's
+  // own status dot over it, so no second marker appears beside it.
+  assert.match(skin, /\$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('sessionRow'\)\}\{height:28px;border-radius:8px\}/);
+  assert.match(skin, /\$\{hostPart\('sessionRow'\)\} \$\{hostPart\('title'\)\}\{font-size:12\.5px;line-height:18px;color:var\(--smooth-muted\)\}/);
+  assert.match(skin, /\$\{hostPart\('sessionRow'\)\}[^{]*\[aria-selected="true"\] \$\{hostPart\('title'\)\}\{color:var\(--smooth-text\)\}/);
+  assert.match(skin, /\$\{hostPart\('sessionRow'\)\} \$\{hostPart\('time'\)\}\{font-size:11px;line-height:16px;color:var\(--smooth-muted\)\}/);
+  // The dot is the host spinner's own circle drawn as a mask (r=9.5, stroke 2.71 in
+  // the spinner's 24-unit viewBox, shown at 8.84px): the two states then share one
+  // vector path and read identically, which a CSS border ring did not.
+  assert.match(skin, /::before\{content:""[^}]*width:8\.84px;height:8\.84px[^}]*background:color-mix\(in srgb,var\(--smooth-muted\) 72%,transparent\);(-webkit-)?mask:url\("data:image\/svg\+xml[^}]*stroke-width='2\.71'[^}]*\}/);
+  assert.match(skin, /::before\{content:""[^}]*mask:url\("data:image\/svg\+xml[^}]*r='9\.5'[^}]*\}/);
+  // A running row keeps the rotation: the host's spinner takes the cell on the same
+  // 8.84px/2.71 geometry, and the idle dot steps aside instead of filling.
+  assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\}:has\(svg\)::before\{opacity:0\}/);
+  assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\} svg\{width:8\.84px;height:8\.84px;color:color-mix\(in srgb,var\(--smooth-muted\) 72%,transparent\)\}/);
+  assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\} svg \*\{stroke-width:2\.71\}/);
+  assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\} svg g>circle:first-child\{opacity:\.4\}/);
+  assert.match(skin, /\$\{hostPart\('projectRow'\)\}\{height:29px;border-radius:8px\}/);
+  assert.match(skin, /\$\{hostPart\('projectRow'\)\} \$\{hostPart\('title'\)\}\{font-size:13\.5px;line-height:19px;font-weight:500\}/);
+  assert.match(skin, /\$\{hostPart\('sectionLabel'\)\}\{font-size:12px;line-height:18px\}/);
+});
+
+test('the conversation header follows the reference: chips under the title, tabs centred', () => {
+  // The host stacks the view tabs in a second grid row spanning the header. The skin
+  // moves them onto the title line, centred over the header, and splits the title
+  // cluster so its action chips sit under the title instead of beside it. Only the
+  // ground stays the skin's own; the type, pills and spacing are the reference's.
+  assert.match(skin, /:has\(\[data-content-phase\]\) \$\{hostPart\('header'\)\}:has\(\[data-conversation-tabs\]\)\{position:relative;padding:4px 18px 6px 14px;min-height:0\}/);
+  assert.match(skin, /\$\{hostPart\('titleRow'\)\}\{grid-column:2;grid-row:1;display:grid;grid-template-columns:minmax\(0,1fr\) auto auto;align-items:start;column-gap:6px;min-height:0\}/);
+  assert.match(skin, /\$\{hostPart\('titleCluster'\)\}\{display:grid;grid-template-columns:minmax\(0,1fr\);align-content:center;gap:1px\}/);
+  // The view switch is a segmented pill: one track, a thumb that slides between the two
+  // views, and the whole control faded out until the pointer is in the conversation.
+  assert.match(skin, /\[data-conversation-tabs\]\{position:absolute;left:50%;top:6px;transform:translateX\(-50%\)[^}]*opacity:0;transition:opacity \.18s ease\}/);
+  assert.match(skin, /\[data-conversation-tabs\]::before\{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;[^}]*transition:transform \.26s cubic-bezier\(\.22,1,\.36,1\)\}/);
+  assert.match(skin, /\[data-conversation-tabs\]:has\(>\[role="tab"\]:nth-child\(2\)\[aria-selected="true"\]\)::before\{transform:translateX\(100%\)\}/);
+  assert.match(skin, /\$\{hostPart\('centerCol'\)\}:hover \$\{hostPart\('header'\)\} \[data-conversation-tabs\]/);
 });
 
 const luminance = hex => {
@@ -240,6 +303,9 @@ test('every CSS custom property the skin reads exists as a plugin token or a lit
   for (const [, name] of skin.matchAll(/@property\s+(--smooth-[a-z0-9-]+)/g)) localProperties.add(name);
   // The active workspace title is supplied as a CSS string by the native tabs.
   localProperties.add('--smooth-workspace-label');
+  // The composer bakes each max-stop spark inline: travel, speed and size per particle.
+  for (const spark of ['--spark-size', '--spark-opacity', '--spark-dx', '--spark-dy', '--spark-duration', '--spark-delay']) localProperties.add(spark);
+  for (const glow of ['--glow-opacity', '--glow-dx', '--glow-dy', '--glow-duration', '--glow-delay']) localProperties.add(glow);
   assert.match(skin, /var\(--dsh-content-font-size,14px\)/);
   const missing = [...used].filter((name) => !tokens.has(name) && !hostProperties.has(name) && !localProperties.has(name) && !name.startsWith('--dsw-alias-') && name !== '--dsh-windows-titlebar-height');
   assert.deepEqual(missing, [], `unresolved custom properties: ${missing.join(', ')}`);
@@ -252,16 +318,20 @@ test('the skin stylesheet is scoped to the gating body attribute and never hides
     const trimmed = selector.trim();
     if (!trimmed.startsWith('body[data-smooth-skin]')) continue;
     rules += 1;
-    // Four hides are allowed, each one replacing something this layout already provides:
-    // the plugin-owned collapsible balance panel, the settings close button (whose job the
-    // tab bar in the same header already does), the welcome row (the card's own info row
-    // already names the workspace and the branch) and the card itself while no tab is open
-    // (there is nowhere to type yet). The host's own preview badge is left alone.
+    // Four hides and one icon cell are allowed, each one replacing something this layout
+    // already provides: the plugin-owned collapsible balance panel, the settings close
+    // button (whose job the tab bar in the same header already does), the welcome row (the
+    // card's own info row already names the workspace and the branch), the card itself while
+    // no tab is open (there is nowhere to type yet) and the workspace row's folder/chevron
+    // glyph (the reference list names the workspace in type alone, and both glyphs share the
+    // same 16px cell, so hiding only one would shift the label on hover). The host's own
+    // preview badge is left alone.
     const contentRules = skin.replace(/body\[data-smooth-skin\] \.smooth-account-balance\{[^}]*\}/, '')
       .replace(/body\[data-smooth-skin\] \[data-shortcut-modal="settings"\] \$\{hostPart\('header'\)\}>\$\{accountPart\('close'\)\}\{display:none\}/, '')
       .replace(/body\[data-smooth-skin\] \$\{hostPart\('composerHero'\)\} \$\{hostPart\('heroWorkspaceRow'\)\}\{[^}]*display:none[^}]*\}/, '')
-      .replace(/body\[data-smooth-skin\]\[data-smooth-no-tabs\][\s\S]*?\{display:none/, '');
-    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, settings close, welcome row and empty-workspace card may be hidden');
+      .replace(/body\[data-smooth-skin\]\[data-smooth-home\][\s\S]*?\{display:none/, '')
+      .replace(/body\[data-smooth-skin\] \$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('projectRow'\)\} :is\(\$\{hostPart\('folder'\)\},\$\{hostPart\('chevron'\)\}\)\{display:none\}/, '');
+    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, settings close, welcome row, empty-workspace card and the workspace folder cell may be hidden');
   }
   assert.ok(rules > 10, 'the skin stylesheet has almost no scoped rules');
 });
@@ -313,3 +383,4 @@ test('the built artifacts exist and agree with the sources', async () => {
   assert.ok(bundle.trimEnd().endsWith('return exports;}});'));
   assert.ok(bundle.includes(skin.trim().slice(0, 40)));
 });
+

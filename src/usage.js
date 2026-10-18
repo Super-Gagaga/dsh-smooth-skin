@@ -1,11 +1,14 @@
 /**
- * The landing page's usage panel.
+ * The welcome page's usage panel.
  *
- * The page this decorates is the landing page shown once every tab is closed: the
- * Host still mounts the blank-session hero — the headline the skin already joins
- * with the product name — and nothing else. The panel is portalled into that hero's
- * own stack, so it lands directly under the headline, inside the column the composer
- * card occupies when a tab is open, and disappears with the hero.
+ * The page this decorates is the host's home surface: the Host still mounts the
+ * welcome hero — the headline the skin already joins with the product name — and
+ * nothing else. The panel is portalled into that hero's own stack, so it lands
+ * directly under the headline, inside the column the composer card occupies on a
+ * session page, and disappears with the hero. The gate is the chrome's
+ * data-smooth-home flag, which follows the host's current view: closing every tab
+ * lands here, and so does Home, which clears the conversation while the strip keeps
+ * whatever tabs it still has.
  *
  * Layout follows the claude-style usage card: tabs (概览 / 模型) and a period switch
  * (全部 / 30 天 / 7 天) in one header, six figures, then a 26-week heatmap whose cell
@@ -311,23 +314,23 @@ function installUsage({ slots, useSmoothState, text }) {
     React.useEffect(() => surfaces.watch(selector, setTarget), [selector]);
     return target;
   }
-  /** The landing page is the one with no tab open; the chrome publishes that state on
-   * the body (src/layout.js) and the stylesheet already drops the composer card there.
-   * The panel belongs to that page alone — a new Session keeps its hero to itself. */
-  function useNoTabs() {
-    const [noTabs, setNoTabs] = React.useState(() => document.body.hasAttribute(NO_TABS_ATTRIBUTE));
+  /** The welcome page is the host's home surface: the chrome publishes that state on the
+   * body (src/layout.js) and the stylesheet already drops the composer card there. The
+   * panel belongs to that page alone — a new Session keeps its hero to itself. */
+  function useHomeSurface() {
+    const [homeSurface, setHomeSurface] = React.useState(() => document.body.hasAttribute(HOME_ATTRIBUTE));
     React.useEffect(() => {
-      const publish = () => setNoTabs(document.body.hasAttribute(NO_TABS_ATTRIBUTE));
+      const publish = () => setHomeSurface(document.body.hasAttribute(HOME_ATTRIBUTE));
       publish();
       const observer = new MutationObserver(publish);
-      observer.observe(document.body, { attributes: true, attributeFilter: [NO_TABS_ATTRIBUTE] });
+      observer.observe(document.body, { attributes: true, attributeFilter: [HOME_ATTRIBUTE] });
       return () => observer.disconnect();
     }, []);
-    return noTabs;
+    return homeSurface;
   }
   function WelcomeUsage() {
     const skin = useSmoothState();
-    const noTabs = useNoTabs();
+    const homeSurface = useHomeSurface();
     // The hero stack is the centered column holding the headline; the panel belongs at
     // its end, directly under the headline.
     const title = useTarget(`[data-content-phase="hero"] ${hostPart('composerHero')} ${hostPart('titleGroup')}`);
@@ -337,13 +340,13 @@ function installUsage({ slots, useSmoothState, text }) {
       ? { status: 'ready', value: usageCache.value }
       : { status: 'loading' });
     React.useEffect(() => {
-      if (!stack || !noTabs) { setMount(null); return undefined; }
+      if (!stack || !homeSurface) { setMount(null); return undefined; }
       const node = document.createElement('div');
       node.className = 'smooth-usage-mount';
       stack.append(node);
       setMount(node);
       return () => { node.remove(); };
-    }, [stack, noTabs]);
+    }, [stack, homeSurface]);
     React.useEffect(() => {
       if (snapshot.status !== 'loading') return undefined;
       let alive = true;
@@ -351,7 +354,7 @@ function installUsage({ slots, useSmoothState, text }) {
         .catch(() => { if (alive) setSnapshot({ status: 'unavailable' }); });
       return () => { alive = false; };
     }, [snapshot.status]);
-    if (!skin.state.enabled || !noTabs || !mount || snapshot.status === 'unavailable') return null;
+    if (!skin.state.enabled || !homeSurface || !mount || snapshot.status === 'unavailable') return null;
     return createPortal(h(UsagePanel, {
       text,
       days: snapshot.status === 'ready' ? snapshot.value.days : [],

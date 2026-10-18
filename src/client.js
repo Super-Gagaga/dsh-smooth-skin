@@ -10,14 +10,20 @@ const inject = ['slots', 'theme', 'locale', 'layout', 'uiWorkspace', 'modelDirec
 const LOCALE_NS = 'smooth';
 
 const CSS = `/* injected through the package stylesheet; kept beside the skin rules */
-.smooth-settings{max-width:820px;margin:0 auto;padding:8px 0 28px;color:var(--dsw-alias-label-primary);font-size:14px;line-height:1.6}
-.smooth-settings h2{font-size:26px;font-weight:600;margin:0 0 8px;letter-spacing:-.4px}
+.smooth-settings{width:100%;max-width:820px;margin:0 auto;padding:8px 0 32px;color:var(--dsw-alias-label-primary);font-size:14px;line-height:1.6;box-sizing:border-box}
+.smooth-settings h2{font-size:26px;font-weight:600;margin:0;letter-spacing:-.4px}
 .smooth-settings h3{font-size:15px;font-weight:600;margin:0}
-.smooth-settings p.smooth-description{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px}
-.smooth-settings section{border-top:1px solid var(--dsw-alias-border-l1);padding:24px 0}
-.smooth-settings section:first-of-type{border-top:0;padding-top:22px}
-.smooth-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:18px 0}
-.smooth-row--appearance{align-items:stretch;flex-direction:column;gap:16px;border-top:1px solid var(--dsw-alias-border-l1);margin-top:12px;padding-top:24px}
+.smooth-page-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.smooth-badge{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1,transparent);color:var(--dsw-alias-label-secondary);font-size:11px;font-weight:500;letter-spacing:.02em}
+.smooth-badge::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--dsw-alias-label-tertiary,rgba(128,128,128,.6))}
+.smooth-badge[data-on="true"]::before{background:var(--dsw-alias-state-success-primary,#4ea36b);box-shadow:0 0 0 2px color-mix(in srgb,var(--dsw-alias-state-success-primary,#4ea36b) 24%,transparent)}
+.smooth-settings p.smooth-description{margin:8px 0 0;color:var(--dsw-alias-label-secondary);font-size:13px;max-width:660px}
+.smooth-settings section{border-top:1px solid var(--dsw-alias-border-l1);margin-top:20px;padding:20px 0 4px}
+.smooth-settings section:first-of-type{border-top:0;margin-top:0;padding-top:16px}
+.smooth-group-title{margin:0;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.smooth-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px 0}
+.smooth-row + .smooth-row{border-top:1px solid var(--dsw-alias-border-l1)}
+.smooth-row--appearance{align-items:stretch;flex-direction:column;gap:14px}
 .smooth-row-copy{min-width:0;flex:1}
 .smooth-row-action{display:flex;align-items:center;flex:none}
 .smooth-button--compact{font-size:12.5px;padding:6px 13px;border-radius:999px;white-space:nowrap}
@@ -29,25 +35,32 @@ const CSS = `/* injected through the package stylesheet; kept beside the skin ru
 .smooth-switch:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
 .smooth-switch:disabled{opacity:.5;cursor:default}
 .smooth-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;flex:none}
-.smooth-choice{font:inherit;font-size:14px;padding:22px 10px;min-height:88px;border-radius:20px;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;transition:background-color .16s ease,border-color .16s ease}
+.smooth-choice{font:inherit;font-size:14px;padding:20px 10px;min-height:84px;border-radius:18px;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;transition:background-color .16s ease,border-color .16s ease}
 .smooth-choice:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
 .smooth-choice[aria-pressed="true"]{background:var(--dsw-alias-interactive-bg-active,rgba(128,128,128,.16));border-color:var(--dsw-alias-label-secondary);color:var(--dsw-alias-label-primary);font-weight:600}
 .smooth-choice:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
 .smooth-choice:disabled{opacity:.5;cursor:default}
-.smooth-footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.smooth-size{display:flex;align-items:center;gap:10px;flex:none}
+.smooth-footer{display:flex;align-items:center;justify-content:space-between;gap:10px 20px;flex-wrap:wrap}
+.smooth-footer-copy{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.smooth-note{font-size:12px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.smooth-size{display:flex;align-items:center;gap:10px;flex:none;flex-wrap:wrap;justify-content:flex-end}
 .smooth-size label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dsw-alias-label-secondary)}
-.smooth-size input{font:inherit;font-size:13px;width:74px;padding:6px 9px;border-radius:10px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1,transparent);color:inherit;text-align:right}
+.smooth-size input{font:inherit;font-size:13px;width:72px;padding:6px 9px;border-radius:10px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1,transparent);color:inherit;text-align:right}
 .smooth-size input:focus-visible{outline:2px solid var(--dsw-alias-border-l3);outline-offset:2px}
 .smooth-size input:disabled{opacity:.5}
 .smooth-size-times{color:var(--dsw-alias-label-secondary);font-size:12.5px}
+.smooth-size-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;margin-top:7px;font-size:12px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.smooth-link{font:inherit;font-size:12px;padding:0;border:0;background:none;color:var(--dsw-alias-label-secondary);cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-decoration-color:color-mix(in srgb,currentColor 35%,transparent)}
+.smooth-link:hover:not(:disabled){color:var(--dsw-alias-label-primary)}
+.smooth-link:disabled{opacity:.45;cursor:default;text-decoration:none}
+.smooth-link:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px;border-radius:4px}
 .smooth-button{font:inherit;font-size:13px;padding:8px 16px;border-radius:999px;border:1px solid var(--dsw-alias-border-l3);background:var(--dsw-alias-bg-layer-1,transparent);color:inherit;cursor:pointer}
 .smooth-button:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12))}
 .smooth-button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
 .smooth-button:disabled{opacity:.5;cursor:default}
 .smooth-status{font-size:12.5px;color:var(--dsw-alias-label-secondary)}
 .smooth-status[data-error="true"]{color:var(--dsw-alias-state-error-primary)}
-@media(max-width:600px){.smooth-choices{gap:8px}.smooth-choice{min-height:72px;font-size:12px;padding:16px 6px}.smooth-row{gap:14px}.smooth-row--size{flex-direction:column;align-items:flex-start;gap:12px}.smooth-size input{width:64px}}
+@media(max-width:600px){.smooth-choices{gap:8px}.smooth-choice{min-height:72px;font-size:12px;padding:16px 6px}.smooth-row{gap:14px}.smooth-row--size{flex-direction:column;align-items:stretch;gap:12px}.smooth-size{justify-content:flex-start}.smooth-size input{width:64px}}
 @media(prefers-reduced-motion:reduce){.smooth-switch,.smooth-switch::after,.smooth-choice{transition:none}}
 `;
 
@@ -94,8 +107,11 @@ function apply(ctx) {
     sync();
   }
 
-  function sameWindowSize(a, b) {
-    return a?.enabled === b?.enabled && a?.width === b?.width && a?.height === b?.height;
+  /** Only the numbers move the visible window. The switch is a launch-time preference:
+   * it decides whether the opening applies the size at all, so flipping it must never
+   * touch the window the user is looking at. */
+  function sameWindowDimensions(a, b) {
+    return a?.width === b?.width && a?.height === b?.height;
   }
 
   function writeState(next) {
@@ -104,11 +120,11 @@ function apply(ctx) {
     failure = '';
     emit();
     sync();
-    // Only a window-size edit moves the window. At launch the injected opening has
+    // Only an edited width or height moves the window. At launch the injected opening has
     // already sized it while the window was still hidden; repeating that on a theme or
     // animation toggle used to call resizeTo on every switch (outerWidth carries the
     // window frame, so it rarely equals the configured width) and nudged the window.
-    if (!sameWindowSize(previousSize, state.windowSize)) applyWindowSize();
+    if (!sameWindowDimensions(previousSize, state.windowSize)) applyWindowSize();
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (error) {
@@ -132,6 +148,12 @@ function apply(ctx) {
     appliedPreference = state.theme;
     theme.setTheme(state.theme);
   }
+
+  /** Electron's frame adds a pixel around the requested outer size (a 1440 x 900 request
+   * reports as 1441 x 901 once the frame is applied), so an exact comparison reads the
+   * window as "wrong" on every write and requests the same size again. Two pixels of slack
+   * absorb the frame on either axis. */
+  const WINDOW_FRAME_SLACK = 2;
 
   /**
    * Put the desktop window into the configured size while the application loads.
@@ -159,8 +181,37 @@ function apply(ctx) {
     const limitHeight = Number(screen_.availHeight) || WINDOW_SIZE.maxHeight;
     const width = Math.max(WINDOW_SIZE.minWidth, Math.min(wanted.width, limitWidth));
     const height = Math.max(WINDOW_SIZE.minHeight, Math.min(wanted.height, limitHeight));
-    if (window.outerWidth === width && window.outerHeight === height) return;
-    try { window.resizeTo(width, height); } catch (error) { failure = String(error && error.message ? error.message : error); }
+    if (Math.abs(window.outerWidth - width) <= WINDOW_FRAME_SLACK
+      && Math.abs(window.outerHeight - height) <= WINDOW_FRAME_SLACK) return;
+    // Every resize re-applies the window frame, and Windows re-anchors the window by that
+    // delta: clicking the same size control over and over walked the window across the
+    // screen. Pin the origin across the call instead — this setting may change the size,
+    // never where the window sits.
+    const left = Number(window.screenX);
+    const top = Number(window.screenY);
+    try {
+      window.resizeTo(width, height);
+    } catch (error) {
+      failure = String(error && error.message ? error.message : error);
+      return;
+    }
+    keepWindowOrigin(left, top, width, height, screen_);
+  }
+
+  /** Put the window back on the origin it had before a resize, kept inside the work area so
+   * a bigger size cannot leave the restored window partly off-screen. */
+  function keepWindowOrigin(left, top, width, height, screen_) {
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+    if (typeof window.moveTo !== 'function') return;
+    const areaLeft = Number(screen_.availLeft) || 0;
+    const areaTop = Number(screen_.availTop) || 0;
+    const areaWidth = Number(screen_.availWidth) || 0;
+    const areaHeight = Number(screen_.availHeight) || 0;
+    const maxLeft = areaWidth ? Math.max(areaLeft, areaLeft + areaWidth - width) : left;
+    const maxTop = areaHeight ? Math.max(areaTop, areaTop + areaHeight - height) : top;
+    const nextLeft = areaWidth ? Math.min(Math.max(left, areaLeft), maxLeft) : left;
+    const nextTop = areaHeight ? Math.min(Math.max(top, areaTop), maxTop) : top;
+    try { window.moveTo(Math.round(nextLeft), Math.round(nextTop)); } catch (error) { /* the size still applied */ }
   }
 
   function attachStyle() {
@@ -182,7 +233,7 @@ function apply(ctx) {
     document.body.toggleAttribute(SKIN_ATTRIBUTE, !!state.enabled);
     // The welcome block's flag is published by the chrome component while it is mounted,
     // so a skin that is switched off has to take it down itself.
-    if (!state.enabled) document.body.removeAttribute(NO_TABS_ATTRIBUTE);
+    if (!state.enabled) document.body.removeAttribute(HOME_ATTRIBUTE);
     scrollbarMotion.setEnabled(!!state.enabled);
     referenceShell?.setEnabled?.(!!state.enabled);
     syncHostTheme();
@@ -285,9 +336,26 @@ function apply(ctx) {
       }, option.label))));
   }
 
-  /** Two numbers and a switch: the size the desktop window is put into at launch. */
+  /** The outer size of the window the settings page is drawn in, or an empty string when
+   * the platform does not expose it (a browser tab still exposes it, a frame does not). */
+  function windowSizeReadout() {
+    const width = Number(window.outerWidth);
+    const height = Number(window.outerHeight);
+    return width && height ? `${width} × ${height}` : '';
+  }
+
+  /** Two numbers and a switch: the size the desktop window is put into at launch. The
+   * meta line names the window that is on screen right now and offers a one-click reset,
+   * so the numbers have a reference instead of floating alone. */
   function SizeRow(props) {
     const value = props.value;
+    const [current, setCurrent] = React.useState(windowSizeReadout);
+    React.useEffect(() => {
+      if (typeof window.addEventListener !== 'function') return undefined;
+      const update = () => setCurrent(windowSizeReadout());
+      window.addEventListener('resize', update);
+      return () => window.removeEventListener('resize', update);
+    }, []);
     const field = (key, label) => h('label', null,
       h('span', null, label),
       h('input', {
@@ -303,10 +371,19 @@ function apply(ctx) {
         // window, so a half-typed number simply keeps the current size.
         onChange: (event) => props.onChange({ ...value, [key]: Number(event.target.value) }),
       }));
+    const atDefault = value.width === DEFAULT_WINDOW_SIZE.width && value.height === DEFAULT_WINDOW_SIZE.height;
     return h('div', { className: 'smooth-row smooth-row--size' },
       h('div', { className: 'smooth-row-copy' },
         h('h3', null, props.title),
-        props.hint ? h('small', null, props.hint) : null),
+        props.hint ? h('small', null, props.hint) : null,
+        h('div', { className: 'smooth-size-meta' },
+          current ? h('span', null, `${text('settings.windowSizeCurrent', 'Current window')} ${current}`) : null,
+          h('button', {
+            type: 'button',
+            className: 'smooth-link',
+            disabled: props.disabled || atDefault,
+            onClick: () => props.onChange({ ...value, width: DEFAULT_WINDOW_SIZE.width, height: DEFAULT_WINDOW_SIZE.height }),
+          }, text('settings.windowSizeDefault', 'Reset to 1440 × 900')))),
       h('div', { className: 'smooth-size' },
         field('width', text('settings.windowSizeWidth', 'Width')),
         h('span', { className: 'smooth-size-times' }, '×'),
@@ -335,9 +412,15 @@ function apply(ctx) {
     ];
     return h('div', { className: 'smooth-settings' },
       h('header', null,
-        h('h2', null, text('settings.title', 'Smooth')),
-        h('p', { className: 'smooth-description' }, text('settings.subtitle', 'Dark palette, radii and list-card texture for the whole Harness UI.'))),
+        h('div', { className: 'smooth-page-title' },
+          h('h2', null, text('settings.title', 'Smooth')),
+          h('span', {
+            className: 'smooth-badge',
+            'data-on': current.enabled ? 'true' : 'false',
+          }, text(current.enabled ? 'settings.stateOn' : 'settings.stateOff', current.enabled ? 'Enabled' : 'Disabled'))),
+        h('p', { className: 'smooth-description' }, text('settings.subtitle', 'One skin for the whole Harness: palette, radii, tabs and the composer.'))),
       h('section', null,
+        h('h4', { className: 'smooth-group-title' }, text('settings.groupAppearance', 'Appearance')),
         h(ToggleRow, {
           title: text('settings.enable', 'Enable the Smooth skin'),
           hint: text('settings.enableHint', 'Turning this off restores the stock appearance.'),
@@ -352,7 +435,9 @@ function apply(ctx) {
           disabled: disabled || !current.enabled,
           options: modeOptions,
           onChange: (value) => view.update({ ...current, theme: value }),
-        }),
+        })),
+      h('section', null,
+        h('h4', { className: 'smooth-group-title' }, text('settings.groupStartup', 'Startup')),
         h(ToggleRow, {
           title: text('settings.boot', 'Launch animation'),
           hint: text('settings.bootHint', 'Plays the brand opening on page load; it applies on the next load.')
@@ -368,8 +453,8 @@ function apply(ctx) {
           }, text(playing ? 'settings.bootPlaying' : 'settings.bootPreview', playing ? 'Playing…' : 'Preview')),
           onChange: (value) => view.update({ ...current, boot: value }),
         }),
-        // The preview layer portals itself to the body; keeping it inside the section
-        // leaves the section order (and the reset row) where the layout expects it.
+        // The preview layer portals itself to the body; keeping it inside the startup
+        // section leaves the section order where the layout expects it.
         playing ? h(SplashPreview, { onDone: () => setPlaying(false) }) : null,
         h(SizeRow, {
           title: text('settings.windowSize', 'Window size at launch'),
@@ -380,12 +465,14 @@ function apply(ctx) {
         })),
       h('section', null,
         h('div', { className: 'smooth-footer' },
-          h('button', {
-            type: 'button',
-            className: 'smooth-button',
-            disabled,
-            onClick: () => view.update({ enabled: true, theme: 'auto', boot: true, windowSize: { enabled: true, ...DEFAULT_WINDOW_SIZE } }),
-          }, text('settings.reset', 'Reset to defaults')),
+          h('div', { className: 'smooth-footer-copy' },
+            h('button', {
+              type: 'button',
+              className: 'smooth-button',
+              disabled,
+              onClick: () => view.update({ enabled: true, theme: 'auto', boot: true, windowSize: { enabled: true, ...DEFAULT_WINDOW_SIZE } }),
+            }, text('settings.reset', 'Reset to defaults')),
+            h('span', { className: 'smooth-note' }, text('settings.autosave', 'Changes are saved automatically.'))),
           h('span', {
             className: 'smooth-status',
             'data-error': view.failure ? 'true' : 'false',
@@ -416,7 +503,7 @@ function apply(ctx) {
     // The welcome block's flag is published while the chrome is mounted; a disabled
     // skin must not leave it behind (it is gated on the skin attribute anyway, but the
     // host body should come back exactly as it was).
-    document.body.removeAttribute(NO_TABS_ATTRIBUTE);
+    document.body.removeAttribute(HOME_ATTRIBUTE);
   }, 'smooth-skin');
 
   referenceShell = installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, theme, remote, useSmoothState, text,

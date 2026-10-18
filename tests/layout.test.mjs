@@ -38,7 +38,7 @@ function runtime({ width = 1282, overflow = null } = {}) {
   const React = { Fragment: 'fragment', useState: value => [value && typeof value === 'object' && 'right' in value ? { left: false, right: false, ...overflow } : value, () => {}], useSyncExternalStore: (_subscribe, read) => read(), useEffect: fn => fn(), useRef: () => ({ current: null }) };
   const bodyAttributes = new Set();
   const sandbox = {
-    React, h, PLUGIN_ID: 'smooth', hostPart: name => `.${name}`, NO_TABS_ATTRIBUTE: 'data-smooth-no-tabs', window: { innerWidth: width }, installComposerLayout: () => () => {}, installAccountMenu: () => () => {}, installUsage: () => () => {},
+    React, h, PLUGIN_ID: 'smooth', hostPart: name => `.${name}`, HOME_ATTRIBUTE: 'data-smooth-home', window: { innerWidth: width }, installComposerLayout: () => () => {}, installAccountMenu: () => () => {}, installUsage: () => () => {},
     document: {
       addEventListener: (type, fn) => events.set(type, fn), removeEventListener: type => events.delete(type),
       body: {
@@ -71,26 +71,27 @@ function runtime({ width = 1282, overflow = null } = {}) {
   return { shell, render, flatten, registrations, calls, layoutState, settingsState, settingsCloses, snapshot, panelState, events, operate, properties, subscriptions, sandbox, bodyAttributes };
 }
 
-test('the welcome block is flagged off while no tab is open, and back once one is', () => {
+test('the welcome block follows the main surface, not the tab count', () => {
   const r = runtime();
   r.shell.setEnabled(true);
-  // Home: no session retained, no panel, settings closed — the ledger has no tab.
+  // The host's home surface: no session retained, no panel, settings closed.
   r.snapshot.current = undefined;
   r.render();
-  assert.equal(r.bodyAttributes.has('data-smooth-no-tabs'), true, 'an empty ledger hides the welcome block');
+  assert.equal(r.bodyAttributes.has('data-smooth-home'), true, 'the home surface is the welcome page');
 
-  // Opening a session (or any panel/settings tab) publishes a tab and clears the flag.
+  // A session surface brings the input card back.
   r.snapshot.current = 'a';
   r.render();
   r.render();
-  assert.equal(r.bodyAttributes.has('data-smooth-no-tabs'), false, 'a session tab brings it back');
+  assert.equal(r.bodyAttributes.has('data-smooth-home'), false, 'a conversation is not the welcome page');
 
-  // Closing that tab again puts the page back to the empty state.
+  // Closing its tab clears the main view, so the welcome page is back — the strip may
+  // still hold a tab of its own (settings, plugins) and that no longer matters.
   const nodes = r.flatten(r.render());
   nodes.find(n => n.props.className === 'smooth-tab-close').props.onClick({ stopPropagation() {} });
   r.render();
   r.render();
-  assert.equal(r.bodyAttributes.has('data-smooth-no-tabs'), true, 'and closing it hides the block again');
+  assert.equal(r.bodyAttributes.has('data-smooth-home'), true, 'and clearing it brings the welcome page back');
 });
 
 test('native shared stores drive width, real navigation and full-page settings', () => {
@@ -192,6 +193,43 @@ test('the outlined Home button only dismisses other surfaces and is inert on the
   r.snapshot.current = undefined; home().props.onClick();
   assert.equal(r.snapshot.current, undefined);
   assert.deepEqual(r.calls, [['panel', null], ['panel', null]], 'no new session, clearMain or session reopening occurs');
+  r.shell.dispose();
+});
+
+test('Home with no session tab returns to the welcome page instead of the retained conversation', () => {
+  // DSH keeps the last conversation in its main view after its tab is gone, so a
+  // Home click used to reveal a page the strip no longer stood for. The welcome page
+  // is the only honest surface then.
+  const r = runtime();
+  r.shell.setEnabled(true);
+  r.snapshot.current = undefined;
+  r.settingsState.open = true;
+  r.render(true);
+  const home = () => r.flatten(r.render(true)).find(node => node.props.className === 'smooth-rail-home');
+  assert.equal(home().props['aria-pressed'], false, 'the settings page is not the main page');
+  home().props.onClick();
+  assert.equal(r.settingsState.open, false);
+  assert.deepEqual(r.calls, [['home']], 'clearing the main view is the whole navigation');
+  assert.equal(r.snapshot.current, undefined);
+  const main = r.flatten(r.render());
+  const tabs = main.filter(node => node.props.role === 'tab');
+  assert.deepEqual(Array.from(tabs, node => node.props['aria-selected']), [false],
+    'the settings tab stays in the strip but nothing is current on the welcome page');
+  assert.ok(main.some(node => node.props.className === 'smooth-rail-home' && node.props['aria-pressed'] === true),
+    'the welcome page counts as the main page');
+  // A session tab still protects its conversation: the click only closes the settings
+  // page stacked above it. Operating inside the conversation pins its tab, which is
+  // what keeps it in the ledger while another surface opens over it.
+  r.snapshot.current = 'a';
+  r.render(); r.render();
+  r.operate();
+  r.render();
+  r.calls.length = 0;
+  r.settingsState.open = true;
+  r.render(true);
+  r.flatten(r.render(true)).find(node => node.props.className === 'smooth-rail-home').props.onClick();
+  assert.deepEqual(r.calls, [], 'the conversation stays when its tab is open');
+  assert.equal(r.snapshot.current, 'a');
   r.shell.dispose();
 });
 

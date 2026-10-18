@@ -52,7 +52,7 @@ body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})>:is(
 body[data-smooth-skin]>span[style*="--dsw-specific-sidebar-fill"][style*="--dsw-alias-label-primary"]{--dsw-specific-sidebar-fill:var(--smooth-surface)}
 /* Leave sidebar color behind the curved tab-bar corner; the rest of the native
    caption remains the workspace color, including the window-button area. */
-body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})::before{background:linear-gradient(to right,var(--smooth-sidebar) 0 calc(var(--smooth-left-width) + 35 * var(--smooth-u)),var(--smooth-surface) calc(var(--smooth-left-width) + 35 * var(--smooth-u)) 100%)}
+body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})::before{background:linear-gradient(to right,var(--smooth-sidebar) 0 calc(var(--smooth-left-width) + 18px),var(--smooth-surface) calc(var(--smooth-left-width) + 18px) 100%)}
 /* Raised surfaces cast contact and ambient shadows onto the sidebar below.
    The shadow follows the panel's rounded silhouette and leaves its interior flat. */
 body[data-smooth-skin] ${hostPart('frame')}>${hostPart('centerCol')}{position:relative;z-index:1;box-sizing:border-box;background:var(--smooth-app);border-left:0;border-radius:26px 0 0 26px;box-shadow:var(--smooth-shadow-workspace)}
@@ -66,11 +66,11 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:has(>${host
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('logoRow')}{min-height:46px;margin-bottom:10px}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}{min-height:40px;margin-bottom:18px;border:1px solid var(--smooth-line);border-radius:15px;background:var(--smooth-surface-2);font-weight:500}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}:hover{background:var(--smooth-surface-3)}
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('panelList')}{position:absolute;top:68px;bottom:82px;left:7px;width:42px;overflow:auto;margin:0;gap:10px;padding:0;scrollbar-width:none}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('panelList')}{position:absolute;top:68px;bottom:82px;left:var(--smooth-rail-inset);width:var(--smooth-rail-button-size);overflow:auto;margin:0;gap:var(--smooth-rail-gap);padding:0;scrollbar-width:none}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')}{box-sizing:border-box;display:flex;align-items:center;align-self:center;flex:none;width:var(--smooth-rail-button-size);min-width:0;min-height:var(--smooth-rail-button-size);margin:0;padding:0;justify-content:center;border:0;border-radius:var(--smooth-rail-button-radius);corner-shape:round}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')} ${hostPart('panelTitle')}{position:absolute;width:1px;height:1px;padding:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelActive')}{background:var(--smooth-selected)}
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('footArea')}{position:fixed;bottom:12px;left:0;box-sizing:border-box;width:var(--smooth-rail-width);display:flex;flex-direction:column;align-items:center;gap:8px;margin:0;padding:0;z-index:29}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('footArea')}{position:fixed;bottom:10px;left:0;box-sizing:border-box;width:var(--smooth-rail-width);display:flex;flex-direction:column;align-items:center;gap:6px;margin:0;padding:0;z-index:29}
 /* The host stacks this footer as [account row] then [settings row: gear, connection,
    update pill], and that second row is itself a flex row, so the pill cannot reach the top
    of the column by ordering. It is lifted out of that row instead: the footer is the
@@ -98,7 +98,42 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostP
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} ${hostPart('indicator')}[aria-disabled] ${hostPart('errorDot')}{background:var(--dsw-alias-state-error-primary)}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} button[data-signed-out]{box-sizing:border-box;display:flex;align-items:center;align-self:center;flex:none;width:var(--smooth-rail-button-size);min-width:var(--smooth-rail-button-size);height:var(--smooth-rail-button-size);margin:0 auto;padding:0;gap:0;justify-content:center;border:0;border-radius:var(--smooth-rail-button-radius);corner-shape:round}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} button[data-signed-out]>${hostPart('label')}{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
-body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"]{border-radius:11px}
+/* The workspace list follows the reference list: rows one notch tighter, the
+   session titles a size under the workspace names, the relative time sharing
+   their colour instead of sitting a whole step dimmer, and the workspace row
+   starting at the column's own padding because its folder glyph is not drawn.
+   The leading cell carries the reference's hollow dot, drawn as a bordered
+   circle rather than a gradient ring (a gradient's hard stops stair-step at
+   this size on a 1.5x display). It is 8px rather than the reference's 6px:
+   at 150% that is 12 device pixels, the smallest size whose edge still reads
+   as an arc instead of a rounded square. A running session keeps the host's
+   rotating spinner in that cell — the dot steps aside instead of turning
+   solid, so the mark still reads as a circle, just turning. Sizes come from
+   the reference column: 28/29px rows, 12.5/18 and 13.5/19 text, 11/16 times,
+   an 8px dot and an 8px corner. */
+body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"]{border-radius:8px}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}{height:28px;border-radius:8px}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')} ${hostPart('title')}{font-size:12.5px;line-height:18px;color:var(--smooth-muted)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}[aria-selected="true"] ${hostPart('title')}{color:var(--smooth-text)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')} ${hostPart('time')}{font-size:11px;line-height:16px;color:var(--smooth-muted)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')}{position:relative}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')}::before{content:"";position:absolute;left:50%;top:50%;width:8.84px;height:8.84px;margin:-4.42px 0 0 -4.42px;background:color-mix(in srgb,var(--smooth-muted) 72%,transparent);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9.5' fill='none' stroke='black' stroke-width='2.71'/%3E%3C/svg%3E") center/8.84px 8.84px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9.5' fill='none' stroke='black' stroke-width='2.71'/%3E%3C/svg%3E") center/8.84px 8.84px no-repeat}
+/* The dot and the host's running spinner are the same geometry: a circle of
+   r=9.5 with a 2.71 stroke inside the spinner's own 24-unit viewBox, shown at
+   8.84px. The idle dot is that circle as a mask so the two are drawn by the
+   same vector path and read identically — a CSS border ring rounded a shade
+   differently and the two states did not match. A running session keeps the
+   spinner's rotation in this cell with the idle dot stepping aside, and its
+   track is dropped to 40% (the host draws it at 25%) so the turning arc is what
+   the eye picks out: the circle stays legible, the motion carries the state. */
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')}:has(svg)::before{opacity:0}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')} svg{width:8.84px;height:8.84px;color:color-mix(in srgb,var(--smooth-muted) 72%,transparent)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')} svg *{stroke-width:2.71}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')} svg g>circle:first-child{opacity:.4}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')}{height:29px;border-radius:8px}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')} :is(${hostPart('folder')},${hostPart('chevron')}){display:none}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')} ${hostPart('title')}{font-size:13.5px;line-height:19px;font-weight:500}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sectionLabel')}{font-size:12px;line-height:18px}
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"][aria-selected="true"]{background:var(--smooth-selected);border-color:transparent;box-shadow:none}
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"]:not([aria-selected="true"]):hover{background:var(--smooth-surface-2)}
 
@@ -127,10 +162,32 @@ body[data-smooth-skin] [data-content-phase]{background:var(--smooth-app)}
 body[data-smooth-skin] [data-conversation-scroll]{background:var(--smooth-app)}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')}{background:var(--smooth-app);border-bottom:1px solid var(--smooth-line)}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')}${hostPart('headerBlank')}{border-top:1px solid var(--smooth-line);border-bottom:0}
-body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('tabs')}{gap:8px;border-bottom:0;padding-block:8px;margin-top:4px}
-body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('tab')}{padding:6px 18px;border:1px solid var(--smooth-line);border-radius:999px;background:transparent;font-size:13px;font-weight:500}
-body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('tabActive')}{background:var(--smooth-surface-3);border-color:var(--smooth-surface-3);color:var(--smooth-text);font-weight:600}
-body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('tab')}::after{background:transparent}
+/* The view switch is the reference's segmented pill: one track with a thumb that slides
+   between 对话 and 轨迹, and the whole control fades in only while the pointer is in the
+   conversation column (keyboard focus shows it as well). The host renders the two views
+   as plain buttons under data-conversation-tabs, so the thumb is the container's own
+   ::before, moved by the selected button's index; two equal halves make that exact. */
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]{position:absolute;left:50%;top:6px;transform:translateX(-50%);display:inline-flex;box-sizing:border-box;gap:0;margin:0;padding:0;border:1px solid var(--smooth-line);border-radius:999px;background:transparent;overflow:hidden;z-index:3;opacity:0;transition:opacity .18s ease}
+body[data-smooth-skin] ${hostPart('centerCol')}:hover ${hostPart('header')} [data-conversation-tabs],
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]:focus-within{opacity:1}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;border-radius:999px;background:var(--smooth-surface-3);transition:transform .26s cubic-bezier(.22,1,.36,1)}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]:has(>[role="tab"]:nth-child(2)[aria-selected="true"])::before{transform:translateX(100%)}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"]{position:relative;z-index:1;flex:1 1 0;padding:6px 18px;border:0;border-radius:0;background:transparent;color:var(--smooth-muted);font-size:13px;font-weight:500;line-height:16px}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"][aria-selected="true"]{color:var(--smooth-text);font-weight:600}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"]::after{content:none}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] [data-conversation-tabs],body[data-smooth-skin] [data-conversation-tabs]::before{transition:none}}
+/* The conversation header follows the supplied reference: the session title owns the
+   first line, the header's chips — the agent team, the creation mode, whatever the
+   utilities slot adds — sit on a second line under it, and the 对话 / 轨迹 buttons are
+   centred over the header on that first line. Only the ground stays this skin's own; the
+   type, the pill shapes and the spacing are the reference's. The host stacks the tabs in
+   a grid row of their own that spans the header, so they take that same span in row one
+   instead, centred over it; the title cluster turns into two stacked rows — crumbs first,
+   action chips second — while the title row keeps its utilities and corner at the right
+   end, centred against the two-line block. */
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')}:has([data-conversation-tabs]){position:relative;padding:4px 18px 6px 14px;min-height:0}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('titleRow')}{grid-column:2;grid-row:1;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:start;column-gap:6px;min-height:0}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('titleCluster')}{display:grid;grid-template-columns:minmax(0,1fr);align-content:center;gap:1px}
 body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('headline')}{font-size:clamp(24px,2vw,30px);font-weight:600;letter-spacing:.01em}
 body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('stack')}{gap:14px}
 body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('workspaceRow')}{font-size:15px;color:var(--smooth-muted)}
@@ -180,7 +237,7 @@ body[data-smooth-skin] .smooth-model-trigger svg{flex:none;color:var(--smooth-mu
    interpolated ratio on every frame. Holding a drag drops the transition, which
    makes the two follow the pointer together instead of the fill trailing behind. */
 @property --smooth-model-ratio{syntax:"<number>";inherits:true;initial-value:0}
-body[data-smooth-skin] .smooth-model-slider{--smooth-model-ratio:0;position:relative;padding:0;transition:--smooth-model-ratio .3s cubic-bezier(.22,1,.36,1)}
+body[data-smooth-skin] .smooth-model-slider{--smooth-model-ratio:0;position:relative;isolation:isolate;padding:0;transition:--smooth-model-ratio .3s cubic-bezier(.22,1,.36,1)}
 body[data-smooth-skin] .smooth-model-slider.is-dragging{transition:none}
 body[data-smooth-skin] .smooth-model-track{position:absolute;left:0;right:0;top:0;box-sizing:border-box;height:26px;border:1px solid var(--smooth-line-strong);border-radius:999px;background:var(--smooth-model-track);overflow:hidden;pointer-events:none}
 /* The track's border eats 1px per side, so the fill's box subtracts it: 26 = the
@@ -189,6 +246,23 @@ body[data-smooth-skin] .smooth-model-fill{position:absolute;z-index:1;left:0;top
 /* Stop dots ride on the bar: above the blue fill so a passed stop still shows, below
    the ball so the thumb covers the stop it is resting on. */
 body[data-smooth-skin] .smooth-model-dot{position:absolute;z-index:2;top:50%;width:4px;height:4px;border-radius:50%;background:var(--smooth-model-dot);transform:translate(-50%,-50%)}
+/* The top effort stop is the release: a field of particles drifts left across the filled
+   track. The composer bakes each spark's start, travel, size, speed and opacity once
+   (MODEL_SPARKS), so the field is dense and irregular instead of one ordered stream. */
+/* Under the sparks the top stop keeps its original blue and only gathers a few small
+   pale glints: each patch is a soft white spot a few bar-heights across, faint enough not
+   to recolour the fill, wandering on its own path. The layer is clipped to the fill's own
+   width, so the light only ever touches the blue bar, never the empty ground right of the
+   thumb; every patch is centred on the strip with translate, so the bright core of its
+   gradient really falls inside the 24px bar instead of far below it. */
+body[data-smooth-skin] .smooth-model-glow{position:absolute;z-index:1;left:0;top:0;bottom:0;width:calc(13px + (100% - 26px) * var(--smooth-model-ratio));overflow:hidden;border-radius:999px;pointer-events:none}
+body[data-smooth-skin] .smooth-model-glow-blob{position:absolute;top:50%;translate:-50% -50%;border-radius:50%;background:radial-gradient(closest-side,#ffffff 0%,color-mix(in srgb,#ffffff 72%,transparent) 34%,color-mix(in srgb,#ffffff 30%,transparent) 64%,transparent 86%);opacity:calc(var(--glow-opacity,.35) * .9);mix-blend-mode:screen;animation:smooth-model-glow var(--glow-duration,6s) ease-in-out infinite alternate;animation-delay:var(--glow-delay,0s)}
+@keyframes smooth-model-glow{0%{transform:translate(0,0) scale(.9);opacity:calc(var(--glow-opacity,.35) * .5)}50%{transform:translate(calc(var(--glow-dx,120px) * .55),calc(var(--glow-dy,0) * .55)) scale(1.05);opacity:calc(var(--glow-opacity,.35) * 1)}100%{transform:translate(var(--glow-dx,120px),var(--glow-dy,0)) scale(1.15);opacity:calc(var(--glow-opacity,.35) * .65)}}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-model-glow-blob{animation:none}}
+body[data-smooth-skin] .smooth-model-sparks{position:absolute;z-index:2;inset:0;overflow:hidden;border-radius:999px;pointer-events:none}
+body[data-smooth-skin] .smooth-model-spark{position:absolute;width:var(--spark-size,3px);height:var(--spark-size,3px);border-radius:50%;background:#f2f7ff;box-shadow:0 0 8px color-mix(in srgb,#f2f7ff 85%,transparent),0 0 2px #fff;opacity:0;animation:smooth-model-spark var(--spark-duration,1.4s) linear infinite;animation-delay:var(--spark-delay,0s)}
+@keyframes smooth-model-spark{0%{opacity:0;transform:translate(0,0) scale(.45)}14%{opacity:var(--spark-opacity,.8)}78%{opacity:calc(var(--spark-opacity,.8) * .55)}100%{opacity:0;transform:translate(var(--spark-dx,-120px),var(--spark-dy,0)) scale(.3)}}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-model-spark{animation:none}}
 body[data-smooth-skin] .smooth-model-slider input[type="range"]{position:relative;z-index:2;appearance:none;-webkit-appearance:none;display:block;box-sizing:border-box;width:100%;height:26px;margin:0;padding:0;background:transparent;cursor:pointer}
 body[data-smooth-skin] .smooth-model-slider input[type="range"]::-webkit-slider-runnable-track{height:26px;border:0;background:transparent}
 /* The native thumb keeps its geometry and hit area but paints nothing: the visible
@@ -343,7 +417,9 @@ ${accountMenu}{
   --smooth-account-unit:.75px;
   --dsw-menu-surface-fill:color-mix(in srgb,var(--dsw-alias-bg-overlay) 96%,transparent);
   --dsw-menu-backdrop-filter:blur(16px);
-  inset:auto auto calc(8 * var(--smooth-account-unit)) max(12px,calc(var(--smooth-rail-width) - 10 * var(--smooth-account-unit)))!important;
+  /* Nudge the popup a few pixels clear of the rail's silhouette: the avatar stays the
+     anchor, the menu just stops crowding the column edge. */
+  inset:auto auto calc(8 * var(--smooth-account-unit)) max(12px,calc(var(--smooth-rail-width) - 10 * var(--smooth-account-unit) + 6px))!important;
   width:min(calc(304 * var(--smooth-account-unit)),calc(100vw - var(--smooth-rail-width) - 8px));
   min-width:0;max-width:none;max-height:calc(100dvh - var(--smooth-caption) - 16px);overflow-x:clip;
   padding:calc(8 * var(--smooth-account-unit)) calc(6 * var(--smooth-account-unit));
@@ -470,19 +546,19 @@ body[data-smooth-skin]{
      width. The bar's own padding and corner radius stay on --smooth-u because they
      meet the shell curve drawn at --smooth-left-width + 35 * --smooth-u. */
   --smooth-tab-u:.65px;
-  --smooth-left-width:352px;--smooth-rail-width:calc(54 * var(--smooth-l));
+  --smooth-left-width:352px;--smooth-rail-width:calc(44 * var(--smooth-l));
   --smooth-rail-button-size:calc(38 * var(--smooth-l));--smooth-rail-icon-size:calc(24 * var(--smooth-l));--smooth-rail-button-radius:calc(12 * var(--smooth-l));
   --smooth-rail-inset:calc((var(--smooth-rail-width) - var(--smooth-rail-button-size)) / 2);
-  --smooth-rail-gap:calc(10 * var(--smooth-l));
-  --smooth-caption:clamp(48px,calc(65 * var(--smooth-u)),64px);--dsh-windows-titlebar-height:var(--smooth-caption);
-  --smooth-rail-top:calc(var(--smooth-caption) + 18 * var(--smooth-l));
+  --smooth-rail-gap:calc(9 * var(--smooth-l));
+  --smooth-caption:48px;--dsh-windows-titlebar-height:var(--smooth-caption);
+  --smooth-rail-top:calc(var(--smooth-caption) + 4 * var(--smooth-l));
   --smooth-rail-panels-top:calc(var(--smooth-rail-top) + var(--smooth-rail-button-size) + var(--smooth-rail-gap));
 }
 body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})>${hostPart('centerCol')}{border-radius:0 0 0 calc(35 * var(--smooth-u));overflow:clip;corner-shape:round}
 body[data-smooth-skin] .smooth-workspace-bar{
   position:fixed;top:0;left:var(--smooth-left-width);right:132px;height:var(--smooth-caption);
-  display:flex;align-items:center;gap:4px;padding:0 calc(30px + 10 * var(--smooth-u)) 0 calc(10 * var(--smooth-u));background:var(--smooth-surface);
-  border-radius:calc(35 * var(--smooth-u)) 0 0 0;corner-shape:round;pointer-events:auto;z-index:50;-webkit-app-region:drag;
+  display:flex;align-items:center;gap:4px;padding:0 35px 0 5px;background:var(--smooth-surface);
+  border-radius:18px 0 0 0;corner-shape:round;pointer-events:auto;z-index:50;-webkit-app-region:drag;
 }
 body[data-smooth-skin] .smooth-workspace-tabs{position:relative;display:flex;align-items:center;gap:calc(12 * var(--smooth-tab-u));min-width:0;overflow-x:auto;scrollbar-width:none;flex:1;-webkit-app-region:drag}
 /* Electron's native caption drag region excludes every interactive tab/control. */
@@ -497,7 +573,7 @@ body[data-smooth-skin] .smooth-tab-label{display:flex;align-items:center;justify
 /* Leave room inside the clipping box for italic glyphs extending past their advance. */
 body[data-smooth-skin] .smooth-tab-label>span{min-width:0;padding:.08em .2em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-smooth-skin] .smooth-workspace-tab[data-preview="true"] .smooth-tab-label{font-style:italic}
-body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]{background:color-mix(in srgb,var(--smooth-surface-3) 80%,var(--smooth-muted));border-color:transparent;font-weight:650}
+body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]{background:color-mix(in srgb,var(--smooth-surface-3) 80%,var(--smooth-muted));border-color:transparent}
 body[data-smooth-skin] .smooth-workspace-tab:hover{background:var(--smooth-surface-3)}
 body[data-smooth-skin] .smooth-tab-close{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--smooth-muted);cursor:pointer}
 /* Pointer reorder: a short | floats in the gap, not on a tab border. Tabs clip
@@ -565,15 +641,17 @@ body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow'
 body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow')}::before{content:"工作区";color:var(--smooth-muted)}
 body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow')}::after{content:"在这里开始新的对话。";position:absolute;left:0;right:0;top:calc(100% + 3px);text-align:center;color:var(--smooth-muted);font-size:13px;line-height:18px;pointer-events:none}
 body[data-smooth-skin] ${hostPart('composerHero')} [data-composer-card]:has(.smooth-composer-meta){padding-top:34px}
-/* No tab is open, so there is nowhere to type yet: the headline stays and the card goes.
-   The browser half publishes the flag from its tab ledger (the data-smooth-no-tabs
-   attribute, src/layout.js); the moment any session, panel or settings tab exists the
-   card comes back. It is addressed by its own data-composer-card attribute rather than by
-   a child combinator, because the host mounts it through a slot wrapper of its own. The
-   way back is a short fade on the hero, so the card keeps the launch animation's own fade
-   (an animation on the card here would have replaced it). */
-body[data-smooth-skin][data-smooth-no-tabs] ${hostPart('composerHero')} [data-composer-card]{display:none}
-body[data-smooth-skin]:not([data-smooth-no-tabs]) ${hostPart('composerHero')}{animation:smooth-welcome-in .26s cubic-bezier(.2,0,0,1) both}
+/* The host's home surface — no session, panel or settings is showing — has nothing to
+   type into yet: the headline stays and the card goes. The browser half publishes the flag
+   from the host's current view (the data-smooth-home attribute, src/layout.js), so it also
+   covers Home clearing the conversation while the strip keeps its remaining tabs; the
+   moment a session, panel or settings surface exists the card comes back. It is addressed
+   by its own data-composer-card attribute rather than by a child combinator, because the
+   host mounts it through a slot wrapper of its own. The way back is a short fade on the
+   hero, so the card keeps the launch animation's own fade (an animation on the card here
+   would have replaced it). */
+body[data-smooth-skin][data-smooth-home] ${hostPart('composerHero')} [data-composer-card]{display:none}
+body[data-smooth-skin]:not([data-smooth-home]) ${hostPart('composerHero')}{animation:smooth-welcome-in .26s cubic-bezier(.2,0,0,1) both}
 @keyframes smooth-welcome-in{from{opacity:0}to{opacity:1}}
 body[data-smooth-skin] .smooth-composer-meta{position:absolute;top:0;left:0;right:0;box-sizing:border-box;height:34px;padding:0 14px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--smooth-line);border-radius:19px 19px 0 0;background:color-mix(in srgb,var(--smooth-surface-3) 50%,var(--dsw-specific-input-major));font-size:12px;line-height:18px;color:var(--smooth-muted);pointer-events:auto}
 body[data-smooth-skin] :is(.smooth-meta-workspace,.smooth-meta-branch){max-width:30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -781,3 +859,4 @@ body[data-smooth-skin] :is(.smooth-composer-preset,.smooth-composer-model) butto
   body[data-smooth-skin] .smooth-meta-host{font-size:12px}
 }
 `;
+

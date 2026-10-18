@@ -72,6 +72,11 @@ function createWorkspaceTabs() {
       if (!movingPreview && pinned.every((item, i) => item.key === state.pinned[i]?.key)) return;
       publish({ ...state, pinned, preview, activeKey: state.activeKey });
     },
+    /** The main surface no longer belongs to any tab: nothing in the strip is current. */
+    clearActive() {
+      if (state.activeKey === null) return;
+      publish({ ...state, activeKey: null });
+    },
     close(key) {
       const list = items();
       const index = list.findIndex(item => item.key === key);
@@ -233,7 +238,22 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
   function closeSettings() { settingsStore?.actions.close(); }
   function openSession(id) { closeSettings(); uiWorkspace.openSession(id); }
   function openHome() { closeSettings(); uiWorkspace.clearMain(); }
+  /* The home view is the page itself, not a tab: while a session tab is open the
+   * click only steps off the settings or panel stacked over it, and the conversation
+   * stays. With no session tab there is nothing to step back to — DSH still holds the
+   * last conversation in its main view, and showing it would put a page on screen that
+   * the strip no longer stands for — so that view is cleared too and the welcome page
+   * takes the surface, with no tab marked current. */
   function openMain(panel, settingsOpen) {
+    const state = workspaceTabs.getSnapshot();
+    const sessionTab = [...(state.preview ? [state.preview] : []), ...state.pinned].some((item) => item.kind === 'session');
+    if (!sessionTab) {
+      closeSettings();
+      if (panel) layout.selectPanel(null);
+      workspaceTabs.clearActive();
+      uiWorkspace.clearMain();
+      return;
+    }
     if (!panel && !settingsOpen) return;
     if (settingsOpen) closeSettings();
     if (panel) layout.selectPanel(null);
@@ -376,13 +396,14 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
       }
       setDrag(null);
     };
-    /* A workspace with no tab open has nothing to type into yet: the welcome page keeps
-     * its headline and drops the workspace picker, the second context line and the card.
-     * The flag is published on the body because the block belongs to the host's hero,
-     * outside this component's own tree; the rules that read it live in src/skin.js. As
-     * soon as a session, panel or settings tab exists the block comes back. */
-    const hasTabs = tabs.length > 0;
-    React.useEffect(() => { document.body.toggleAttribute(NO_TABS_ATTRIBUTE, !hasTabs); }, [hasTabs]);
+    /* The welcome page is the host's own home surface — no session, panel or settings is
+     * showing — not "the strip is empty": Home clears the conversation without closing the
+     * strip, and the page it lands on is still the welcome page. The flag is published on
+     * the body because the block belongs to the host's hero, outside this component's own
+     * tree; the rules that read it live in src/skin.js. A session, panel or settings
+     * surface brings the input card back. */
+    const welcomePage = view.kind === 'home';
+    React.useEffect(() => { document.body.toggleAttribute(HOME_ATTRIBUTE, welcomePage); }, [welcomePage]);
     React.useEffect(() => {
       const node = scroll.current;
       if (!node) return;

@@ -211,7 +211,7 @@ function usageHelpers() {
     bridgeRequest: async () => ({ today: '2026-05-12', days: [] }),
     hostPart: (name) => `.${name}`,
     PLUGIN_ID: 'smooth',
-    NO_TABS_ATTRIBUTE: 'data-smooth-no-tabs',
+    HOME_ATTRIBUTE: 'data-smooth-home',
     createSurfaceWatcher: () => ({ watch: () => () => {}, dispose() {} }),
     MutationObserver: class { observe() {} disconnect() {} },
     document: { body: { hasAttribute: () => true } },
@@ -299,9 +299,9 @@ test('the panel keeps the reference layout and the landing-page gate', () => {
   }
   assert.match(usage, /data-smooth-tip/, 'cells carry their own tooltip text');
   assert.match(usage, /slots\.register\(\{\s*name: 'shell\.overlay',[\s\S]*?id: `\$\{PLUGIN_ID\}\.usage`/);
-  assert.match(usage, /document\.body\.hasAttribute\(NO_TABS_ATTRIBUTE\)/, 'it reads the chrome\'s no-tab flag');
-  assert.match(usage, /if \(!stack \|\| !noTabs\) \{ setMount\(null\); return undefined; \}/, 'no mount while a tab is open');
-  assert.match(usage, /!skin\.state\.enabled \|\| !noTabs \|\| !mount/, 'and it renders nothing then');
+  assert.match(usage, /document\.body\.hasAttribute\(HOME_ATTRIBUTE\)/, 'it reads the chrome\'s welcome-page flag');
+  assert.match(usage, /if \(!stack \|\| !homeSurface\) \{ setMount\(null\); return undefined; \}/, 'no mount off the welcome page');
+  assert.match(usage, /!skin\.state\.enabled \|\| !homeSurface \|\| !mount/, 'and it renders nothing then');
 });
 
 test('the stylesheet paints the panel, the four shades and the tooltip', () => {

@@ -24,7 +24,7 @@ const allSource = [...sources.values()].join('\n');
 test('the host contract covers the selectors and hooks the skin actually reaches for', () => {
   // Guards the audit itself: an empty or filtered contract would make the live check pass
   // without testing anything.
-  for (const name of ['sidebarCol', 'centerCol', 'footArea', 'indicator', 'cardWorkspaceTrigger', 'tabActive', 'panelRow']) {
+  for (const name of ['sidebarCol', 'centerCol', 'footArea', 'indicator', 'cardWorkspaceTrigger', 'titleRow', 'titleCluster', 'panelRow']) {
     assert.ok(contract.classes.includes(name), `contract.classes is missing ${name}`);
   }
   for (const name of ['data-composer-card', 'data-conversation-scroll', 'data-sidebar-collapsed', 'data-testid']) {
@@ -44,7 +44,7 @@ test('the host contract covers the selectors and hooks the skin actually reaches
     assert.ok(contract.packages.includes(name), `contract.packages is missing ${name}`);
   }
   // Data attributes created by the plugin itself must not be demanded from the host.
-  for (const own of ['data-smooth-skin', 'data-smooth-no-tabs', 'data-selected', 'data-preview', 'data-error']) {
+  for (const own of ['data-smooth-skin', 'data-smooth-home', 'data-selected', 'data-preview', 'data-error']) {
     assert.ok(!contract.attributes.includes(own), `the host must not be required to carry ${own}`);
   }
 

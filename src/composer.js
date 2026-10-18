@@ -330,7 +330,53 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
     return THINK_LEVELS[Math.max(0, Math.min(THINK_LEVELS.length - 1, Math.round(ratio * (THINK_LEVELS.length - 1))))];
   }
 
-  /** The composer's model seat: model name above a reasoning-effort slider. The
+  /** Pale glints for the top effort stop: a few small, very faint white spots wander
+ * across the blue fill at unrelated speeds. The bar keeps its own blue — each spot is
+ * only a local lift of a few dozen px at low opacity, never a wash over the track. The
+ * geometry is baked once, like the spark field, so re-renders never reshuffle it. */
+const MODEL_GLOWS = Array.from({ length: 4 }, (_, index) => {
+  const random = (salt) => {
+    const value = Math.sin((index + 3.7) * salt) * 43758.5453;
+    return value - Math.floor(value);
+  };
+  return {
+    left: 6 + random(17.31) * 88,
+    top: (random(63.97) - .5) * 8,
+    opacity: .13 + random(88.13) * .12,
+    size: 32 + random(45.77) * 36,
+    dx: (random(29.53) - .5) * 160,
+    dy: (random(74.11) - .5) * 28,
+    duration: 4.5 + random(12.71) * 4,
+    delay: -random(59.37) * 8,
+  };
+});
+
+/** One fixed particle field for the top effort stop. The randomness is baked once, with a
+ * cheap sine hash, so a drag that crosses stops — and therefore re-renders — never
+ * reshuffles a stream that is already running. Each spark starts somewhere across the
+ * filled track and drifts left at its own speed, height, size and opacity. */
+const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
+  const random = (salt) => {
+    const value = Math.sin((index + 1) * salt) * 43758.5453;
+    return value - Math.floor(value);
+  };
+  // Packed by the thumb: the left third is almost empty, the right half carries most.
+  // Size and opacity follow that weight as well, so the field is loudest where it starts.
+  const left = 4 + Math.pow(random(12.9898), .38) * 94;
+  const weight = Math.min(1, Math.max(0, (left - 4) / 94));
+  return {
+    left,
+    top: (random(78.233) - .5) * 18,
+    dx: -(40 + random(37.719) * 140),
+    dy: (random(4.898) - .5) * 14,
+    duration: .8 + random(93.989) * 1.4,
+    delay: -random(23.14) * 2.6,
+    size: 2.2 + weight * 2.4 + random(68.7) * 1.2,
+    opacity: .35 + weight * .4 + random(51.3) * .25,
+  };
+});
+
+/** The composer's model seat: model name above a reasoning-effort slider. The
    * slider drafts locally and commits through the injected directory `select`. */
   function ModelEffortControl(props) {
     const directory = props.directory;
@@ -362,20 +408,63 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
     // edge stops under the thumb centre instead of under its left half.
     const ratio = efforts.length > 1 ? index / (efforts.length - 1) : 1;
     const sliderRef = React.useRef(null);
+    const ratioRef = React.useRef(ratio);
+    ratioRef.current = ratio;
     const dragRef = React.useRef(null);
-    // A click, a stop label or the keyboard lets the glider slide; an actual drag
-    // turns the left transition off so the thumb tracks the pointer exactly.
-    const beginDrag = (event) => { dragRef.current = { x: event.clientX, y: event.clientY }; };
+    // While the pointer is down the thumb rides the pointer itself: the ratio is written
+    // straight onto the slider as a custom property (no re-render per move, so the sparks
+    // and the cutouts are not re-created mid-drag), and the store's stop ratio takes back
+    // over on release. A click, a stop label or the keyboard still lets the glider slide.
+    const setPointerRatio = (clientX) => {
+      const node = sliderRef.current;
+      const track = node?.querySelector?.('.smooth-model-track');
+      if (!track) return;
+      const rect = track.getBoundingClientRect();
+      const span = Math.max(1, rect.width - 26);
+      const pointerRatio = Math.min(1, Math.max(0, (clientX - rect.left - 13) / span));
+      node.style.setProperty('--smooth-model-ratio', String(pointerRatio));
+    };
+    // Handing the property back to the stored ratio: a drag that ended between two stops
+    // glides onto the nearer one instead of sticking wherever the pointer left it.
+    const restoreRatio = () => {
+      sliderRef.current?.classList.remove('is-dragging');
+      sliderRef.current?.style.setProperty('--smooth-model-ratio', String(ratioRef.current));
+    };
+    const beginDrag = (event) => {
+      dragRef.current = { x: event.clientX, y: event.clientY };
+      setPointerRatio(event.clientX);
+    };
     const endDrag = () => {
       dragRef.current = null;
-      sliderRef.current?.classList.remove('is-dragging');
+      restoreRatio();
     };
+    // The rendered ratio is written straight onto the element as well, so React and the
+    // pointer never fight over the property: only an idle slider follows the store.
+    React.useEffect(() => {
+      if (dragRef.current) return;
+      sliderRef.current?.style.setProperty('--smooth-model-ratio', String(ratio));
+    }, [ratio]);
+    // Every open starts where the thumb already is: the property is written before the
+    // first paint with the transition switched off for that one frame, so the panel never
+    // replays a slide from the leftmost stop. The class comes off on the next frame, and
+    // the ratio is unchanged by then, so no transition fires.
+    React.useLayoutEffect(() => {
+      const node = sliderRef.current;
+      if (!node) return undefined;
+      node.style.setProperty('--smooth-model-ratio', String(ratioRef.current));
+      node.classList.add('is-dragging');
+      const frame = typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame(() => node.classList.remove('is-dragging'))
+        : null;
+      return () => { if (frame != null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame); };
+    }, []);
     React.useEffect(() => {
       const move = (event) => {
         const start = dragRef.current;
         if (!start || !event.buttons) return;
         if (Math.abs(event.clientX - start.x) < 4 && Math.abs(event.clientY - start.y) < 4) return;
         sliderRef.current?.classList.add('is-dragging');
+        setPointerRatio(event.clientX);
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', endDrag);
@@ -422,6 +511,8 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
         setDraft(null);
       }
     }, [currentIndex, draft]);
+    // The top stop is a release: a stream of sparks runs left along the filled track.
+    const atMax = efforts.length > 0 && index === efforts.length - 1;
     const level = reasoning && efforts.length > 0 ? thinkArtFor(efforts, index) : undefined;
     const backdrop = Boolean(level && deepseekBackdrop(group));
     const levelName = efforts[index]?.name || '';
@@ -447,7 +538,7 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
           h('span', { className: 'smooth-model-name' }, model?.name || text('composer.modelLoading', '正在读取…')),
           h(ui.IconChevronRightOutlineRegular, { size: 14, 'aria-hidden': true })),
         reasoning && efforts.length > 0 && h('div', {
-          ref: sliderRef, className: 'smooth-model-slider', style: { '--smooth-model-ratio': String(ratio) },
+          ref: sliderRef, className: 'smooth-model-slider',
         },
           h('div', { className: 'smooth-model-track', 'aria-hidden': true },
             h('div', { className: 'smooth-model-fill' }),
@@ -457,7 +548,39 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
                 key: `dot:${effort.id}`, className: 'smooth-model-dot',
                 style: { left: `calc(13px + (100% - 26px) * ${percent})` },
               });
-            })),
+            }),
+            // The pale wash lives inside the track and is clipped to the filled width,
+            // so it only ever lands on the blue bar and never on the empty ground right
+            // of the thumb.
+            atMax && h('div', { className: 'smooth-model-glow' },
+              MODEL_GLOWS.map((glow, index) => h('span', {
+                key: `glow:${index}`, className: 'smooth-model-glow-blob',
+                style: {
+                  left: `${glow.left}%`,
+                  top: `calc(50% + ${glow.top}px)`,
+                  width: `${glow.size}px`,
+                  height: `${glow.size}px`,
+                  '--glow-opacity': String(glow.opacity),
+                  '--glow-dx': `${glow.dx}px`,
+                  '--glow-dy': `${glow.dy}px`,
+                  '--glow-duration': `${glow.duration}s`,
+                  '--glow-delay': `${glow.delay}s`,
+                },
+              })))),
+          atMax && h('div', { className: 'smooth-model-sparks', 'aria-hidden': true },
+            MODEL_SPARKS.map((spark, index) => h('span', {
+              key: `spark:${index}`, className: 'smooth-model-spark',
+              style: {
+                left: `${spark.left}%`,
+                top: `calc(50% + ${spark.top}px)`,
+                '--spark-size': `${spark.size}px`,
+                '--spark-opacity': String(spark.opacity),
+                '--spark-dx': `${spark.dx}px`,
+                '--spark-dy': `${spark.dy}px`,
+                '--spark-duration': `${spark.duration}s`,
+                '--spark-delay': `${spark.delay}s`,
+              },
+            }))),
           h('input', {
             type: 'range', min: 0, max: Math.max(0, efforts.length - 1), step: 1, value: index,
             disabled: disabled,

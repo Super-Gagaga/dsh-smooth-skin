@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 const built = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8');
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
-function loadClient({ stored, unavailable = [], screen, outer, framed = false } = {}) {
+function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66], framed = false } = {}) {
   let registration;
   let settings;
   let dictionaries;
@@ -15,8 +15,11 @@ function loadClient({ stored, unavailable = [], screen, outer, framed = false } 
   const effects = [];
   const styles = new Set();
   const resizes = [];
+  const moves = [];
   let outerWidth = outer ? outer[0] : 1280;
   let outerHeight = outer ? outer[1] : 820;
+  let screenX = origin[0];
+  let screenY = origin[1];
   const attributes = new Set();
   const timers = new Map();
   // Each component function gets one hook frame, reused across its renders, so a
@@ -75,8 +78,11 @@ function loadClient({ stored, unavailable = [], screen, outer, framed = false } 
     clearTimeout: (id) => timers.delete(id),
     // The desktop window the half sizes at launch; the test observes the requests.
     resizeTo: (width, height) => { resizes.push([width, height]); outerWidth = width; outerHeight = height; },
+    moveTo: (x, y) => { moves.push([x, y]); screenX = x; screenY = y; },
     get outerWidth() { return outerWidth; },
     get outerHeight() { return outerHeight; },
+    get screenX() { return screenX; },
+    get screenY() { return screenY; },
     screen: screen || { availWidth: 2560, availHeight: 1440 },
   };
   // A frame reports the parent as a different window object, which is how the half tells
@@ -117,7 +123,9 @@ function loadClient({ stored, unavailable = [], screen, outer, framed = false } 
     },
   });
   return {
-    plugin, ctx, styles, attributes, storage, timers, swim, resizes,
+    plugin, ctx, styles, attributes, storage, timers, swim, resizes, moves,
+    get outer() { return [outerWidth, outerHeight]; },
+    get origin() { return [screenX, screenY]; },
     get settings() { return settings; },
     get tokenLayers() { return tokenLayers; },
     get preference() { return preference; },
@@ -136,6 +144,23 @@ function loadClient({ stored, unavailable = [], screen, outer, framed = false } 
     dispose: () => { for (const fn of effects.reverse()) fn(); },
   };
 }
+
+/** Every child the Smooth page renders below its header, across its sections. */
+const pageChildren = (runtime) => runtime.settings.component().children
+  .slice(1)
+  .flatMap((section) => (section && section.children) || []);
+
+/** The page's settings rows, in order: the group headings carry no `title` prop. */
+const settingRows = (runtime) => pageChildren(runtime)
+  .filter((child) => child && typeof child.type === 'function' && child.props && 'title' in child.props);
+
+/** The splash preview element, present only while it plays. */
+const splashPart = (runtime) => pageChildren(runtime)
+  .find((child) => child && child.props && 'onDone' in child.props);
+
+/** The footer's one reset button. */
+const resetButton = (runtime) => runtime.settings.component().children.at(-1)
+  .children[0].children[0].children[0];
 
 test('built client exports an activatable plugin with every service declared', () => {
   const runtime = loadClient();
@@ -174,7 +199,7 @@ test('the launch window size is left to the opening and edited in settings', asy
   const stored = () => JSON.parse(runtime.storage.get('dsh-smooth-skin:state'));
   // Rows are re-read after every change, the way React re-renders them.
   const sizeRow = () => {
-    const rows = runtime.settings.component().children[1].children;
+    const rows = settingRows(runtime);
     const element = rows[rows.length - 1];
     const [width, times, height, toggle] = runtime.render(element).children[1].children;
     return { element, width, times, height, toggle };
@@ -209,7 +234,7 @@ test('the launch window size is left to the opening and edited in settings', asy
   assert.equal(stored().windowSize.enabled, false, 'and editing a number does not switch it back on');
   assert.equal(stored().windowSize.height, 1000, 'the number itself is still remembered');
 
-  await runtime.settings.component().children[2].children[0].children[0].props.onClick();
+  await resetButton(runtime).props.onClick();
   assert.deepEqual(stored().windowSize, { enabled: true, width: 1440, height: 900 });
   runtime.dispose();
 });
@@ -223,7 +248,7 @@ test('theme and animation switches never move the window; only a size edit does'
   });
   runtime.plugin.apply(runtime.ctx);
   assert.deepEqual(runtime.resizes, [], 'activation leaves a visible window alone');
-  const rows = () => runtime.settings.component().children[1].children;
+  const rows = () => settingRows(runtime);
   await rows()[1].props.onChange('light');
   assert.equal(runtime.preference, 'light');
   assert.deepEqual(runtime.resizes, [], 'switching the theme must not resize or reposition the window');
@@ -237,9 +262,103 @@ test('theme and animation switches never move the window; only a size edit does'
   runtime.dispose();
 });
 
+test('the size switch never touches the visible window, even one the user resized', async () => {
+  // The switch is a launch-time preference: it decides whether the opening applies the
+  // size, not whether the window on screen is corrected now. Flipping it must leave a
+  // window that no longer matches the configured size completely alone.
+  const runtime = loadClient({
+    stored: { windowSize: { enabled: true, width: 1440, height: 900 } },
+    outer: [1469, 915],
+    origin: [240, 66],
+  });
+  runtime.plugin.apply(runtime.ctx);
+  const sizeRow = () => {
+    const rows = settingRows(runtime);
+    return runtime.render(rows[rows.length - 1]);
+  };
+  // The reported gesture: a dozen and one clicks on the switch.
+  for (let click = 0; click < 13; click += 1) {
+    const [, , , toggle] = sizeRow().children[1].children;
+    await toggle.props.onChange({ target: { checked: click % 2 === 0 } });
+  }
+  assert.deepEqual(runtime.resizes, [], 'the switch must not resize the window');
+  assert.deepEqual(runtime.moves, [], 'nor reposition it');
+  assert.deepEqual(runtime.outer, [1469, 915], 'a manually sized window keeps its size');
+  assert.deepEqual(runtime.origin, [240, 66], 'and its origin');
+  // Editing a number is still immediate.
+  const [width] = sizeRow().children[1].children;
+  await width.children[1].props.onChange({ target: { value: '1600' } });
+  assert.deepEqual(runtime.resizes, [[1600, 900]], 'a real size edit still applies');
+  runtime.dispose();
+});
+
+test('a width or height edit within the window frame is not re-requested', async () => {
+  // Electron applies its frame outside the requested outer size: 1440 x 900 reports back
+  // as 1441 x 901. Editing only the height to 901 asks for that same frame back, so the
+  // comparison allows the border either way instead of resizing (and re-anchoring) again.
+  const runtime = loadClient({
+    stored: { windowSize: { enabled: true, width: 1440, height: 900 } },
+    outer: [1441, 901],
+    origin: [240, 66],
+  });
+  runtime.plugin.apply(runtime.ctx);
+  const row = runtime.render(settingRows(runtime).at(-1));
+  const [, , height] = row.children[1].children;
+  await height.children[1].props.onChange({ target: { value: '901' } });
+  assert.deepEqual(runtime.resizes, [], 'the frame already holds this size');
+  assert.deepEqual(runtime.moves, [], 'so nothing is touched');
+  runtime.dispose();
+});
+
+test('the size row resets the width and height pair without touching the switch', async () => {
+  const runtime = loadClient({ stored: { windowSize: { enabled: false, width: 1600, height: 1000 } } });
+  runtime.plugin.apply(runtime.ctx);
+  const row = runtime.render(settingRows(runtime).at(-1));
+  // The copy block is [title, hint, meta]; the meta line carries [current size, reset].
+  const reset = row.children[0].children[2].children[1];
+  assert.equal(reset.props.disabled, false, 'a custom pair can be reset');
+  await reset.props.onClick();
+  assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')).windowSize,
+    { enabled: false, width: 1440, height: 900 }, 'only the numbers go back to the default pair');
+  const atDefault = runtime.render(settingRows(runtime).at(-1));
+  assert.equal(atDefault.children[0].children[2].children[1].props.disabled, true, 'and the reset idles at the default pair');
+  runtime.dispose();
+});
+
+test('a size edit keeps the window on the origin it already had', async () => {
+  const runtime = loadClient({
+    stored: { windowSize: { enabled: true, width: 1440, height: 900 } },
+    outer: [1469, 915],
+    origin: [240, 66],
+  });
+  runtime.plugin.apply(runtime.ctx);
+  const row = runtime.render(settingRows(runtime).at(-1));
+  const [width] = row.children[1].children;
+  await width.children[1].props.onChange({ target: { value: '1600' } });
+  assert.deepEqual(runtime.resizes, [[1600, 900]]);
+  assert.deepEqual(runtime.moves, [[240, 66]], 'only the size may change, not where the window sits');
+  runtime.dispose();
+});
+
+test('a restored origin stays inside the screen work area', async () => {
+  const runtime = loadClient({
+    stored: { windowSize: { enabled: true, width: 1440, height: 900 } },
+    outer: [1000, 700],
+    origin: [300, 120],
+    screen: { availWidth: 1280, availHeight: 720, availLeft: 0, availTop: 0 },
+  });
+  runtime.plugin.apply(runtime.ctx);
+  const row = runtime.render(settingRows(runtime).at(-1));
+  const [width] = row.children[1].children;
+  await width.children[1].props.onChange({ target: { value: '1600' } });
+  assert.deepEqual(runtime.resizes, [[1280, 720]], 'the request is clamped to the work area');
+  assert.deepEqual(runtime.moves, [[0, 0]], 'the pinned origin is clamped so the window stays reachable');
+  runtime.dispose();
+});
+
 test('an edited size is clamped to the screen work area and skipped when it fits', async () => {
   const edit = async (runtime, value) => {
-    const rows = runtime.settings.component().children[1].children;
+    const rows = settingRows(runtime);
     const element = rows[rows.length - 1];
     const [width] = runtime.render(element).children[1].children;
     await width.children[1].props.onChange({ target: { value } });
@@ -280,12 +399,12 @@ test('turning the skin off restores tokens and theme, then re-enabling reapplies
   const runtime = loadClient({ stored: { enabled: true, theme: 'dark' } });
   runtime.plugin.apply(runtime.ctx);
   assert.equal(runtime.preference, 'dark');
-  const getToggle = () => runtime.settings.component().children[1].children[0];
+  const getToggle = () => settingRows(runtime)[0];
   // The chrome publishes this flag while the workspace has no tab open; switching the
   // skin off has to take it down with the rest of the plugin's marks on the host body.
-  runtime.attributes.add('data-smooth-no-tabs');
+  runtime.attributes.add('data-smooth-home');
   await getToggle().props.onChange(false);
-  assert.equal(runtime.attributes.has('data-smooth-no-tabs'), false, 'a disabled skin leaves no welcome-block flag behind');
+  assert.equal(runtime.attributes.has('data-smooth-home'), false, 'a disabled skin leaves no welcome-block flag behind');
   assert.equal(runtime.preference, 'system');
   assert.equal(runtime.tokenLayers, 0);
   assert.equal(runtime.attributes.size, 0);
@@ -301,7 +420,7 @@ test('turning the skin off restores tokens and theme, then re-enabling reapplies
 test('the settings page carries the enable switch, the mode choice and the launch animation', async () => {
   const runtime = loadClient();
   runtime.plugin.apply(runtime.ctx);
-  const rows = runtime.settings.component().children[1].children;
+  const rows = settingRows(runtime);
   assert.equal(rows[0].props.checked, true, 'the enable switch stays the first row');
   assert.equal(rows[1].props.value, 'auto');
   assert.equal(rows[2].props.checked, true, 'the launch animation is on by default');
@@ -309,8 +428,8 @@ test('the settings page carries the enable switch, the mode choice and the launc
   await rows[2].props.onChange(false);
   assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')),
     { enabled: true, theme: 'auto', boot: false, windowSize: { enabled: true, width: 1440, height: 900 } });
-  assert.equal(runtime.settings.component().children[1].children[2].props.checked, false);
-  await runtime.settings.component().children[2].children[0].children[0].props.onClick();
+  assert.equal(settingRows(runtime)[2].props.checked, false);
+  await resetButton(runtime).props.onClick();
   assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')),
     { enabled: true, theme: 'auto', boot: true, windowSize: { enabled: true, width: 1440, height: 900 } });
   runtime.dispose();
@@ -319,21 +438,21 @@ test('the settings page carries the enable switch, the mode choice and the launc
 test('the settings page replays the index opening without touching the stored state', () => {
   const runtime = loadClient();
   runtime.plugin.apply(runtime.ctx);
-  const rowOf = (tree) => tree.children[1].children[2];
-  const preview = rowOf(runtime.settings.component()).props.action;
+  const rowOf = () => settingRows(runtime)[2];
+  const preview = rowOf().props.action;
   assert.equal(preview.children[0], '预览');
   assert.equal(preview.props.disabled, false, 'the preview is available while the skin is on');
   assert.equal(runtime.styles.size, 1, 'only the skin stylesheet is up so far');
 
   preview.props.onClick();
-  const playing = rowOf(runtime.settings.component()).props.action;
+  const playing = rowOf().props.action;
   assert.equal(playing.children[0], '播放中…', 'the button reports that it is busy');
   assert.equal(playing.props.disabled, true);
-  const layerOf = (tree) => {
-    const element = tree.children[1].children[3];
+  const layerOf = () => {
+    const element = splashPart(runtime);
     return element ? runtime.render(element) : null;
   };
-  const layer = layerOf(runtime.settings.component());
+  const layer = layerOf();
   assert.ok(layer && layer.props.id === 'dsh-smooth-splash', 'the preview portals the same layer the index ships');
   assert.equal(layer.props['data-smooth-splash-live'], '');
   assert.equal(layer.props['data-smooth-splash-out'], undefined);
@@ -343,10 +462,10 @@ test('the settings page replays the index opening without touching the stored st
   assert.equal(runtime.styles.size, 2, 'a page without the Host stylesheet gets a plugin copy');
 
   assert.equal(runtime.fireTimer(), 1500, 'the whale holds for the same extended minimum as the real opening');
-  assert.equal(layerOf(runtime.settings.component()).props['data-smooth-splash-out'], '');
+  assert.equal(layerOf().props['data-smooth-splash-out'], '');
   assert.equal(runtime.fireTimer(), 1500 + 640, 'the layer leaves once the shell transition is over');
-  assert.equal(layerOf(runtime.settings.component()), null);
-  assert.equal(rowOf(runtime.settings.component()).props.action.children[0], '预览');
+  assert.equal(layerOf(), null);
+  assert.equal(rowOf().props.action.children[0], '预览');
   // The replay is decoration: it never writes settings.
   assert.equal(runtime.storage.has('dsh-smooth-skin:state'), false);
   runtime.dispose();

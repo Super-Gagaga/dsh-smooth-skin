@@ -89,6 +89,20 @@ test('the model page shares the panel surface instead of the host menu card', as
   assert.match(skin, /\.smooth-model-list \.smooth-git-list\{[^}]*border:0;border-radius:0;background:transparent;box-shadow:none/);
 });
 
+test('a held drag rides the pointer, then settles on the nearest stop', async () => {
+  const composer = await read('../src/composer.js');
+  // The pointer writes the ratio straight onto the element (no re-render per move), and
+  // the store's own ratio only takes over again when nothing is held.
+  assert.match(composer, /const setPointerRatio = \(clientX\) => \{[\s\S]*?style\.setProperty\('--smooth-model-ratio', String\(pointerRatio\)\)/);
+  assert.match(composer, /if \(dragRef\.current\) return;\s*sliderRef\.current\?\.style\.setProperty\('--smooth-model-ratio', String\(ratio\)\)/);
+  assert.match(composer, /const restoreRatio = \(\) => \{[\s\S]*?classList\.remove\('is-dragging'\)[\s\S]*?setProperty\('--smooth-model-ratio', String\(ratioRef\.current\)\)/);
+  // The first paint already sits on the stored stop: the mount writes the ratio with the
+  // transition off, then hands the class back on the next frame.
+  assert.match(composer, /React\.useLayoutEffect\(\(\) => \{[\s\S]*?setProperty\('--smooth-model-ratio', String\(ratioRef\.current\)\)[\s\S]*?classList\.add\('is-dragging'\)[\s\S]*?remove\('is-dragging'\)/);
+  // Nothing else may own the property, or React and the pointer would fight over it.
+  assert.ok(!/style: \{ '--smooth-model-ratio'/.test(composer), 'the ratio must not ride the React style prop');
+});
+
 test('the level is named above the model selector instead of under the slider', async () => {
   const [composer, skin] = await Promise.all([read('../src/composer.js'), read('../src/skin.js')]);
   // The tick labels are gone; the level name sits above the model trigger and re-enters
