@@ -297,8 +297,9 @@ test('every CSS custom property the skin reads exists as a plugin token or a lit
   const { buildTokens } = await loadHostHalf();
   const tokens = new Set(Object.keys(buildTokens({ enabled: true, theme: 'auto' })));
   const used = new Set([...skin.matchAll(/var\((--[a-z0-9-]+)/g)].map((match) => match[1]));
-  // The native composer exposes the user's font preference; keep its literal fallback.
-  const hostProperties = new Set(['--dsh-content-font-size']);
+  // The native composer exposes the user's font preference, its side clearance and the
+  // card width ceiling; keep their literal fallbacks.
+  const hostProperties = new Set(['--dsh-content-font-size', '--dsh-composer-side-clearance', '--dsh-composer-card-max-width']);
   const localProperties = new Set([...skin.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1]));
   for (const [, name] of skin.matchAll(/@property\s+(--smooth-[a-z0-9-]+)/g)) localProperties.add(name);
   // The active workspace title is supplied as a CSS string by the native tabs.

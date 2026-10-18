@@ -50,7 +50,7 @@ function runtime({ width = 1282, overflow = null } = {}) {
     },
     require: name => { assert.equal(name, '@deepseek-ai/dsh-client-ui-primitives'); return new Proxy({}, { get: (_t, key) => key }); },
   };
-  runInNewContext(source + '\nglobalThis.install = installReferenceShell; globalThis.createTabs = createWorkspaceTabs; globalThis.currentTab = currentWorkspaceTab; globalThis.isOperation = isWorkspaceOperation; globalThis.installScroll = installTabScroll; globalThis.tabOverflow = tabOverflow;', sandbox);
+  runInNewContext(source + '\nglobalThis.install = installReferenceShell; globalThis.createTabs = createWorkspaceTabs; globalThis.currentTab = currentWorkspaceTab; globalThis.isCreated = isCreatedSession; globalThis.applyWidth = applyConversationWidth; globalThis.isOperation = isWorkspaceOperation; globalThis.installScroll = installTabScroll; globalThis.tabOverflow = tabOverflow;', sandbox);
   const shell = sandbox.install({ slots, layout: { selectPanel: id => { panelState.activePanelId = id; calls.push(['panel', id]); } }, uiWorkspace: {
     clearMain: () => { snapshot.current = undefined; panelState.activePanelId = null; calls.push(['home']); },
     startSession: () => { snapshot.current = 'blank'; calls.push(['new']); },
@@ -150,14 +150,61 @@ test('tab descriptors only use the current surface, never unrelated sessions', (
   const r = runtime();
   const text = (_key, fallback) => fallback;
   const snapshot = { current: 'empty', ids: ['empty', 'a', 'b'], byId: { empty: { blank: true }, a: { title: 'A' }, b: { title: 'B' } } };
-  assert.equal(r.sandbox.currentTab(snapshot, null, false, null, text).title, '新会话');
+  const blank = r.sandbox.currentTab(snapshot, null, false, null, text);
+  assert.equal(blank.title, '新会话');
+  assert.equal(blank.blank, true);
+  assert.equal(r.sandbox.isCreated(blank), true, 'a conversation that was just created pins immediately');
   assert.equal(r.sandbox.currentTab(snapshot, 'plugins', false, null, text).key, 'panel:plugins');
   assert.equal(r.sandbox.currentTab(snapshot, null, true, null, text).key, 'settings');
   snapshot.current = 'a';
-  assert.equal(r.sandbox.currentTab(snapshot, null, false, null, text).title, 'A');
+  const opened = r.sandbox.currentTab(snapshot, null, false, null, text);
+  assert.equal(opened.title, 'A');
+  assert.equal(opened.blank, false);
+  assert.equal(r.sandbox.isCreated(opened), false, 'sessions opened from the tree stay in the preview slot');
+  assert.equal(r.sandbox.isCreated({ kind: 'home' }), false);
   snapshot.current = undefined;
   assert.equal(r.sandbox.currentTab(snapshot, null, false, null, text).key, 'home');
   assert.equal(r.sandbox.currentTab(snapshot, null, false, null, text).title, '首页');
+});
+
+test('a new conversation stays a preview until a message is sent', () => {
+  const r = runtime();
+  r.shell.setEnabled(true);
+  r.snapshot.current = 'blank';
+  r.render(); r.render();
+  const tab = () => r.flatten(r.render()).find(node => typeof node.props?.className === 'string' && (node.props.className === 'smooth-workspace-tab' || node.props.className.startsWith('smooth-workspace-tab ')));
+  assert.equal(tab().props['data-preview'], true, 'a fresh conversation opens as the replaceable preview');
+  r.operate(); r.render();
+  assert.equal(tab().props['data-preview'], true, 'operations inside a new conversation do not pin it');
+  const keydown = r.events.get('keydown');
+  keydown({ type: 'keydown', key: 'Enter', isComposing: false, shiftKey: false, target: { textContent: 'hello', closest: selector => selector === '[data-composer-card]' || selector === '[data-composer-input]' ? {} : null } });
+  r.render();
+  assert.equal(tab().props['data-preview'], false, 'sending the first message pins the tab');
+});
+
+test('the conversation width the user runs with becomes the plugin default', () => {
+  const r = runtime();
+  const store = new Map([['dsh.conversation.contentWidth', '812']]);
+  const written = [];
+  r.sandbox.localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+  r.sandbox.document.querySelectorAll = () => [{ style: { setProperty: (key, value) => written.push([key, value]) } }];
+  r.sandbox.applyWidth();
+  assert.equal(store.get('dsh.smooth.conversationWidth'), '812', 'the dragged width is saved as the plugin default');
+  assert.equal(store.get('dsh.conversation.contentWidth'), '812');
+  assert.deepEqual(written, [['--dsh-chat-user-width', '812px']], 'the running body is republished at that width');
+  store.delete('dsh.conversation.contentWidth');
+  r.sandbox.applyWidth();
+  assert.equal(store.get('dsh.conversation.contentWidth'), '812', 'a cleared host preference falls back to the saved default');
+});
+
+test('with nothing stored, the measured conversation width is adopted as the default', () => {
+  const r = runtime();
+  const store = new Map();
+  r.sandbox.localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+  r.sandbox.document.querySelectorAll = () => [{ style: { getPropertyValue: key => key === '--dsh-chat-user-width' ? '744px' : '', setProperty: () => {} } }];
+  r.sandbox.applyWidth();
+  assert.equal(store.get('dsh.smooth.conversationWidth'), '744');
+  assert.equal(store.get('dsh.conversation.contentWidth'), '744');
 });
 
 test('the outlined Home button only dismisses other surfaces and is inert on the main page', () => {

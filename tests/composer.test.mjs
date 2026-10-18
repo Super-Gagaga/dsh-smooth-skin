@@ -7,7 +7,7 @@ const read = (name) => readFile(new URL(`../src/${name}`, import.meta.url), 'utf
 // The bundle order: composer.js watches surfaces through watch.js.
 const source = `${await read('watch.js')}\n${await read('composer.js')}`;
 const sandbox = { PLUGIN_ID: 'smooth', hostPart: name => `.${name}` };
-runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker;', sandbox);
+runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.installFallback = installComposerFallbackHint; globalThis.installCaret = installSmoothCaret; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker;', sandbox);
 
 function files(entries) {
   const calls = [];
@@ -72,6 +72,54 @@ test('compact prompts preserve native unavailable, workspace, planning and runni
   dispose(); assert.equal(disconnected, true); assert.equal(marker.size, 0);
   assert.equal(properties.get('--smooth-composer-placeholder'), '"Previous"');
   assert.equal(sandbox.installHint(null, [], ''), undefined);
+});
+
+test('the hint survives attachments, when the host drops its placeholder element', () => {
+  let notify; let disconnects = 0;
+  sandbox.MutationObserver = class {
+    constructor(fn) { notify = fn; }
+    observe() {}
+    disconnect() { disconnects += 1; }
+  };
+  sandbox.document = { createElement: () => ({ className: '', hidden: true, textContent: '', attributes: new Map(), setAttribute(key, value) { this.attributes.set(key, value); }, remove() { this.removed = true; } }) };
+  const grow = { element: null, append(element) { this.element = element; } };
+  let nativePlaceholder = null;
+  const attributes = new Map();
+  const card = { querySelector: (selector) => selector === '[data-composer-placeholder]' ? nativePlaceholder : null };
+  const input = {
+    parentElement: grow,
+    textContent: '',
+    closest: () => card,
+    querySelector: () => null,
+    getAttribute: (key) => attributes.get(key) ?? null,
+  };
+  const dispose = sandbox.installFallback(input, 'Short prompt');
+  assert.ok(grow.element, 'a hint node is placed in the editor box');
+  assert.equal(grow.element.className, 'smooth-composer-fallback');
+  assert.equal(grow.element.textContent, 'Short prompt');
+  assert.equal(grow.element.attributes.get('aria-hidden'), 'true');
+  assert.equal(grow.element.hidden, false, 'the hint is visible while the editor is empty');
+  input.textContent = 'typed';
+  notify();
+  assert.equal(grow.element.hidden, true, 'typing hides the fallback');
+  input.textContent = '';
+  nativePlaceholder = {};
+  notify();
+  assert.equal(grow.element.hidden, true, 'the native placeholder takes over when it returns');
+  nativePlaceholder = null;
+  notify();
+  assert.equal(grow.element.hidden, false);
+  attributes.set('aria-disabled', 'true');
+  notify();
+  assert.equal(grow.element.hidden, true, 'disabled editors keep their native state');
+  dispose();
+  assert.equal(grow.element.removed, true);
+  assert.equal(disconnects, 2);
+});
+
+test('the smooth caret degrades when the platform cannot report a selection', () => {
+  assert.equal(sandbox.installCaret(null), undefined);
+  assert.equal(sandbox.installCaret({ parentElement: {}, closest: () => ({}) }), undefined);
 });
 
 test('the model seat is contributed through the composer right slot', () => {

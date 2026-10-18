@@ -14,6 +14,64 @@ function sharedSurfaceStore(slots, name, action) {
  * 264-420px clamp and the skin's 320-560px rail window. */
 const DEFAULT_SIDEBAR_WIDTH = 352;
 
+/** The host lets a conversation body be widened by dragging a side handle and keeps that
+ * preference in localStorage (`dsh.conversation.contentWidth`). The skin saves the width
+ * the user is running with as its own default (`dsh.smooth.conversationWidth`): every drag
+ * is remembered, and the value is written back to the host at activation so a reload or a
+ * cleared host preference still opens at that width instead of the computed fallback. */
+const CONVERSATION_WIDTH_KEY = 'dsh.smooth.conversationWidth';
+const HOST_CONVERSATION_WIDTH_KEY = 'dsh.conversation.contentWidth';
+
+function storedConversationWidth(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const value = raw === null ? NaN : Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The width the conversation body is showing right now: the host's published variable
+ * first, then the content width it computed for the column. */
+function measuredConversationWidth() {
+  try {
+    for (const node of document.querySelectorAll?.('[style*="--dsh-chat-user-width"]') || []) {
+      const value = Number.parseFloat(node.style.getPropertyValue('--dsh-chat-user-width'));
+      if (Number.isFinite(value) && value > 0) return value;
+    }
+    const body = document.querySelector?.('[data-conversation-scroll]')?.parentElement;
+    if (body) {
+      const value = Number.parseFloat(getComputedStyle(body).getPropertyValue('--dsh-chat-content-width'));
+      if (Number.isFinite(value) && value > 0) return value;
+    }
+  } catch { /* measurement unavailable in this environment */ }
+  return undefined;
+}
+
+function applyConversationWidth() {
+  const explicit = storedConversationWidth(HOST_CONVERSATION_WIDTH_KEY);
+  const saved = storedConversationWidth(CONVERSATION_WIDTH_KEY);
+  // A dragged width wins and becomes the default; with nothing stored yet, the width the
+  // body is showing is adopted so the current layout is what later loads open with.
+  let target = saved;
+  if (explicit !== undefined && explicit !== saved) target = explicit;
+  else if (saved === undefined) target = measuredConversationWidth();
+  if (target === undefined) return;
+  try {
+    localStorage.setItem(CONVERSATION_WIDTH_KEY, `${target}`);
+    localStorage.setItem(HOST_CONVERSATION_WIDTH_KEY, `${target}`);
+  } catch { /* storage unavailable */ }
+  const nodes = document.querySelectorAll?.('[style*="--dsh-chat-user-width"]') || [];
+  for (const node of nodes) node.style.setProperty('--dsh-chat-user-width', `${target}px`);
+  if (nodes.length === 0) {
+    // The host has not published the size yet; write it on the element it publishes to
+    // (the parent of the conversation body) so the mounted view already uses it.
+    const body = document.querySelector?.('[data-conversation-scroll]')?.parentElement;
+    body?.parentElement?.style.setProperty('--dsh-chat-user-width', `${target}px`);
+  }
+}
+
 function currentWorkspaceTab(snapshot, panel, settingsOpen, panelTitle, text) {
   if (settingsOpen) return { key: 'settings', kind: 'settings', title: text('shell.settings', '设置') };
   if (panel) return { key: `panel:${panel}`, kind: 'panel', id: panel, title: panelTitle || (panel === 'plugins' ? text('shell.plugins', '插件') : panel) };
@@ -21,8 +79,14 @@ function currentWorkspaceTab(snapshot, panel, settingsOpen, panelTitle, text) {
   const currentId = snapshot?.current || Object.keys(byId).find((id) => byId[id]?.retainedBy?.mainView > 0);
   const current = byId[currentId];
   return currentId && current
-    ? { key: `session:${currentId}`, kind: 'session', id: currentId, title: current.blank ? text('shell.new', '新会话') : current.title || text('shell.untitled', '未命名会话') }
+    ? { key: `session:${currentId}`, kind: 'session', id: currentId, blank: !!current.blank, title: current.blank ? text('shell.new', '新会话') : current.title || text('shell.untitled', '未命名会话') }
     : { key: 'home', kind: 'home', title: text('shell.home', '首页') };
+}
+
+/** A conversation created right now owns a permanent tab from the moment it opens; the
+ * replaceable preview slot is kept for sessions merely opened from the tree. */
+function isCreatedSession(view) {
+  return view?.kind === 'session' && view.blank === true;
 }
 
 /** UI-only ledger: one replaceable preview and an ordered list of operated tabs.
@@ -195,10 +259,27 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
   let usageDispose;
   const disposers = [];
   // The home view is the page itself, not a tab, so it never becomes a pin target.
-  const recordOperation = (event) => { if (active && currentView && isWorkspaceOperation(event)) workspaceTabs.pin(currentView); };
+  // A conversation opened from the tree pins on any real interaction; a newly created
+  // one only pins when a message is actually sent (see recordSend below).
+  const recordOperation = (event) => { if (active && currentView && !isCreatedSession(currentView) && isWorkspaceOperation(event)) workspaceTabs.pin(currentView); };
   for (const type of ['input', 'change', 'click']) {
     document.addEventListener(type, recordOperation, true);
     disposers.push(() => document.removeEventListener(type, recordOperation, true));
+  }
+  const recordSend = (event) => {
+    if (!active || !isCreatedSession(currentView)) return;
+    const target = event.target;
+    if (!target?.closest || !target.closest('[data-composer-card]')) return;
+    const sent = event.type === 'keydown'
+      ? event.key === 'Enter' && !event.shiftKey && !event.isComposing
+        && String(target.textContent || '').trim() !== ''
+        && !!target.closest('[data-composer-input]')
+      : !!target.closest(`${hostPart('primary')}`);
+    if (sent) workspaceTabs.pin(currentView);
+  };
+  for (const type of ['click', 'keydown']) {
+    document.addEventListener(type, recordSend, true);
+    disposers.push(() => document.removeEventListener(type, recordSend, true));
   }
   const setLeftWidth = () => {
     const info = layoutStore?.getSnapshot().layoutInfo;
@@ -207,6 +288,8 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
   function setEnabled(enabled) {
     if (enabled === active) return;
     active = enabled;
+    // The conversation column opens at the plugin default: the last width the user used.
+    if (enabled) applyConversationWidth();
     if (enabled) {
       composerDispose = installComposerLayout({ slots, modelDirectories, remote, useSmoothState, text });
       accountDispose = installAccountMenu({ slots, text });
@@ -308,6 +391,8 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
       if (!ownsSurface) return;
       currentView = view.kind === 'home' ? undefined : view;
       if (currentView) workspaceTabs.show(view);
+      // Adopt the width of the view that just mounted (once), then keep applying it.
+      applyConversationWidth();
     }, [ownsSurface, view.key, view.title]);
     const scroll = React.useRef(null);
     const tabScroll = React.useRef(null);

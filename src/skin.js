@@ -194,15 +194,42 @@ body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('workspaceRow')}{f
 /* One outer frame owns the surface; the editor and toolbar share its background.
    No stroke and no focus ring: the host's own card is borderless too, and the card is
    held apart from the page by its drop shadow and the inset top highlight alone. */
-body[data-smooth-skin] [data-composer-card]{--dsw-radius-panel:20px;--dsh-composer-text-max-height:min(300px,40vh);border:0;border-radius:20px;background:var(--smooth-light-wash),var(--dsw-specific-input-major);padding-top:0;gap:0;box-shadow:var(--smooth-light-edge),var(--smooth-shadow-1)}
+/* The composer is two pieces, not one card: a bordered input well on top and a quiet
+   footer row underneath. The well is one continuous border drawn by the card's ::before,
+   so the attached-image rail and the editor share it and no seam ever appears between
+   them; the footer floats on the page ground below the well. The send button is lifted
+   out of that footer into the well's top-right (bottom-right once previews take the top). */
+body[data-smooth-skin] [data-composer-card]{--dsw-radius-panel:20px;--dsh-composer-text-max-height:min(300px,40vh);--smooth-composer-footer-h:38px;position:relative;isolation:isolate;border:0;border-radius:0;background:transparent;padding-top:0;gap:0;box-shadow:none}
+body[data-smooth-skin] [data-composer-card]::before{content:"";position:absolute;z-index:-1;left:0;right:0;top:0;bottom:var(--smooth-composer-footer-h);border:1px solid var(--smooth-line-strong);border-radius:14px;background:var(--dsw-specific-input-major);pointer-events:none}
 body[data-smooth-skin] [data-composer-card]${hostPart('cardWorkspaceTrigger')}{border-style:dashed}
 body[data-smooth-skin] [data-composer-card]${hostPart('cardWorkspaceTrigger')}::after{border:0}
-body[data-smooth-skin] [data-composer-card] ${hostPart('scroll')}{box-sizing:border-box;padding:12px 16px 0;min-height:64px;max-height:var(--dsh-composer-text-max-height);margin:0;border:0;border-radius:0;background:transparent;flex:1 1 auto}
-body[data-smooth-skin] [data-composer-input]{min-height:48px;padding:0;font-size:var(--dsh-content-font-size,14px);line-height:1.65;color:var(--smooth-text)}
-body[data-smooth-skin] [data-composer-card] ${hostPart('placeholder')}{inset:0 0 auto;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset;font-size:var(--dsh-content-font-size,14px);line-height:1.65;color:var(--smooth-muted)}
+body[data-smooth-skin] [data-composer-card] ${hostPart('scroll')}{box-sizing:border-box;padding:12px 54px 12px 14px;min-height:46px;max-height:var(--dsh-composer-text-max-height);margin:0;border:0;border-radius:0;background:transparent;flex:1 1 auto}
+/* Attached previews sit inside the same well, above the placeholder; they carry no border
+   of their own so there is no line beside the image. */
+body[data-smooth-skin] [data-composer-card] ${hostPart('rail')}{box-sizing:border-box;min-width:0;margin:0;padding:10px 12px 0;border:0;border-radius:0;background:transparent;overflow:hidden;contain:layout paint;animation:smooth-composer-open .15s cubic-bezier(.2,0,0,1) both}
+@keyframes smooth-composer-open{from{max-height:0;opacity:0}to{max-height:140px;opacity:1}}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] [data-composer-card] ${hostPart('rail')}{animation:none}}
+body[data-smooth-skin] [data-composer-card] :is(${hostPart('imageItem')},${hostPart('thumbnail')}){width:124px;height:124px;min-width:124px;min-height:124px;max-width:124px;max-height:124px;aspect-ratio:1/1;flex:none;display:block}
+body[data-smooth-skin] [data-composer-card] ${hostPart('thumbnail')}{box-sizing:border-box;padding:0;overflow:hidden;border:0;border-radius:14px}
+body[data-smooth-skin] [data-composer-card] ${hostPart('thumbnail')} img{display:block;width:100%;height:100%;object-fit:cover}
+/* The native rail is a 64px-tall strip: its item wrapper clips a taller preview, which
+   made the square look like a wide letterbox. Let the wrapper grow with the square. */
+body[data-smooth-skin] [data-composer-card] ${hostPart('rail')} ${hostPart('item')}:has(${hostPart('thumbnail')}){height:124px}
+body[data-smooth-skin] [data-composer-input]{min-height:22px;padding:0;font-size:var(--dsh-content-font-size,14px);line-height:1.55;color:var(--smooth-text)}
+body[data-smooth-skin] [data-composer-card] ${hostPart('placeholder')}{inset:0 0 auto;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset;font-size:var(--dsh-content-font-size,14px);line-height:1.55;color:var(--smooth-muted)}
 body[data-smooth-skin] [data-composer-card] [data-composer-placeholder][data-smooth-placeholder]{--smooth-composer-placeholder:"";color:transparent}
-body[data-smooth-skin] [data-composer-card] [data-composer-placeholder][data-smooth-placeholder]::after{position:absolute;inset:0;content:var(--smooth-composer-placeholder);font-size:var(--dsh-content-font-size,14px);color:var(--smooth-muted)}
-body[data-smooth-skin] [data-composer-card] ${hostPart('row')}{box-sizing:border-box;flex:none;min-height:48px;padding:8px 12px;gap:8px;border:0;border-radius:0;background:transparent;font-size:13px;line-height:20px}
+body[data-smooth-skin] [data-composer-card] [data-composer-placeholder][data-smooth-placeholder]::after{position:absolute;inset:0;content:var(--smooth-composer-placeholder);font-size:var(--dsh-content-font-size,14px);line-height:1.55;color:var(--smooth-muted)}
+/* Attachments make the host drop its own placeholder; this fallback keeps the hint in the
+   editor line until the draft has text. */
+body[data-smooth-skin] [data-composer-card] .smooth-composer-fallback{position:absolute;inset:0;pointer-events:none;color:var(--smooth-muted);font-size:var(--dsh-content-font-size,14px);line-height:1.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body[data-smooth-skin] [data-composer-card] .smooth-composer-fallback:not([hidden]){display:block}
+/* The native caret blinks in hard steps and jumps between characters. The plugin draws
+   the bar instead (src/composer.js) and hides the native one only while it is shown. */
+body[data-smooth-skin] [data-composer-card][data-smooth-caret] [data-composer-input]{caret-color:transparent}
+body[data-smooth-skin] [data-composer-card] .smooth-composer-caret{position:absolute;left:0;top:0;z-index:2;width:2px;border-radius:1px;background:var(--smooth-text);pointer-events:none;transition:transform .1s cubic-bezier(.2,0,0,1),height .1s ease;animation:smooth-caret-blink 1.06s ease-in-out infinite}
+@keyframes smooth-caret-blink{0%,42%{opacity:1}50%,92%{opacity:.18}100%{opacity:1}}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] [data-composer-card] .smooth-composer-caret{transition:none;animation:none}}
+body[data-smooth-skin] [data-composer-card] ${hostPart('row')}{box-sizing:border-box;flex:none;justify-content:flex-start;min-height:36px;padding:6px 12px 0 4px;gap:8px;border:0;border-radius:0;background:transparent;font-size:13px;line-height:20px}
 body[data-smooth-skin] [data-composer-card] :is(${hostPart('tools')},${hostPart('modes')},${hostPart('trailing')},${hostPart('standardControls')}){gap:8px}
 body[data-smooth-skin] [data-composer-card] ${hostPart('accessory')}{border-bottom:1px solid var(--smooth-line);padding:9px 16px;color:var(--smooth-muted)}
 /* The welcome page and a conversation show the same card on the same ground: the host
@@ -217,6 +244,17 @@ body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}{background:va
 body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}:hover:not(:disabled){background:color-mix(in srgb,var(--smooth-accent) 85%,var(--smooth-text))}
 body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}:active:not(:disabled){transform:scale(.94)}
 body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}:disabled{background:var(--smooth-surface-3);color:var(--smooth-muted);opacity:.6;cursor:default}
+/* The send key lives in the input well's top-right corner, not in the footer: the last
+   primary button in the trailing group is the send/queue key, so it is lifted out of the
+   row and pinned over the well. It keeps the skin's accent ball: a 32px round key. A stop
+   key rendered while a turn runs sits before it and stays in the footer. */
+body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type{position:absolute;top:auto;bottom:calc(var(--smooth-composer-footer-h) + 7px);right:8px;z-index:3;width:32px;height:32px;border:0;border-radius:50%;background:var(--smooth-accent);color:var(--smooth-ink);box-shadow:none;transform:none}
+body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type:hover:not(:disabled){background:color-mix(in srgb,var(--smooth-accent) 85%,var(--smooth-text))}
+body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type:disabled{background:var(--smooth-surface-3);color:var(--smooth-muted);opacity:.6}
+/* The host's own bottom dock (the three status groups: rounds/steps and tok/s, the token
+   total with its cache hit rate, and the context ring) stays where it was rendered, under
+   the card and centred. The card's footer only owns the controls, so the model selector
+   keeps the right end of that row. */
 body[data-smooth-skin] .smooth-composer-model{display:flex;align-items:center;min-width:0;max-width:100%;font-size:13px;line-height:20px}
 body[data-smooth-skin] .smooth-composer-model button{height:32px;min-height:32px;font-size:inherit;line-height:20px;padding-block:0}
 body[data-smooth-skin] .smooth-model-effort{display:flex;flex-direction:column;align-items:stretch;gap:0;width:100%;min-width:0;max-width:100%}
@@ -550,7 +588,10 @@ body[data-smooth-skin]{
   --smooth-rail-button-size:calc(38 * var(--smooth-l));--smooth-rail-icon-size:calc(24 * var(--smooth-l));--smooth-rail-button-radius:calc(12 * var(--smooth-l));
   --smooth-rail-inset:calc((var(--smooth-rail-width) - var(--smooth-rail-button-size)) / 2);
   --smooth-rail-gap:calc(9 * var(--smooth-l));
-  --smooth-caption:48px;--dsh-windows-titlebar-height:var(--smooth-caption);
+  /* The tab strip takes the host's own caption height (40px in the desktop app) instead
+     of a taller fixed caption: the tabs keep their size, the strip's extra whitespace
+     disappears, and the rail keeps the same 4-unit gap under the strip. */
+  --smooth-caption:var(--dsh-windows-titlebar-height,40px);
   --smooth-rail-top:calc(var(--smooth-caption) + 4 * var(--smooth-l));
   --smooth-rail-panels-top:calc(var(--smooth-rail-top) + var(--smooth-rail-button-size) + var(--smooth-rail-gap));
 }
@@ -640,7 +681,6 @@ body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('titleGroup')}::be
 body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow')}{position:relative;gap:9px;display:none}
 body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow')}::before{content:"工作区";color:var(--smooth-muted)}
 body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow')}::after{content:"在这里开始新的对话。";position:absolute;left:0;right:0;top:calc(100% + 3px);text-align:center;color:var(--smooth-muted);font-size:13px;line-height:18px;pointer-events:none}
-body[data-smooth-skin] ${hostPart('composerHero')} [data-composer-card]:has(.smooth-composer-meta){padding-top:34px}
 /* The host's home surface — no session, panel or settings is showing — has nothing to
    type into yet: the headline stays and the card goes. The browser half publishes the flag
    from the host's current view (the data-smooth-home attribute, src/layout.js), so it also
@@ -653,19 +693,32 @@ body[data-smooth-skin] ${hostPart('composerHero')} [data-composer-card]:has(.smo
 body[data-smooth-skin][data-smooth-home] ${hostPart('composerHero')} [data-composer-card]{display:none}
 body[data-smooth-skin]:not([data-smooth-home]) ${hostPart('composerHero')}{animation:smooth-welcome-in .26s cubic-bezier(.2,0,0,1) both}
 @keyframes smooth-welcome-in{from{opacity:0}to{opacity:1}}
-body[data-smooth-skin] .smooth-composer-meta{position:absolute;top:0;left:0;right:0;box-sizing:border-box;height:34px;padding:0 14px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--smooth-line);border-radius:19px 19px 0 0;background:color-mix(in srgb,var(--smooth-surface-3) 50%,var(--dsw-specific-input-major));font-size:12px;line-height:18px;color:var(--smooth-muted);pointer-events:auto}
-body[data-smooth-skin] :is(.smooth-meta-workspace,.smooth-meta-branch){max-width:30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-body[data-smooth-skin] .smooth-meta-branch{display:inline-flex;align-items:center;gap:6px}
+/* The workspace/branch line rides just above the input well, aligned with its left edge;
+   the footer row keeps only the native controls, with the model selector on the right. */
+body[data-smooth-skin] .smooth-composer-meta{position:absolute;left:0;right:0;top:-28px;display:flex;align-items:center;gap:6px;min-width:0;color:var(--smooth-muted);font-size:12px;line-height:18px;pointer-events:none}
+body[data-smooth-skin] [data-composer-card]:has(.smooth-composer-meta){margin-top:34px}
+body[data-smooth-skin] .smooth-composer-meta .smooth-meta-button{pointer-events:auto}
+body[data-smooth-skin] .smooth-composer-meta svg{width:13px;height:13px;flex:none}
+body[data-smooth-skin] .smooth-composer-meta :is(.smooth-meta-workspace,.smooth-meta-branch){max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body[data-smooth-skin] .smooth-composer-meta .smooth-meta-button{max-width:170px;height:20px;margin:0;padding:0 5px;border-radius:6px}
+body[data-smooth-skin] .smooth-composer-meta .smooth-meta-preset{display:inline-flex;align-items:center;min-width:0;max-width:170px}
+body[data-smooth-skin] .smooth-composer-meta .smooth-composer-preset button{height:20px;min-height:20px;padding:0 5px;border-radius:6px;gap:4px;font-size:12px;line-height:18px;font-weight:400;color:inherit;pointer-events:auto}
+body[data-smooth-skin] .smooth-composer-meta .smooth-composer-preset button>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body[data-smooth-skin] :is(.smooth-meta-workspace,.smooth-meta-branch){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body[data-smooth-skin] .smooth-meta-branch{display:inline-flex;align-items:center;gap:5px}
 body[data-smooth-skin] .smooth-meta-host{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
-body[data-smooth-skin] .smooth-meta-button{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:30%;margin:0 -4px;padding:2px 6px;border:0;border-radius:7px;background:transparent;color:inherit;font:inherit;line-height:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+body[data-smooth-skin] .smooth-meta-button{display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:170px;margin:0;padding:2px 5px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;line-height:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 body[data-smooth-skin] .smooth-meta-button>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-smooth-skin] .smooth-meta-button:hover{background:var(--smooth-surface-3);color:var(--smooth-text)}
 body[data-smooth-skin] .smooth-meta-button:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:-2px}
 body[data-smooth-skin] .smooth-meta-divider{flex:none;height:12px;width:1px;background:var(--smooth-line)}
-body[data-smooth-skin] [data-smooth-permission-seat]{margin-left:auto;flex:none}
-body[data-smooth-skin] .smooth-composer-permission button{height:26px;min-height:26px;padding:0 7px;border-radius:8px;background:transparent;font-size:12px;line-height:18px;gap:5px}
-body[data-smooth-skin] .smooth-composer-permission button:hover:not(:disabled){background:var(--smooth-surface-3)}
-body[data-smooth-skin] .smooth-composer-permission svg{width:14px;height:14px}
+/* The access mode and plan live natively in the row's modes group, right beside the add
+   button: keep them as one quiet line of text, not as card furniture. The mode leads and
+   the plus follows, the way the reference footer reads. */
+body[data-smooth-skin] [data-composer-card] ${hostPart('tools')} ${hostPart('modes')}{order:-1}
+body[data-smooth-skin] [data-composer-card] ${hostPart('modes')} :is(button,[role="button"]){height:28px;min-height:28px;padding:0 6px;border:0;border-radius:8px;background:transparent;color:var(--smooth-text);font-size:13px;line-height:18px;gap:5px;cursor:pointer}
+body[data-smooth-skin] [data-composer-card] ${hostPart('modes')} :is(button,[role="button"]):hover:not(:disabled){background:var(--smooth-surface-3);color:var(--smooth-text)}
+body[data-smooth-skin] [data-composer-card] ${hostPart('modes')} svg{width:14px;height:14px}
 body[data-smooth-skin] .smooth-git-menu{position:fixed;z-index:1200;box-sizing:border-box;display:flex;flex-direction:column;gap:4px;max-height:min(420px,calc(100vh - 24px));padding:8px;border:1px solid var(--smooth-line);border-radius:14px;background:color-mix(in srgb,var(--smooth-surface-3) 80%,var(--dsw-specific-input-major));box-shadow:0 18px 48px rgba(0,0,0,.38);color:var(--smooth-text);font-size:13px;line-height:20px;overflow:auto}
 body[data-smooth-skin] .smooth-git-heading{padding:4px 8px 2px;color:var(--smooth-muted);font-size:12px}
 body[data-smooth-skin] .smooth-git-search{box-sizing:border-box;width:100%;height:32px;margin:2px 0 4px;padding:0 10px;border:1px solid var(--smooth-line);border-radius:9px;background:var(--dsw-specific-input-major);color:var(--smooth-text);font:inherit;outline:none}
@@ -829,7 +882,6 @@ body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]:hover{backgro
    selection fill there — the same soft blue every other selected row gets. */
 body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab[data-selected="true"]{background-color:var(--smooth-selected)}
 body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-selected) 94%,var(--smooth-text))}
-body[data-smooth-skin] .smooth-composer-meta{background-image:var(--smooth-light-wash);box-shadow:var(--smooth-light-edge)}
 body[data-smooth-skin] :is(.smooth-workspace-tab,.smooth-rail-home,.smooth-rail-plugins),
 body[data-smooth-skin] ${hostPart('sidebarCol')} :is(${hostPart('newSession')},${hostPart('panelRow')}),
 body[data-smooth-skin] [data-composer-card] ${hostPart('add')},

@@ -57,6 +57,113 @@ function installComposerHint(placeholder, prompts, prompt) {
   return () => { observer.disconnect(); restore(); };
 }
 
+/** With attachments present the host does not render the native placeholder at all, so
+ * the compact hint has nothing to style. Draw a plugin-owned line inside the editor's own
+ * box instead, shown only while the editor is empty and the native placeholder is absent. */
+function installComposerFallbackHint(input, prompt) {
+  const grow = input?.parentElement;
+  const card = input?.closest?.('[data-composer-card]');
+  if (!grow || !card || typeof document === 'undefined') return undefined;
+  const fallback = document.createElement('span');
+  fallback.className = 'smooth-composer-fallback';
+  fallback.setAttribute('aria-hidden', 'true');
+  fallback.textContent = prompt;
+  fallback.hidden = true;
+  grow.append(fallback);
+  const update = () => {
+    const native = card.querySelector('[data-composer-placeholder]');
+    const empty = String(input.textContent || '').replace(/[\u200b\u00a0\s]/g, '') === ''
+      && input.querySelector('img, [contenteditable="false"]') === null;
+    fallback.hidden = Boolean(native) || !empty || input.getAttribute('aria-disabled') === 'true';
+  };
+  update();
+  const editor = new MutationObserver(update);
+  editor.observe(input, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-disabled'] });
+  const surface = new MutationObserver(update);
+  surface.observe(card, { childList: true, subtree: true });
+  return () => { editor.disconnect(); surface.disconnect(); fallback.remove(); };
+}
+
+/** A native caret cannot be animated, so one is drawn for the composer: the real caret is
+ * hidden only while the selection sits in the editor, and the plugin's bar glides between
+ * caret positions and fades its blink. While an IME composes, the caret rides the end of
+ * the composition text so pinyin input gets the same smooth bar. */
+function installSmoothCaret(input) {
+  const grow = input?.parentElement;
+  const card = input?.closest?.('[data-composer-card]');
+  if (!grow || !card || typeof document === 'undefined' || typeof window === 'undefined' || typeof window.getSelection !== 'function') return undefined;
+  const scroller = input.closest?.('[data-input-scroll]') || null;
+  const caret = document.createElement('span');
+  caret.className = 'smooth-composer-caret';
+  caret.setAttribute('aria-hidden', 'true');
+  caret.hidden = true;
+  let placed = false;
+  let composing = false;
+  let frame = 0;
+  const nativeCaret = (on) => {
+    if (on) card.removeAttribute('data-smooth-caret');
+    else card.setAttribute('data-smooth-caret', '');
+  };
+  const hide = () => { caret.hidden = true; };
+  const update = () => {
+    frame = 0;
+    if (document.activeElement !== input) { hide(); nativeCaret(true); return; }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) { hide(); nativeCaret(true); return; }
+    let range = selection.getRangeAt(0);
+    // Composing keeps a range over the pinyin; the caret belongs at its end.
+    if (!selection.isCollapsed) {
+      if (!composing) { hide(); nativeCaret(true); return; }
+      range = range.cloneRange();
+      range.collapse(false);
+    }
+    if (!input.contains(range.startContainer)) { hide(); nativeCaret(true); return; }
+    const host = grow.getBoundingClientRect();
+    let rect = range.getBoundingClientRect();
+    if ((!rect || !rect.height) && range.startContainer.nodeType === 1) rect = range.startContainer.getBoundingClientRect();
+    if (!rect || !rect.height) {
+      const parent = range.startContainer.parentElement;
+      rect = parent ? parent.getBoundingClientRect() : null;
+    }
+    if (!rect || !rect.height) { hide(); nativeCaret(true); return; }
+    nativeCaret(false);
+    if (!placed) caret.style.transition = 'none';
+    caret.style.transform = `translate(${Math.round(rect.left - host.left)}px,${Math.round(rect.top - host.top)}px)`;
+    caret.style.height = `${Math.round(rect.height)}px`;
+    caret.hidden = false;
+    if (!placed) {
+      placed = true;
+      window.requestAnimationFrame(() => { caret.style.transition = ''; });
+    }
+  };
+  const schedule = () => {
+    if (!frame && typeof window.requestAnimationFrame === 'function') frame = window.requestAnimationFrame(update);
+  };
+  const onCompositionStart = () => { composing = true; schedule(); };
+  const onCompositionEnd = () => { composing = false; schedule(); };
+  document.addEventListener('selectionchange', schedule);
+  for (const event of ['input', 'keyup', 'mouseup', 'focus', 'blur']) input.addEventListener(event, schedule);
+  input.addEventListener('compositionstart', onCompositionStart);
+  input.addEventListener('compositionupdate', schedule);
+  input.addEventListener('compositionend', onCompositionEnd);
+  scroller?.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+  grow.append(caret);
+  schedule();
+  return () => {
+    document.removeEventListener('selectionchange', schedule);
+    for (const event of ['input', 'keyup', 'mouseup', 'focus', 'blur']) input.removeEventListener(event, schedule);
+    input.removeEventListener('compositionstart', onCompositionStart);
+    input.removeEventListener('compositionupdate', schedule);
+    input.removeEventListener('compositionend', onCompositionEnd);
+    scroller?.removeEventListener('scroll', schedule);
+    window.removeEventListener('resize', schedule);
+    if (frame) window.cancelAnimationFrame(frame);
+    nativeCaret(true);
+    caret.remove();
+  };
+}
+
 /** The hero workspace chip is the native picker's owner: it keeps the open state and
  * the anchor ref. The metadata bar re-points that anchor at its own chip, then clicks
  * the native control, so the real picker (workspace list + directory flow) opens. */
@@ -818,8 +925,11 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     }, h(ui.IconBranchOutlineRegular, { size: 16, 'aria-hidden': true }), h('span', null, branchLabel));
     return h(React.Fragment, null,
       createPortal(h('div', { className: 'smooth-composer-meta' },
-        workspaceControl, git,
-        h('div', { 'data-smooth-permission-seat': '' })), card),
+        workspaceControl,
+        git ? h('span', { className: 'smooth-meta-divider', 'aria-hidden': true }) : null,
+        git,
+        git ? h('span', { className: 'smooth-meta-divider', 'aria-hidden': true }) : null,
+        h('div', { className: 'smooth-meta-preset', 'data-smooth-preset-seat': '' })), card),
       row && branchText && createPortal(h('span', { className: 'smooth-hero-branch' }, h('span', { 'aria-hidden': true }, '/'), branchText), row),
       menu && createPortal(h(GitMenu, {
         kind: menu.kind, anchor: menu.anchor, cwd,
@@ -832,15 +942,30 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
   function ComposerHint(props) {
     const skin = useSmoothState();
     const target = useTarget('[data-composer-card] [data-composer-placeholder]');
+    const input = useTarget('[data-composer-card] [data-composer-input]');
     const heroPrompt = props.t('placeholder.hero');
     const normalPrompt = props.t('placeholder.default');
     const shortPrompt = text('composer.placeholder', '描述任务，/ 调用指令，@ 引用文件或对话');
     React.useEffect(() => {
       if (skin.state.enabled) return installComposerHint(target, [heroPrompt, normalPrompt], shortPrompt);
     }, [target, heroPrompt, normalPrompt, shortPrompt, skin.state.enabled]);
+    // The host drops its placeholder element while attachments exist; keep the hint on
+    // screen with the plugin-owned fallback until the draft gets text.
+    React.useEffect(() => {
+      if (skin.state.enabled) return installComposerFallbackHint(input, shortPrompt);
+    }, [input, shortPrompt, skin.state.enabled]);
     return null;
   }
   disposers.push(slots.inject('conversation.input.overlay', () => slots.register({ name: 'conversation.input.overlay', id: `${PLUGIN_ID}.hint`, order: -90, locale: 'conversation' }, ComposerHint)));
+  function ComposerCaret() {
+    const skin = useSmoothState();
+    const input = useTarget('[data-composer-card] [data-composer-input]');
+    React.useEffect(() => {
+      if (skin.state.enabled) return installSmoothCaret(input);
+    }, [input, skin.state.enabled]);
+    return null;
+  }
+  disposers.push(slots.inject('conversation.input.overlay', () => slots.register({ name: 'conversation.input.overlay', id: `${PLUGIN_ID}.caret`, order: -80 }, ComposerCaret)));
   function decorate(name, wrap, offset = -10) {
     return slots.inject(name, () => {
       let native;
@@ -885,7 +1010,10 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
   disposers.push(slots.inject('conversation.input.right', () => slots.register({
     name: 'conversation.input.right', id: `${PLUGIN_ID}.model`, order: 20,
   }, ModelPanelHost)));
-  disposers.push(relocate('conversation.hero.agentPreset', `${hero} [data-composer-card] ${hostPart('tools')}`, 'smooth-composer-preset'));
-  disposers.push(relocate('conversation.input.permission', `${hero} [data-smooth-permission-seat]`, 'smooth-composer-permission'));
+  // The mode selector appears in two different slots depending on whether the welcome
+  // page already owns a draft session: the hero slot when it does not, the generic left
+  // slot when it does. Both are pointed at the same seat in the metadata line.
+  disposers.push(relocate('conversation.hero.agentPreset', `${hero} [data-smooth-preset-seat]`, 'smooth-composer-preset'));
+  disposers.push(relocate('conversation.input.left', `${hero} [data-smooth-preset-seat]`, 'smooth-composer-preset'));
   return () => { for (const dispose of disposers.reverse()) dispose?.(); };
 }
