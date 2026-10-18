@@ -1,6 +1,6 @@
 # Smooth
 
-DSH 界面美化插件，依据 `样例图/index.html`、`settings.html` 及预期截图调整侧栏、顶部标签、欢迎区、双层输入卡片和整页设置；插件页沿用原生页面，仅调整页面背景。图标使用宿主原生组件，导航和主题切换调用宿主接口。关闭皮肤后恢复原生样式和外观选项；侧栏若已被手动拖动，则保留手动宽度。
+DSH 界面美化插件，依据 `assets/样例图/index.html`、`settings.html` 及预期截图调整侧栏、顶部标签、欢迎区、双层输入卡片和整页设置；插件页沿用原生页面，仅调整页面背景。图标使用宿主原生组件，导航和主题切换调用宿主接口。关闭皮肤后恢复原生样式和外观选项；侧栏若已被手动拖动，则保留手动宽度。
 
 ## 外观
 
@@ -31,11 +31,12 @@ DSH 界面美化插件，依据 `样例图/index.html`、`settings.html` 及预�
 
 应用外壳与滚动条、图标栏与会话树、会话胶囊标签、整页设置与表单控件、插件管理页、输入框卡片、欢迎页、对话气泡、弹层与菜单。没有复制参考 HTML 的 SVG、图标字体或示例数据。首页房子、账号用量与帮助图标使用简短的本地 SVG，其余复用宿主图标。会话名称、工作区和插件列表来自宿主，会话树沿用当前已安装的 Codex UI 插件。欢迎页沿用宿主自己的堆叠与占比：标题（含原生「预览版」徽标）、工作区胶囊、输入卡片依次排列，卡片宽度由宿主 `--dsh-composer-card-max-width` 决定（与对话中同一个上限）。皮肤不再手工摆位——早期版本把标题、工作区行和卡片各自绝对定位（`40.65%` 系列偏移、卡片钉在下半屏并压到 150px 高、`max-width:none`），这些**位置**规则已删除，改为在 `[data-conversation-scroll]` 与 `[data-composer-seat]` 上显式 `justify-content:center`，所以整块在窗口里居中且占比与参考图一致。皮肤自己的文案只留下标题里的产品名前缀：那一行工作区（皮肤的「工作区」标签 + 原生工作区选择器 + 它带的分支）连下面那行「在这里开始新的对话。」都不画——卡片自己的信息栏已经写了工作区与分支，那一行只是重复一遍。隐藏写在 `heroWorkspaceRow` 上（`display:none`，其 `::after` 随之消失），而「工作区」标签与那句话的规则仍留在源码里，改一行就能把整行放回来。欢迎页另按「有没有标签页」分两种状态：标签账本为空时（应用刚启动、没有任何会话，或标签全被关掉）只有标题，输入卡片不画；一旦存在会话/面板/设置标签，卡片以 `.26s` 淡入（减少动态效果时不播）。开关由浏览器半按自己的标签账本发布在 `body[data-smooth-no-tabs]`（`src/layout.js`），样式在 `src/skin.js` 读它，关掉皮肤时随皮肤一并撤掉。输入卡片是按它自己的 `data-composer-card` 属性选中的，不依赖它在宿主里的层级——宿主把 composer 挂在自己的 slot 包装层里，子代选择器会漏掉它。
 
+标题下方那张用量面板只出现在**标签全关掉的落地页**（`body[data-smooth-no-tabs]`，和隐藏输入卡片是同一个开关）：新建会话的欢迎页仍只有标题与卡片，不画这块。它照 `dsh-claude-style` 的 Studio 用量卡来做：一张 12px 内边距、12px 圆角的卡（宽 `min(560px, 100%)`，居中在标题下），卡头左边是「概览 / 模型」两个标签、右边是「全部 / 30 天 / 7 天」三段区间；概览页先排六格数字——会话数、消息数、Token 总量、活跃天数、高峰时段、最常用模型（3 列 × 2 行，窄窗口降到 2 列），再是 26 周 × 7 天的热力图（周日起始，`grid-auto-columns:1fr` 让格子随卡宽保持正方形、间距 3px、圆角 3px），最后一句「你的 Token 用量相当于 N 本《…》」。热力图的四档亮度是**当天占窗口内最高一天的比例**（`20% / 40% / 65% / 100%` 混合 `--smooth-heat`，空白天是 `--smooth-text` 的 11%），所以忙季和淡季能分开；单元格悬停用 `::after` 显示「日期 — X Token」，最左、最右三列把浮层贴边对齐，避免被窗口裁掉；加载中整块画成 5% 高的骨架并轻微呼吸，解析失败（没有 Host 桥）则整块不画。模型页是同一份数据按 token 排序的列表：色块（按名次的蓝色阶梯）、模型名、token 数、占比，超过 6 行折叠成「再显示 N 个」。所有数字沿用宿主状态栏的 k/M/B 一位小数计数，计数类用千分位。数据来自 Host 半的 `usage` 动作：只读扫描 `$DSH_HOME/sessions/` 下每个会话日志（JSONL，逐批次 zstd 帧），按 `assistant/message` 结算折叠成「本地日 → {四类 token, 消息数, 24 小时直方图, 按模型 token}」，同一 (turn, step) 的再次结算只算最后一次（和宿主 token 投影的规则一致）；会话 id 取自日志所在的会话目录，所以「会话数」是区间内去重后的真实会话数，「高峰时段」取 24 小时直方图的峰值小时（`上午 5 点` / `下午 5 点`），「最常用模型」按 token 取第一名。日志按 (size, mtime) 缓存到 `$DSH_HOME/cache/smooth-usage-v2.json`，只重新解码写过的那些。
 账号菜单在原生 `settings.launcher` 上增加头像资料、“剩余用量”和帮助入口，并按参考图排列，字号跟随内容区。点击“剩余用量”后，余额面板在该项下方展开，右侧箭头旋转向下，再次点击收起；充值余额四舍五入显示两位小数，赠金钱包为空或为零时隐藏，有赠金时保留其小数精度，不合并不同币种。金额按十进制字符串处理，不改变接口原始数据。打开菜单和展开时刷新，支持手动重试；读取失败不冒充零余额。账号资料和登录状态来自原生 account store，不写死昵称或 Plus 套餐。设置、反馈、登录、退出确认和账号通知仍由原生组件处理；关闭皮肤后撤销覆盖。
 
 首页通过宿主 `remote.workspaceFiles.read()` 读取当前会话工作区的 `.git/HEAD`，支持子目录、worktree 和 detached HEAD；切换工作区立即清除旧分支，聚焦窗口及每 30 秒刷新。读取失败或无 Git 仓库时不显示分支。宿主未公开完整的 Git status 接口，因此不展示待暂存文件数量。语音输入按钮沿用语音插件的原生插槽，仅在宿主提供该功能时出现。
 
-输入框**没有描边**：宿主的卡片本身就是 `border:0` + 柔光投影，皮肤不再另加一层边框，靠外投影与顶部内高光把它托起来；聚焦时也没有强调色描边或反光（`：focus-within` 规则已删），光标与卡片本身的位置就是反馈。欢迎页与对话中用的是同一个卡片：同一圆角、同一底色、文本区最小高度统一为 48px，占位提示两处都是单行省略（宿主在欢迎页原本会折成两行），对话中卡片下方那条渐隐也改为收到本皮肤的地板色而不是宿主基色，两个场景因此是同一块面。顶部信息栏高 34px，卡片高度交给宿主自己的排版（欢迎页的栈宽与卡片上限都取 `--dsh-composer-card-max-width`，皮肤不再给它 150px 的最小高度）。文本区随内容增高，最高 300px（小窗口不超过 40vh），同时受页面剩余高度限制，超出后内部滚动。模式与模型入口统一为 13px、32px 高，发送按钮空内容时灰显、可用时为主题蓝。普通占位提示缩短为“描述任务，/ 调用指令，@ 引用文件或对话”；工作区选择、不可用、计划和运行状态提示仍沿用原生内容。信息栏里的工作区、分支都是按钮：工作区按钮复用宿主隐藏的 WorkspaceChip 与原生 picker（并把锚点改到可见按钮上）；分支按钮打开 Git 菜单，支持搜索、切换分支、创建并检出新分支，当前分支下显示未提交文件数。两个入口由 Host 半的私有 `/smooth-skin/git` 监听提供：固定 `git` argv、每次激活生成的能力令牌、只接受带令牌的本地请求；Host 半更新后需重启 DSH，未加载时分支按钮回退为复制分支名。编辑器、附件、发送与停止、模型选择继续由原生组件处理。设置页里的表单控件（原生下拉与插件自己的数字输入）聚焦时保留一圈中性色（`--smooth-line-strong` / `border-l3`）而不是品牌蓝，键盘导航仍然看得见焦点。
+输入框**没有描边**：宿主的卡片本身就是 `border:0` + 柔光投影，皮肤不再另加一层边框，靠外投影与顶部内高光把它托起来；聚焦时也没有强调色描边或反光（`：focus-within` 规则已删），光标与卡片本身的位置就是反馈。欢迎页与对话中用的是同一个卡片：同一圆角、同一底色、文本区最小高度统一为 48px，占位提示两处都是单行省略（宿主在欢迎页原本会折成两行），对话中卡片下方那条渐隐也改为收到本皮肤的地板色而不是宿主基色，两个场景因此是同一块面。顶部信息栏高 34px，卡片高度交给宿主自己的排版（欢迎页的栈宽与卡片上限都取 `--dsh-composer-card-max-width`，皮肤不再给它 150px 的最小高度）。文本区随内容增高，最高 300px（小窗口不超过 40vh），同时受页面剩余高度限制，超出后内部滚动。模式入口保持 13px、32px 高；模型入口保留原生紧凑控件（模型名 + 1017 徽标 + 当前 High + 右侧箭头），点击时在它上方展开一张面板：面板内容是模型名（点它滑到模型列表页）和一条不带刻度文字的思考强度滑杆，当前挡位（Off/Low/High/Max）显示在模型名上方，切换时轻微上浮淡入一次；蓝色填充到选中挡位，拖动经过挡位或点轨道时即时通过宿主模型目录写入 `reasoningEffort`，松手只补一次最终确认，不再等防抖计时。原生模型菜单被这张面板替换：面板有两页——思考强度页和模型列表页，点模型名时两页像账号菜单滑出帮助页那样横向淡入淡出（`opacity .2s` + `translateX 14px`、`.26s` 高度过渡，面板高度跟着当前页走），选中模型、按返回或 Esc 再滑回强度页；滑杆轨道、填充、滑块和每个挡位的浅色小点使用独立的 `--smooth-model-track/blue/thumb/dot` 双色 token：浅色是浅轨深蓝，深色是深轨亮蓝。滑块放大到 28px，滑块本身是一颗跟随挡位滑动的球：原生滑块只保留命中区域并隐藏绘制；`--smooth-model-ratio`（0–1，用 `@property` 注册成可动画的 `<number>`）同时决定蓝色填充宽度和球的 `left`，点轨道或按方向键时只对这**一个数**做 300ms 缓动，填充边缘和球因此在每一帧都重合（填充按轨道内宽算，减掉左右各 1px 边框，正好停在球心），不会出现球到了、蓝条还在半路的情况；按住拖动时滑杆容器关掉这段过渡，填充和球一起直接跟手。按下有平滑缩放和阴影过渡，每个挡位在轨道上有一个浅色小点；小点画在蓝色填充之上、滑块之下：已填过的挡位仍能看到小点，滑块只盖住它正停住的那个挡位点。发送按钮空内容时灰显、可用时为主题蓝。普通占位提示缩短为“描述任务，/ 调用指令，@ 引用文件或对话”；工作区选择、不可用、计划和运行状态提示仍沿用原生内容。信息栏里的工作区、分支都是按钮：工作区按钮复用宿主隐藏的 WorkspaceChip 与原生 picker（并把锚点改到可见按钮上）；分支按钮打开 Git 菜单，支持搜索、切换分支、创建并检出新分支，当前分支下显示未提交文件数。两个入口由 Host 半的私有 `/smooth-skin/git` 监听提供：固定 `git` argv、只接受带令牌的本地请求，令牌**跨激活保留**（写在 `$DSH_HOME/cache/smooth-bridge-token`：页面手里的那份不会因为重新激活、重建或重启而失效，否则旧页面会被 403 挡在门外直到刷新）；Host 半更新后需重启 DSH，未加载时分支按钮回退为复制分支名。编辑器、附件、发送与停止继续由原生组件处理。设置页里的表单控件（原生下拉与插件自己的数字输入）聚焦时保留一圈中性色（`--smooth-line-strong` / `border-l3`）而不是品牌蓝，键盘导航仍然看得见焦点。
 
 整页设置里，顶部标签条就是离开设置的通道（点标签、点「主页面」、按 Esc 都行），所以原生那枚关闭 ✕ 被去掉：它紧贴在页面自己的动作按钮（例如「通用设置」右上角的「打开配置文件」）右边，看起来像同一颗按钮上粘了个叉。参考图里那个位置本来也没有 ✕。除此之外皮肤不隐藏任何宿主内容：`display:none` 只出现在参考图里同样不可见的装饰性预览徽标、插件自己可折起的余额面板，以及这枚关闭按钮上。
 
@@ -43,7 +44,7 @@ DSH 界面美化插件，依据 `样例图/index.html`、`settings.html` 及预�
 
 ## 工作机制
 
-- **Host 半**（`lib/index.js`）：**只订阅一个事件，不读任何服务**。Cordis 对未写进 `inject` 的服务名会直接抛 `cannot get property "..." without inject`，而事件不需要 `inject`，所以这一半仍然只导出对象形态插件 `{ name, inject: [], apply }`，`apply` 里仅 `ctx.on('webserver/index-inject', …)` 把启动动画的三行（`style` / `html` / `script`）推进每份 index 的注入表，监听器随插件一起释放。它不读状态、不写文件、不碰 React 树；行必须是可 JSON 序列化的纯数据，因为静态部署会用同一张表。
+- **Host 半**（`lib/index.js`）：**不读任何服务**。Cordis 对未写进 `inject` 的服务名会直接抛 `cannot get property "..." without inject`，而事件不需要 `inject`，所以这一半仍然只导出对象形态插件 `{ name, inject: [], apply }`，`apply` 里仅 `ctx.on('webserver/index-inject', …)` 把启动动画的三行（`style` / `html` / `script`）和桥接地址/能力令牌推进每份 index 的注入表，监听器随插件一起释放。它不读状态、不碰 React 树；行必须是可 JSON 序列化的纯数据，因为静态部署会用同一张表。另有一个私有回环监听（`/smooth-skin/git`）：`status` / `checkout` 两个 Git 动作，以及落地页用量表的 `usage` 动作（只读扫描会话日志，见上文）；只接受带本次激活令牌的 POST，插件释放时关闭。
 - **Client 半**（`lib/client.js`）：注册 `settings.section` 页面、注入作用域样式表（自带 `data-plugin` 标记，避免被其他插件的热替换清理）、按状态调用 `theme.overrideTokens()`，并用 `body[data-smooth-skin]` 作为样式门控。状态存在浏览器 `localStorage`（键 `dsh-smooth-skin:state`），不经过任何 Host 通道。
 - Client 产物显式导出 `name` / `inject` / `apply`；服务 `theme` / `slots` / `locale` / `layout` / `uiWorkspace` / `remote` / `remote.workspaceFiles` 均声明在 `inject` 中，manifest 同时列出相应提供模块和设置、会话模块。
 - 首页权限选择通过 React portal 放入输入框顶部，模式选择放入底部；重新注册原生组件时保留它的全部注册选项（`locale`、`store`、`inject`、`children` 以及宿主后续新增的字段，只排除会冲突的 `id` 并调整 `priority`/`registrant`）和确认交互。`children` 不能丢：DSH 0.2.1 的模型选择用它在 `conversation.input.model.label` 下声明子插槽，丢了 `renderSlot` 会变成 `undefined`。关闭皮肤时撤销插槽覆盖和 portal，恢复原生位置；不手动搬移宿主 React 管理的 DOM。
@@ -61,6 +62,8 @@ node build.mjs                # 生成 lib/index.js 与 lib/client.js
 node build.mjs --watch        # 监听 src/ 增量重建
 node tools/activate-host.mjs  # 激活试验台
 node tools/export-icons.mjs   # 从 src/boot.js 导出 assets/whale.svg
+python tools/prepare-think.py # 从 assets/think/*.png 生成抠好的 cutout/*.webp（换图时才需要）
+node tools/export-think.mjs   # 把 cutout 内联进 src/think.js（浏览器端无法运行时读文件）
 node tools/startup-profile.mjs # 启动耗时与载荷剖析（改造前后对比用）
 node tools/host-contract.mjs  # 更新 DSH 后核对宿主的类名、属性、插槽、令牌与方法
 node --test tests/*.test.mjs
@@ -76,8 +79,13 @@ node --test tests/*.test.mjs
 
 `src/shared.js` 被打包进两个产物，是配色与状态规范化的唯一来源。
 
+思考强度面板的插图走一条和鲸鱼相同的“导出 → 内联”链路：`tools/prepare-think.py` 读取 `assets/think/<名字>-Off/Low/High/Max.png`，**优先使用源图自带的透明通道**（透明区里残留的白/黑 RGB 不会被当成底色而保留成不透明块），只有源图被压平成不透明背景时才从边框泛洪抠掉白色或黑色（角色内部的同色区域保留），再按文件名后缀生成 780px 宽的直通 alpha WebP 到 `assets/think/cutout/`；`tools/export-think.mjs` 再把它 base64 内联成 `src/think.js` 的 `THINK_ART`，`build.mjs` 把这份常量拼进 `lib/client.js`。`--check` 只核对不写入，`tests/think.test.mjs` 断言四张图存在、确实是 WebP、体积受限且与 cutout 逐字节一致——换图后忘了导出会直接测试失败。面板打开时按当前挡位显示对应插图（先匹配思考挡位 id，匹配不到按位置换算），拖动或点标签换挡时四张图常驻在 DOM 里交叉淡入。插图只属于 DeepSeek：只有模型目录里 DeepSeek、DeepSeek Account 这两组的模型才显示这块背景，其它 provider（例如 xiaomi）保持没有插图的纯面板；挡位文字和滑杆对所有带 reasoning 的模型照常显示。整块背景（插图连同底部虚化）比媒体区顶边低 6px，图片和渐变一起下移，不会出现“只有图动了、虚化没动”。
+
 `tests/client.test.mjs` 直接执行浏览器构建产物，检查模块导出、依赖访问、设置页注册、启用/关闭和卸载清理。源码与构建产物必须完全一致，修改 `src/` 后需重新构建。`tests/git-bridge.test.mjs` 在临时 Git 仓库里验证分支列表、未提交计数、建分支和带能力令牌的 Host 监听。
 
+落地页用量面板也分两半：Host 半在 `src/host.js` 里扫描 `$DSH_HOME/sessions/**/session.v<N>.jsonl[.zstd]`（逐帧解 zstd，撕裂的尾帧不算事件），折叠出每天的 token 四件套、消息数、24 小时直方图与按模型的 token；浏览器半在 `src/usage.js` 只做取数、区间过滤、名次与排版，`src/bridge.js` 是同一条桥的公共入口（Git 菜单与用量面板共用，页面没有桥时两边都回退）。`tests/usage.test.mjs` 用合成日志覆盖日记录、同一步骤重试只算一次、纯 JSONL、撕裂尾帧、(size, mtime) 缓存复用与窗口外日志跳过，真的起一个监听请求 `usage` 动作，并把 `src/usage.js` 放进 VM 里单测那几个纯函数（计数格式、热力档位、区间过滤、高峰时段、书目换算）。缓存文件落在 `$DSH_HOME/cache/smooth-usage-v2.json`，删掉它只会让下一次扫描变慢。
+
+手工改 profile 的 `cordis.patch.yml` 时，备份名**不要**用 `<patch>.bak-<纯数字>`：dshmarket 把这种命名当成 DSH 自己 `sanitizeProfile` 留下的宿主恢复残留（备份行比当前 patch 多时会弹「宿主恢复」横幅），而那条横幅渲染的 `IconWarningOutline16` 在本版 DSH 的原语里不存在（只有 `IconWarningOutlineRegular`），会让插件市场整页崩成「插件市场无法显示」。用 `-manual` 之类的后缀把数字挪到名字中间即可绕开检测。
 若仍出现旧版 `lib/index.js` 访问 `host` 的报错，先构建，再从托盘完全退出 DeepSeek Harness 并重新打开；只刷新页面不会清除 Host 进程已导入的模块。
 
 ## 结构
@@ -85,19 +93,23 @@ node --test tests/*.test.mjs
 ```
 package.json      manifest：dsh.bundle.patch + dsh.client
 cordis.patch.yml  bundle 补丁，插入 smooth-skin 行
-样例图/           原始 HTML 设计参考，不参与插件运行
+assets/样例图/     原始 HTML 设计参考，不参与插件运行
 assets/whale.svg  开场鲸鱼的独立 SVG 文件，从 src/boot.js 导出，同样不参与运行
+assets/think/     四挡思考强度插图：原始 PNG 与抠图缩放后的 cutout/*.webp（面板背景用）
 locale/{zh,en}.json  插件管理页显示的标题与描述
 src/shared.js     调色板、主题令牌映射、状态规范化、locale 词条
+src/think.js      由 tools/export-think.mjs 生成的 THINK_ART（四挡插图的内联 data URL），不要手改
 src/skin.js       作用域样式表
 src/boot.js       启动动画唯一定义：注入 index 的样式/标记/脚本 + 设置页预览
 src/watch.js      等待宿主表面：一个共享的 body observer + 按帧合并的检查
+src/bridge.js     Host 私有桥的浏览器侧入口（Git 菜单与每日用量共用）
 src/composer.js   真实 Git 分支读取、分支菜单、信息栏与原生控件 portal
+src/usage.js      落地页的每日 token 表：26 周热力图、图例与悬停提示
 src/account.js    账号资料、向下展开的真实余额与原生账号菜单扩展
 src/layout.js     原生导航标签、共享布局连接与三块外观选项
 src/scrollbar.js  各滚动区域的粗细动画、空闲恢复与卸载清理
 src/client.js     Client 半：设置页 + 令牌覆盖 + 样式注入 + localStorage 状态
-src/host.js       Host 半：启动动画注入 + 私有 /smooth-skin/git Git 监听
+src/host.js       Host 半：启动动画注入 + 私有 /smooth-skin/git 桥（Git 与每日 token）
 build.mjs         构建脚本
 tools/            激活试验台、图标导出、启动剖析与宿主契约审计
 tests/            契约、样式作用域、宿主兼容性与交互测试

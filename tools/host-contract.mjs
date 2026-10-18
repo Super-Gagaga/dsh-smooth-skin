@@ -49,6 +49,7 @@ export const HOST_SLOTS = [
   'sidebar.settings',
   'sidebar.panellist',
   'conversation.input.overlay',
+  'conversation.input.right',
   'conversation.input.model',
   'conversation.input.permission',
   'conversation.hero.agentPreset',
@@ -101,8 +102,10 @@ const OWN_ATTRIBUTES = new Set([
   'data-active',
   'data-error',
   'data-expanded',
+  'data-pane',
   'data-preview',
   'data-selected',
+  'data-view',
 ]);
 
 const EMPTY_MISSING = () => ({

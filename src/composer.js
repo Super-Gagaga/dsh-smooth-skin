@@ -90,7 +90,7 @@ function openNativeWorkspacePicker(button) {
 
 /** Render native controls into reference positions without moving React-owned DOM.
  * The native component keeps its locale, injected actions, hooks and confirmations. */
-function installComposerLayout({ slots, remote, useSmoothState, text }) {
+function installComposerLayout({ slots, modelDirectories, remote, useSmoothState, text }) {
   const { createPortal } = require('react-dom');
   const ui = require('@deepseek-ai/dsh-client-ui-primitives');
   const disposers = [];
@@ -128,15 +128,6 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
     }, [sessionId, cwd]);
     return value.sessionId === sessionId && value.cwd === cwd ? value.branch : undefined;
   }
-  /** The Host half injects its route origin and a per-activation token into the
-   * index. A client-only preview (or an older Host half) has no bridge and the
-   * menus surface that instead of inventing successful Git operations. */
-  function gitBridge() {
-    const bridge = globalThis.__SMOOTH_GIT__;
-    if (!bridge || typeof bridge.base !== 'string' || !bridge.base || typeof bridge.token !== 'string' || !bridge.token) return undefined;
-    return bridge;
-  }
-
   /** Clipboard text with a fallback for a renderer that hides navigator.clipboard. */
   async function copyText(value) {
     if (!value) return false;
@@ -148,48 +139,6 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
       const copied = document.execCommand?.('copy') ?? false;
       area.remove(); return copied;
     } catch (error) { return false; }
-  }
-
-  async function gitRequest(action, payload) {
-    const bridge = gitBridge();
-    if (!bridge) throw new Error('git-bridge-unavailable');
-    const body = JSON.stringify({ action, ...payload });
-    // The desktop renderer can reach the bridge either through the origin injected
-    // beside the token or through the same custom-scheme path. Try both before
-    // declaring the service unavailable; an app-level error is never retried.
-    let lastError;
-    for (const url of [`${bridge.base}/smooth-skin/git`, '/smooth-skin/git']) {
-      const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), 60_000);
-      let response;
-      try {
-        response = await fetch(url, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-smooth-token': bridge.token },
-          body,
-          signal: controller.signal,
-        });
-      } catch (error) {
-        lastError = error;
-        continue;
-      } finally {
-        window.clearTimeout(timer);
-      }
-      if (!response.ok) {
-        lastError = new Error(`Git bridge HTTP ${response.status}`);
-        continue;
-      }
-      let data;
-      try {
-        data = await response.json();
-      } catch (error) {
-        lastError = error;
-        continue;
-      }
-      if (!data?.ok) throw new Error(data?.error?.message || 'Git request failed');
-      return data.value;
-    }
-    throw lastError ?? new Error('Git bridge connection failed');
   }
 
   /** The branch and work-location popovers. They are plain portals over the
@@ -206,7 +155,7 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
     const nameRef = React.useRef(null);
     const describe = (reason) => {
       const message = reason?.message || '';
-      if (message === 'git-bridge-unavailable') return text('composer.gitUnavailable', 'Git 服务未加载，请重启 DSH 后再试');
+      if (message === 'smooth-bridge-unavailable') return text('composer.gitUnavailable', 'Git 服务未加载，请重启 DSH 后再试');
       if (/Failed to fetch|NetworkError|HTTP \d+|Unexpected token|JSON|AbortError/i.test(message)) {
         return text('composer.gitConnectionFailed', 'Git 服务连接失败，请重启 DSH 后再试');
       }
@@ -215,7 +164,7 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
     React.useEffect(() => {
       if (kind !== 'branch') return undefined;
       let active = true;
-      gitRequest('status', { cwd }).then((value) => {
+      bridgeRequest('status', { cwd }).then((value) => {
         if (active) setStatus(value);
       }).catch((reason) => {
         if (active) setError(describe(reason));
@@ -243,7 +192,7 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
     const run = async (action, payload) => {
       setBusy(true); setError('');
       try {
-        const value = await gitRequest(action, { cwd, ...payload });
+        const value = await bridgeRequest(action, { cwd, ...payload });
         if (action === 'checkout') { onBranch(value); onClose(); }
         return value;
       } catch (reason) {
@@ -309,6 +258,368 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
     ), document.body);
   }
 
+  /** The model picker behind the control's model name. The Host directory is the
+   * same catalog the native selector used; selecting goes through its `select`. */
+  /** The model catalogue as the panel's second page. The panel slides this page in
+   * from the effort page the way the account menu reveals its help page, and picking
+   * a model slides it back to the effort page of the newly selected model. */
+  function ModelList({ groups, current, onPick, onBack, onDone, active, text }) {
+    const [query, setQuery] = React.useState('');
+    const [error, setError] = React.useState('');
+    const [busy, setBusy] = React.useState(false);
+    const searchRef = React.useRef(null);
+    React.useEffect(() => { if (active) searchRef.current?.focus?.(); }, [active]);
+    const needle = query.trim().toLowerCase();
+    const filtered = groups.map((group) => ({
+      ...group,
+      models: (group.models || []).filter((model) => !needle || model.name.toLowerCase().includes(needle)),
+    })).filter((group) => group.models.length > 0);
+    const pick = async (group, model) => {
+      setBusy(true); setError('');
+      try {
+        await onPick(group, model);
+        onDone();
+      } catch (reason) {
+        setError(reason?.message || text('composer.modelFailed', '模型切换失败'));
+      } finally {
+        setBusy(false);
+      }
+    };
+    return h('div', { className: 'smooth-model-list', role: 'group', 'aria-label': text('composer.modelMenu', '模型') },
+      h('div', { className: 'smooth-model-list-head' },
+        h('button', {
+          type: 'button', className: 'smooth-model-back', onClick: onBack,
+          'aria-label': text('composer.back', '返回'),
+        }, h(ui.IconChevronLeftOutlineRegular, { size: 16, 'aria-hidden': true })),
+        h('span', { className: 'smooth-model-list-title' }, text('composer.modelMenu', '模型'))),
+      h('input', {
+        ref: searchRef, className: 'smooth-git-search', type: 'search', value: query,
+        placeholder: text('composer.searchModel', '搜索模型'),
+        onChange: (event) => setQuery(event.target.value),
+      }),
+      error && h('div', { className: 'smooth-git-error', role: 'alert' }, error),
+      h('div', { className: 'smooth-git-list', role: 'listbox', 'aria-label': text('composer.modelMenu', '模型') }, filtered.map((group) =>
+        h('div', { key: group.id, className: 'smooth-model-group', role: 'group', 'aria-label': group.name },
+          h('div', { className: 'smooth-git-heading' }, group.name),
+          (group.models || []).map((model) => {
+            const selected = group.id === current?.provider && model.id === current?.model;
+            return h('button', {
+              key: model.id, type: 'button', className: 'smooth-git-row', disabled: busy,
+              role: 'option', 'aria-selected': selected, 'data-current': selected ? 'true' : undefined,
+              onClick: () => pick(group, model),
+            },
+              h('span', { className: 'smooth-git-row-main' }, h('span', { className: 'smooth-git-name' }, model.name)),
+              selected && h('span', { className: 'smooth-git-check', 'aria-hidden': true }, '✓'));
+          })))),
+      !filtered.length && h('div', { className: 'smooth-git-note' }, text('composer.noModels', '没有模型')));
+  }
+
+  /** The level artwork is a DeepSeek touch: only the DeepSeek and DeepSeek Account
+   * groups get the backdrop, every other provider keeps the plain panel. */
+  function deepseekBackdrop(group) {
+    return Boolean(group && /deepseek/i.test(`${group.id || ''} ${group.name || ''}`));
+  }
+
+  /** The panel backdrop for one reasoning level. Effort ids name the artwork first;
+   * a model with a different effort set still gets a sensible picture by position. */
+  const THINK_LEVELS = ['off', 'low', 'high', 'max'];
+  function thinkArtFor(efforts, index) {
+    const id = String(efforts[index]?.id || '').toLowerCase();
+    if (THINK_ART[id]) return id;
+    const ratio = efforts.length > 1 ? index / (efforts.length - 1) : 1;
+    return THINK_LEVELS[Math.max(0, Math.min(THINK_LEVELS.length - 1, Math.round(ratio * (THINK_LEVELS.length - 1))))];
+  }
+
+  /** The composer's model seat: model name above a reasoning-effort slider. The
+   * slider drafts locally and commits through the injected directory `select`. */
+  function ModelEffortControl(props) {
+    const directory = props.directory;
+    const state = React.useSyncExternalStore(
+      (listener) => directory.subscribe(listener),
+      () => directory.getSnapshot(),
+    );
+    const [draft, setDraft] = React.useState(null);
+    const [error, setError] = React.useState('');
+    const triggerRef = React.useRef(null);
+    const draftRef = React.useRef(null);
+    const committedRef = React.useRef(null);
+    React.useEffect(() => {
+      if (props.available !== false) props.load?.();
+    }, [props.available, props.load]);
+    const groups = state.groups || [];
+    const current = state.current;
+    const choices = groups.flatMap((group) => (group.models || []).map((model) => ({ group, model })));
+    const choice = choices.find(({ group, model }) => group.id === current?.provider && model.id === current?.model);
+    const model = choice?.model;
+    const group = choice?.group;
+    const reasoning = model?.reasoning;
+    const efforts = reasoning?.efforts || [];
+    const effective = current?.reasoningEffort ?? reasoning?.defaultEffort;
+    const currentIndex = Math.max(0, efforts.findIndex((effort) => effort.id === effective));
+    const index = draft == null ? currentIndex : Math.max(0, Math.min(draft, efforts.length - 1));
+    const disabled = Boolean(props.locked) || props.available === false;
+    // 0..1 share of the thumb's travel; the fill and the glider share it so the blue
+    // edge stops under the thumb centre instead of under its left half.
+    const ratio = efforts.length > 1 ? index / (efforts.length - 1) : 1;
+    const sliderRef = React.useRef(null);
+    const dragRef = React.useRef(null);
+    // A click, a stop label or the keyboard lets the glider slide; an actual drag
+    // turns the left transition off so the thumb tracks the pointer exactly.
+    const beginDrag = (event) => { dragRef.current = { x: event.clientX, y: event.clientY }; };
+    const endDrag = () => {
+      dragRef.current = null;
+      sliderRef.current?.classList.remove('is-dragging');
+    };
+    React.useEffect(() => {
+      const move = (event) => {
+        const start = dragRef.current;
+        if (!start || !event.buttons) return;
+        if (Math.abs(event.clientX - start.x) < 4 && Math.abs(event.clientY - start.y) < 4) return;
+        sliderRef.current?.classList.add('is-dragging');
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', endDrag);
+      window.addEventListener('pointercancel', endDrag);
+      return () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', endDrag);
+        window.removeEventListener('pointercancel', endDrag);
+      };
+    }, []);
+    const commit = (next) => {
+      const effort = efforts[next];
+      if (!effort || !current) return;
+      committedRef.current = next;
+      setError('');
+      Promise.resolve(props.select({
+        provider: current.provider,
+        model: current.model,
+        reasoningEffort: effort.id,
+      })).catch((reason) => {
+        if (committedRef.current === next) committedRef.current = null;
+        if (draftRef.current === next) {
+          draftRef.current = null;
+          setDraft(null);
+        }
+        setError(reason?.message || text('composer.modelFailed', '模型切换失败'));
+      });
+    };
+    // Commit on every stop the thumb crosses, so the Host selection changes while
+    // dragging; the draft only keeps the visual thumb ahead until the store catches up.
+    const preview = (next) => {
+      setDraft(next); draftRef.current = next;
+      if (committedRef.current !== next) commit(next);
+    };
+    const flush = () => {
+      const next = draftRef.current;
+      if (next == null || committedRef.current === next) return;
+      commit(next);
+    };
+    React.useEffect(() => {
+      // Once the durable selection catches up, hand the thumb back to the store.
+      if (draft != null && currentIndex === draft) {
+        draftRef.current = null;
+        setDraft(null);
+      }
+    }, [currentIndex, draft]);
+    const level = reasoning && efforts.length > 0 ? thinkArtFor(efforts, index) : undefined;
+    const backdrop = Boolean(level && deepseekBackdrop(group));
+    const levelName = efforts[index]?.name || '';
+    return h('div', { className: 'smooth-model-effort' },
+      // The panel's backdrop follows the level the thumb is on, so a drag previews it
+      // the moment the thumb crosses a stop. All four cutouts stay mounted and cross-fade.
+      backdrop && h('div', { className: 'smooth-model-media', 'data-level': level, 'aria-hidden': true },
+        THINK_LEVELS.map((key) => h('img', {
+          key, className: 'smooth-model-art', src: THINK_ART[key], alt: '',
+          'data-active': key === level ? 'true' : undefined, draggable: false,
+        }))),
+      h('div', { className: 'smooth-model-body' },
+        // The slider carries no tick labels any more: the current level sits above the
+        // model selector and re-enters on every change, so the panel still names it.
+        levelName && h('div', { className: 'smooth-model-level', 'aria-live': 'polite' },
+          h('span', { key: level, className: 'smooth-model-level-name' }, levelName)),
+        h('button', {
+          ref: triggerRef, type: 'button', className: 'smooth-model-trigger',
+          'data-smooth-model-trigger': '', disabled, title: model?.name,
+          'aria-haspopup': 'menu',
+          onClick: () => props.onOpenModels?.(),
+        },
+          h('span', { className: 'smooth-model-name' }, model?.name || text('composer.modelLoading', '正在读取…')),
+          h(ui.IconChevronRightOutlineRegular, { size: 14, 'aria-hidden': true })),
+        reasoning && efforts.length > 0 && h('div', {
+          ref: sliderRef, className: 'smooth-model-slider', style: { '--smooth-model-ratio': String(ratio) },
+        },
+          h('div', { className: 'smooth-model-track', 'aria-hidden': true },
+            h('div', { className: 'smooth-model-fill' }),
+            efforts.map((effort, at) => {
+              const percent = efforts.length > 1 ? at / (efforts.length - 1) : 0;
+              return h('span', {
+                key: `dot:${effort.id}`, className: 'smooth-model-dot',
+                style: { left: `calc(13px + (100% - 26px) * ${percent})` },
+              });
+            })),
+          h('input', {
+            type: 'range', min: 0, max: Math.max(0, efforts.length - 1), step: 1, value: index,
+            disabled: disabled,
+            'aria-label': text('composer.reasoningEffort', '思考强度'),
+            'aria-valuetext': levelName,
+            onChange: (event) => { if (!disabled) preview(Number(event.target.value)); },
+            onPointerDown: beginDrag,
+            onPointerUp: () => { endDrag(); flush(); },
+            onPointerCancel: endDrag,
+            onKeyUp: flush, onBlur: () => { endDrag(); flush(); },
+          }),
+          h('span', { className: 'smooth-model-glider', 'aria-hidden': true })),
+        error && h('div', { className: 'smooth-model-error', role: 'alert' }, error)));
+  }
+
+  /** The reference panel opens above the compact native model control. The native
+   * control stays exactly as shipped (name, release badge, effort, chevron); only its
+   * click is captured, so the expansion can show the larger effort slider. The panel
+   * has two pages — effort and the model catalogue — that slide into each other the
+   * way the account menu slides its help page over the launcher rows. */
+  function ModelPanel({ anchor, directory, load, select, text, onClose }) {
+    const panelRef = React.useRef(null);
+    const effortRef = React.useRef(null);
+    const modelsRef = React.useRef(null);
+    const [view, setView] = React.useState('effort');
+    const [height, setHeight] = React.useState(0);
+    const state = React.useSyncExternalStore(
+      (listener) => directory.subscribe(listener),
+      () => directory.getSnapshot(),
+    );
+    // The panel is bottom-anchored, so its height comes from the page that is on
+    // screen; observing that page keeps the size right through filtering and errors.
+    React.useLayoutEffect(() => {
+      const pane = (view === 'models' ? modelsRef : effortRef).current;
+      if (!pane) return undefined;
+      const update = () => setHeight(pane.offsetHeight);
+      update();
+      const observer = new ResizeObserver(update);
+      observer.observe(pane);
+      return () => observer.disconnect();
+    }, [view]);
+    React.useEffect(() => {
+      const outside = (event) => {
+        if (panelRef.current?.contains?.(event.target)) return;
+        if (event.target?.closest?.('[data-slot="conversation.input.model"]')) return;
+        onClose();
+      };
+      document.addEventListener('pointerdown', outside, true);
+      return () => document.removeEventListener('pointerdown', outside, true);
+    }, [onClose]);
+    React.useEffect(() => {
+      const escape = (event) => {
+        if (event.key !== 'Escape') return;
+        if (view === 'models') setView('effort');
+        else onClose();
+      };
+      document.addEventListener('keydown', escape);
+      return () => document.removeEventListener('keydown', escape);
+    }, [view, onClose]);
+    const pick = async (group, model) => {
+      await select({
+        provider: group.id,
+        model: model.id,
+        ...(model.reasoning?.defaultEffort === undefined ? {} : { reasoningEffort: model.reasoning.defaultEffort }),
+      });
+    };
+    // Match the compact trigger's width (within readable bounds) and right-align the
+    // panel to it; the reference slider stays legible without outgrowing the control.
+    const width = Math.min(Math.max(anchor.width || 0, 260), 360, window.innerWidth - 16);
+    const right = anchor.right ?? anchor.left + width;
+    const left = Math.max(8, Math.min(right - width, window.innerWidth - width - 8));
+    // Anchor the panel's bottom just above the compact control, so the expanded
+    // range occupies the empty space between the slider and the trigger instead of
+    // floating over the conversation above it.
+    const bottom = Math.max(8, window.innerHeight - anchor.top + 8);
+    return createPortal(h('div', {
+      ref: panelRef, className: 'smooth-git-menu smooth-model-panel', 'data-view': view,
+      style: { left: `${left}px`, bottom: `${bottom}px`, width: `${width}px` },
+      role: 'dialog', 'aria-label': view === 'models' ? text('composer.modelMenu', '模型') : text('composer.reasoningEffort', '思考强度'),
+    },
+      h('div', { className: 'smooth-model-panel-viewport', style: height ? { height: `${height}px` } : undefined },
+        h('div', {
+          ref: effortRef, className: 'smooth-model-panel-pane', 'data-pane': 'effort',
+          'data-active': view === 'effort' ? 'true' : undefined, 'aria-hidden': view === 'models', inert: view === 'models',
+        },
+          h(ModelEffortControl, {
+            directory, load, select, text, available: true, locked: false,
+            onOpenModels: () => setView('models'),
+          })),
+        h('div', {
+          ref: modelsRef, className: 'smooth-model-panel-pane', 'data-pane': 'models',
+          'data-active': view === 'models' ? 'true' : undefined, 'aria-hidden': view !== 'models', inert: view !== 'models',
+        },
+          h(ModelList, {
+            groups: state.groups || [], current: state.current, text,
+            active: view === 'models',
+            onPick: pick,
+            onBack: () => setView('effort'),
+            onDone: () => setView('effort'),
+          })))),
+      document.body);
+  }
+
+  /** Listens on the shipped model trigger; the panel component owns all changes. */
+  function ModelPanelHost(props) {
+    const skin = useSmoothState();
+    let directory;
+    if (skin.state.enabled && modelDirectories && props.sessionId) {
+      try {
+        directory = modelDirectories.directoryFor(props.sessionId);
+      } catch {}
+    }
+    const ready = Boolean(directory?.store);
+    const [anchor, setAnchor] = React.useState(undefined);
+    React.useEffect(() => {
+      if (!ready) return undefined;
+      let trigger;
+      const capture = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = trigger.getBoundingClientRect();
+        setAnchor((current) => current ? undefined : {
+          left: rect.left, top: rect.top, width: rect.width, right: rect.right,
+        });
+      };
+      const attach = () => {
+        const next = document.querySelector('[data-slot="conversation.input.model"] button[aria-haspopup="menu"]')
+          || document.querySelector('[data-slot="conversation.input.model"] button');
+        if (!next || next === trigger) return;
+        trigger?.removeEventListener('click', capture, true);
+        trigger = next;
+        trigger.addEventListener('click', capture, true);
+      };
+      attach();
+      const observer = new MutationObserver(attach);
+      observer.observe(document.body, { childList: true, subtree: true });
+      return () => {
+        observer.disconnect();
+        trigger?.removeEventListener('click', capture, true);
+      };
+    }, [ready]);
+    React.useEffect(() => {
+      if (!ready) setAnchor(undefined);
+    }, [ready]);
+    if (!ready) return null;
+    const load = () => {
+      try { directory.load?.().catch?.(() => {}); } catch {}
+    };
+    const select = async (selection) => {
+      const result = await directory.select(selection);
+      if (result && result.ok === false) {
+        throw new Error(result.error?.message || text('composer.modelFailed', '模型切换失败'));
+      }
+    };
+    return anchor
+      ? h(ModelPanel, {
+        anchor, directory: directory.store, load, select, text,
+        onClose: () => setAnchor(undefined),
+      })
+      : null;
+  }
+
   function Metadata(props) {
     const skin = useSmoothState();
     const sessions = props.useSessions((value) => value);
@@ -355,7 +666,7 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
     };
     if (!skin.state.enabled || !card) return null;
     const shownBranch = branchOverride && branchOverride.cwd === cwd ? branchOverride.branch : branch;
-    const bridgeReady = Boolean(gitBridge());
+    const bridgeReady = Boolean(smoothBridge());
     const copy = async (value, kind) => {
       if (!(await copyText(value))) return;
       setCopied(kind);
@@ -407,7 +718,7 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
     return null;
   }
   disposers.push(slots.inject('conversation.input.overlay', () => slots.register({ name: 'conversation.input.overlay', id: `${PLUGIN_ID}.hint`, order: -90, locale: 'conversation' }, ComposerHint)));
-  function decorate(name, wrap) {
+  function decorate(name, wrap, offset = -10) {
     return slots.inject(name, () => {
       let native;
       let disposeNative;
@@ -432,7 +743,7 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
         const locale = inherited.locale ?? native.locale;
         const inject = inherited.inject ?? native.inject;
         const store = inherited.store ?? native.store;
-        disposeNative = slots.register({ ...inherited, name, locale, inject, store, priority: (native.options?.priority || 0) - 10, registrant: PLUGIN_ID },
+        disposeNative = slots.register({ ...inherited, name, locale, inject, store, priority: (native.options?.priority || 0) + offset, registrant: PLUGIN_ID },
           wrap(original.component));
       };
       refresh();
@@ -448,11 +759,9 @@ function installComposerLayout({ slots, remote, useSmoothState, text }) {
       return skin.state.enabled && target ? createPortal(h('div', { className }, control), target) : control;
     });
   }
-  disposers.push(decorate('conversation.input.model', Native => function ModelControl(props) {
-    const skin = useSmoothState();
-    const control = h(Native, props);
-    return skin.state.enabled ? h('div', { className: 'smooth-composer-model' }, control) : control;
-  }));
+  disposers.push(slots.inject('conversation.input.right', () => slots.register({
+    name: 'conversation.input.right', id: `${PLUGIN_ID}.model`, order: 20,
+  }, ModelPanelHost)));
   disposers.push(relocate('conversation.hero.agentPreset', `${hero} [data-composer-card] ${hostPart('tools')}`, 'smooth-composer-preset'));
   disposers.push(relocate('conversation.input.permission', `${hero} [data-smooth-permission-seat]`, 'smooth-composer-permission'));
   return () => { for (const dispose of disposers.reverse()) dispose?.(); };

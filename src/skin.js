@@ -162,6 +162,75 @@ body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}:active:not(:d
 body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}:disabled{background:var(--smooth-surface-3);color:var(--smooth-muted);opacity:.6;cursor:default}
 body[data-smooth-skin] .smooth-composer-model{display:flex;align-items:center;min-width:0;max-width:100%;font-size:13px;line-height:20px}
 body[data-smooth-skin] .smooth-composer-model button{height:32px;min-height:32px;font-size:inherit;line-height:20px;padding-block:0}
+body[data-smooth-skin] .smooth-model-effort{display:flex;flex-direction:column;align-items:stretch;gap:0;width:100%;min-width:0;max-width:100%}
+/* The slider has no tick labels: the level the thumb is on is named above the model
+   selector, and re-enters with a small rise every time the level changes. */
+body[data-smooth-skin] .smooth-model-level{display:flex;align-items:center;justify-content:center;gap:6px;min-height:18px;margin-bottom:1px;color:var(--smooth-muted);font-size:10.5px;line-height:16px;letter-spacing:.05em}
+body[data-smooth-skin] .smooth-model-level::before{content:"";flex:none;width:4px;height:4px;border-radius:50%;background:var(--smooth-model-blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--smooth-model-blue) 16%,transparent)}
+body[data-smooth-skin] .smooth-model-level-name{color:var(--smooth-text);font-size:11px;font-weight:600;animation:smooth-model-level-in .26s cubic-bezier(.22,1,.36,1)}
+@keyframes smooth-model-level-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-model-level-name{animation:none}}
+body[data-smooth-skin] .smooth-model-effort .smooth-model-trigger{display:flex;align-items:center;justify-content:center;gap:5px;height:22px;min-height:22px;padding:0 4px;border:0;border-radius:7px;background:transparent;color:var(--smooth-muted);font-size:12px;line-height:18px;cursor:pointer}
+body[data-smooth-skin] .smooth-model-effort .smooth-model-trigger:hover:not(:disabled){background:var(--smooth-surface-3);color:var(--smooth-text)}
+body[data-smooth-skin] .smooth-model-trigger:disabled{opacity:.55;cursor:default}
+body[data-smooth-skin] .smooth-model-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--smooth-text);font-weight:500}
+body[data-smooth-skin] .smooth-model-trigger svg{flex:none;color:var(--smooth-muted)}
+/* One animated number feeds both the blue fill edge and the ball's position, so a
+   slide can never split them: whichever way the value changes, both read the same
+   interpolated ratio on every frame. Holding a drag drops the transition, which
+   makes the two follow the pointer together instead of the fill trailing behind. */
+@property --smooth-model-ratio{syntax:"<number>";inherits:true;initial-value:0}
+body[data-smooth-skin] .smooth-model-slider{--smooth-model-ratio:0;position:relative;padding:0;transition:--smooth-model-ratio .3s cubic-bezier(.22,1,.36,1)}
+body[data-smooth-skin] .smooth-model-slider.is-dragging{transition:none}
+body[data-smooth-skin] .smooth-model-track{position:absolute;left:0;right:0;top:0;box-sizing:border-box;height:26px;border:1px solid var(--smooth-line-strong);border-radius:999px;background:var(--smooth-model-track);overflow:hidden;pointer-events:none}
+/* The track's border eats 1px per side, so the fill's box subtracts it: 26 = the
+   28px thumb minus both borders, 13 = the 14px half thumb minus one border. */
+body[data-smooth-skin] .smooth-model-fill{position:absolute;z-index:1;left:0;top:0;bottom:0;width:calc(13px + (100% - 26px) * var(--smooth-model-ratio));border-radius:999px;background:var(--smooth-model-blue)}
+/* Stop dots ride on the bar: above the blue fill so a passed stop still shows, below
+   the ball so the thumb covers the stop it is resting on. */
+body[data-smooth-skin] .smooth-model-dot{position:absolute;z-index:2;top:50%;width:4px;height:4px;border-radius:50%;background:var(--smooth-model-dot);transform:translate(-50%,-50%)}
+body[data-smooth-skin] .smooth-model-slider input[type="range"]{position:relative;z-index:2;appearance:none;-webkit-appearance:none;display:block;box-sizing:border-box;width:100%;height:26px;margin:0;padding:0;background:transparent;cursor:pointer}
+body[data-smooth-skin] .smooth-model-slider input[type="range"]::-webkit-slider-runnable-track{height:26px;border:0;background:transparent}
+/* The native thumb keeps its geometry and hit area but paints nothing: the visible
+   ball is the glider below it, riding the same ratio as the fill. */
+body[data-smooth-skin] .smooth-model-slider input[type="range"]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:28px;height:28px;margin-top:-1px;border:0;border-radius:50%;background:transparent;box-shadow:none;opacity:0}
+body[data-smooth-skin] .smooth-model-glider{position:absolute;z-index:3;top:-1px;left:calc(14px + (100% - 28px) * var(--smooth-model-ratio));box-sizing:border-box;width:28px;height:28px;border-radius:50%;border:1px solid color-mix(in srgb,var(--smooth-text) 28%,transparent);background:var(--smooth-model-thumb);box-shadow:0 3px 10px rgba(0,0,0,.3);transform:translateX(-50%);pointer-events:none;transition:transform .32s cubic-bezier(.16,1,.3,1),box-shadow .32s ease}
+body[data-smooth-skin] .smooth-model-slider input[type="range"]:active + .smooth-model-glider{transform:translateX(-50%) scale(1.06);box-shadow:0 5px 16px rgba(0,0,0,.36)}
+body[data-smooth-skin] .smooth-model-slider:has(input[type="range"]:focus-visible) .smooth-model-track{box-shadow:0 0 0 2px color-mix(in srgb,var(--smooth-accent) 65%,transparent)}
+body[data-smooth-skin] .smooth-model-slider input[type="range"]:disabled{opacity:.55;cursor:default}
+body[data-smooth-skin] .smooth-model-slider input[type="range"]:disabled + .smooth-model-glider{opacity:.55}
+body[data-smooth-skin] .smooth-model-error{padding:1px 4px;color:var(--dsw-alias-state-error-primary);font-size:10.5px;line-height:14px}
+body[data-smooth-skin] .smooth-model-group{display:flex;flex-direction:column;gap:1px}
+body[data-smooth-skin] .smooth-git-menu.smooth-model-panel{padding:0;gap:0;overflow:hidden;max-height:none;--smooth-model-fade:color-mix(in srgb,var(--smooth-surface-3) 80%,var(--dsw-specific-input-major))}
+/* Two pages share one slot: the active page fades in from the side the navigation
+   comes from while the other leaves the opposite way, the same language as the account
+   menu's help page. The viewport height follows the page on screen, so the
+   bottom-anchored panel grows or shrinks while the pages move instead of jumping. */
+body[data-smooth-skin] .smooth-model-panel-viewport{position:relative;overflow:hidden;transition:height .26s cubic-bezier(.2,0,0,1)}
+body[data-smooth-skin] .smooth-model-panel-pane{position:absolute;top:0;left:0;width:100%;min-width:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;transform:translateX(14px);transition:opacity .2s ease,transform .26s cubic-bezier(.2,0,0,1)}
+body[data-smooth-skin] .smooth-model-panel-pane[data-pane="effort"]{transform:translateX(-14px)}
+body[data-smooth-skin] .smooth-model-panel-pane[data-active="true"]{opacity:1;pointer-events:auto;transform:none}
+body[data-smooth-skin] .smooth-model-list{display:flex;flex-direction:column;gap:6px;min-width:0;padding:12px 14px 14px}
+body[data-smooth-skin] .smooth-model-list-head{display:flex;align-items:center;gap:4px;min-height:22px}
+body[data-smooth-skin] .smooth-model-back{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:7px;background:transparent;color:var(--smooth-muted);cursor:pointer}
+body[data-smooth-skin] .smooth-model-back:hover{background:var(--smooth-surface-3);color:var(--smooth-text)}
+body[data-smooth-skin] .smooth-model-list-title{flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--smooth-text)}
+body[data-smooth-skin] .smooth-model-list .smooth-git-list{max-height:min(42vh,320px);overflow-y:auto;overscroll-behavior:contain;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+body[data-smooth-skin] .smooth-model-list .smooth-git-heading{padding:4px 4px 2px}
+/* The panel's backdrop: one cutout per thinking level, stacked and cross-faded as the
+   thumb moves. The bottom fade lands on the panel's own colour, so the art melts into
+   the controls instead of ending on a hard edge. */
+body[data-smooth-skin] .smooth-model-media{position:relative;flex:none;height:168px;overflow:hidden;border-radius:13px 13px 0 0;background:radial-gradient(130% 150% at 50% 6px,color-mix(in srgb,var(--smooth-model-blue) 14%,transparent),transparent 72%)}
+/* The whole backdrop — artwork and the soft bottom fade — sits 6px lower than the
+   panel's top edge. Moving them together keeps the picture and its blur in step. */
+body[data-smooth-skin] .smooth-model-media::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent calc(68% + 6px),var(--smooth-model-fade) 100%);pointer-events:none}
+body[data-smooth-skin] .smooth-model-art{position:absolute;left:0;top:6px;width:100%;height:100%;object-fit:cover;object-position:50% 38%;opacity:0;transition:opacity .28s ease;pointer-events:none;user-select:none}
+body[data-smooth-skin] .smooth-model-art[data-active="true"]{opacity:1}
+body[data-smooth-skin] .smooth-model-body{display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0;padding:10px 12px 12px}
+body[data-smooth-skin] .smooth-model-panel .smooth-model-trigger{height:24px;min-height:24px;font-size:13px}
+body[data-smooth-skin] .smooth-model-panel .smooth-model-slider{margin-top:4px}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-model-art{transition:none}}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-model-panel-viewport,body[data-smooth-skin] .smooth-model-panel-pane{transition:none}}
 /* Keep TodoPanel's projection, native StateDot and conditional list rendering.
    Scope every local name to its public panel hook so chat headers stay untouched. */
 body[data-smooth-skin] [data-testid="todo-panel"]{border:0;border-radius:16px;background:var(--smooth-surface);background-image:var(--smooth-light-wash);box-shadow:var(--smooth-light-edge),var(--smooth-shadow-1);backdrop-filter:none}
@@ -176,9 +245,9 @@ body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('list')}{gap:2px;ma
 body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('item')}{box-sizing:border-box;flex:none;align-items:flex-start;gap:10px;min-height:34px;padding:7px 10px;border-radius:9px;font-size:13px;line-height:20px;color:var(--smooth-muted)}
 body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('glyph')}{width:16px;height:20px}
 body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('content')}{min-width:0;flex:1;white-space:normal;overflow:visible;overflow-wrap:anywhere;text-overflow:clip}
-body[data-smooth-skin] [data-testid="todo-panel"] [data-status="in_progress"]{background:color-mix(in srgb,var(--smooth-accent) 8%,transparent);color:var(--smooth-text);font-weight:500}
-body[data-smooth-skin] [data-testid="todo-panel"] [data-status="in_progress"] [data-state="ongoing"]{color:var(--smooth-accent)}
-body[data-smooth-skin] [data-testid="todo-panel"] [data-status="completed"]{color:var(--dsw-alias-label-tertiary)}
+body[data-smooth-skin] [data-testid="todo-panel"] [data-smooth-status="in_progress"]{background:color-mix(in srgb,var(--smooth-accent) 8%,transparent);color:var(--smooth-text);font-weight:500}
+body[data-smooth-skin] [data-testid="todo-panel"] [data-smooth-status="in_progress"] [data-smooth-state="ongoing"]{color:var(--smooth-accent)}
+body[data-smooth-skin] [data-testid="todo-panel"] [data-smooth-status="completed"]{color:var(--dsw-alias-label-tertiary)}
 @media(prefers-reduced-motion:reduce){body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('header')}{transition:none}}
 /* Native question form: retain radio/checkbox semantics, draft mirrors, paging,
    countdowns and submission. Only the question seat owns these local classes. */
@@ -546,6 +615,54 @@ body[data-smooth-skin] .smooth-hero-branch .smooth-meta-branch{max-width:240px;c
 body[data-smooth-skin] .smooth-composer-preset{display:inline-flex;align-items:center;min-width:0}
 body[data-smooth-skin] .smooth-composer-preset button{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 8px;border-radius:8px;background:transparent;font-size:13px;line-height:20px;font-weight:500;color:var(--smooth-text)}
 body[data-smooth-skin] .smooth-composer-preset button:hover:not(:disabled){background:var(--smooth-surface-3)}
+
+/* Landing-page usage panel. The panel is portalled into the host hero's own stack
+   (src/usage.js) and follows the reference card's construction: a 12px-padded well,
+   a tab/period header, six figures, then a 26-week grid whose shade is the day's
+   share of the busiest day in the window. Widths are capped so the figures keep
+   their proportions and the grid cells stay square at any window size. */
+body[data-smooth-skin] .smooth-usage-mount{display:flex;justify-content:center;width:100%;min-width:0;margin-top:2px}
+body[data-smooth-skin] .smooth-usage-panel{box-sizing:border-box;display:flex;flex-direction:column;gap:12px;width:min(560px,100%);padding:12px;border-radius:12px;background:color-mix(in srgb,var(--smooth-text) 4%,var(--smooth-surface-2));color:var(--smooth-muted);font-size:12px;line-height:16px;font-variant-numeric:tabular-nums}
+body[data-smooth-skin] .smooth-usage-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+body[data-smooth-skin] :is(.smooth-usage-tabs,.smooth-usage-ranges){display:flex;align-items:center;gap:2px}
+body[data-smooth-skin] :is(.smooth-usage-tab,.smooth-usage-range,.smooth-usage-more){appearance:none;box-sizing:border-box;margin:0;padding:1px 8px;border:0;border-radius:5px;background:transparent;color:var(--smooth-muted);font:inherit;font-size:12px;line-height:18px;cursor:pointer}
+body[data-smooth-skin] :is(.smooth-usage-tab,.smooth-usage-range):hover:not([data-active]){background:color-mix(in srgb,var(--smooth-text) 6%,transparent);color:var(--smooth-text)}
+body[data-smooth-skin] :is(.smooth-usage-tab,.smooth-usage-range)[data-active]{background:color-mix(in srgb,var(--smooth-text) 11%,var(--smooth-surface-2));color:var(--smooth-text)}
+body[data-smooth-skin] :is(.smooth-usage-tab,:is(.smooth-usage-range,.smooth-usage-more)):focus-visible{outline:2px solid var(--smooth-accent);outline-offset:1px}
+body[data-smooth-skin] .smooth-usage-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+body[data-smooth-skin] .smooth-usage-stat{display:flex;flex-direction:column;gap:2px;box-sizing:border-box;min-width:0;padding:5px 8px;border-radius:8px;background:color-mix(in srgb,var(--smooth-text) 9%,var(--smooth-surface-2))}
+body[data-smooth-skin] .smooth-usage-stat-label{color:var(--smooth-muted);font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body[data-smooth-skin] .smooth-usage-stat-value{color:var(--smooth-text);font-size:13px;font-weight:600;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body[data-smooth-skin] .smooth-usage-stat[data-smooth-stat="model"] .smooth-usage-stat-value{font-weight:400}
+body[data-smooth-skin] .smooth-usage-heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,1fr);grid-auto-columns:1fr;gap:3px;align-content:start}
+body[data-smooth-skin] .smooth-usage-heat-cell{position:relative;aspect-ratio:1;border-radius:3px;background:color-mix(in srgb,var(--smooth-text) 11%,transparent)}
+body[data-smooth-skin] .smooth-usage-heat-cell[data-smooth-level="1"]{background:color-mix(in srgb,var(--smooth-heat) 20%,transparent)}
+body[data-smooth-skin] .smooth-usage-heat-cell[data-smooth-level="2"]{background:color-mix(in srgb,var(--smooth-heat) 40%,transparent)}
+body[data-smooth-skin] .smooth-usage-heat-cell[data-smooth-level="3"]{background:color-mix(in srgb,var(--smooth-heat) 65%,transparent)}
+body[data-smooth-skin] .smooth-usage-heat-cell[data-smooth-level="4"]{background:var(--smooth-heat)}
+body[data-smooth-skin] .smooth-usage-heat[data-smooth-skeleton] .smooth-usage-heat-cell{background:color-mix(in srgb,var(--smooth-text) 5%,transparent);animation:smooth-usage-pulse 1.6s ease-in-out infinite}
+@keyframes smooth-usage-pulse{0%,100%{opacity:1}50%{opacity:.55}}
+body[data-smooth-skin] .smooth-usage-heat-cell[data-smooth-tip]:hover:after{content:attr(data-smooth-tip);position:absolute;bottom:calc(100% + 6px);left:50%;z-index:6;transform:translate(-50%);padding:5px 10px;border-radius:8px;background:var(--smooth-text);color:var(--smooth-app);font-size:13px;font-weight:500;line-height:18px;white-space:nowrap;font-variant-numeric:tabular-nums;pointer-events:none}
+body[data-smooth-skin] .smooth-usage-heat-cell[data-smooth-tip][data-smooth-edge="start"]:hover:after{left:0;transform:none}
+body[data-smooth-skin] .smooth-usage-heat-cell[data-smooth-tip][data-smooth-edge="end"]:hover:after{left:auto;right:0;transform:none}
+body[data-smooth-skin] .smooth-usage-fun{color:var(--smooth-muted);font-size:12px;line-height:16px}
+body[data-smooth-skin] .smooth-usage-models{display:flex;flex-direction:column;gap:2px}
+body[data-smooth-skin] .smooth-usage-model{display:flex;align-items:center;gap:8px;min-width:0;padding:2px 0}
+body[data-smooth-skin] .smooth-usage-model-swatch{flex:none;width:8px;height:8px;border-radius:2px;background:var(--smooth-heat)}
+body[data-smooth-skin] .smooth-usage-model-swatch[data-smooth-rank="1"]{background:color-mix(in srgb,var(--smooth-heat) 82%,var(--smooth-app))}
+body[data-smooth-skin] .smooth-usage-model-swatch[data-smooth-rank="2"]{background:color-mix(in srgb,var(--smooth-heat) 64%,var(--smooth-app))}
+body[data-smooth-skin] .smooth-usage-model-swatch[data-smooth-rank="3"]{background:color-mix(in srgb,var(--smooth-heat) 46%,var(--smooth-app))}
+body[data-smooth-skin] .smooth-usage-model-swatch[data-smooth-rank="4"]{background:color-mix(in srgb,var(--smooth-heat) 28%,var(--smooth-app))}
+body[data-smooth-skin] .smooth-usage-model-swatch[data-smooth-rank="5"]{background:color-mix(in srgb,var(--smooth-heat) 12%,var(--smooth-app))}
+body[data-smooth-skin] .smooth-usage-model-name{flex:0 1 auto;min-width:0;overflow:hidden;color:var(--smooth-text);font-size:13px;line-height:18px;white-space:nowrap;text-overflow:ellipsis}
+body[data-smooth-skin] .smooth-usage-model-split{margin-left:auto;color:var(--smooth-muted);font-size:12px;line-height:18px;white-space:nowrap}
+body[data-smooth-skin] .smooth-usage-model-share{flex:none;width:48px;color:var(--smooth-text);font-size:12px;line-height:18px;text-align:right;white-space:nowrap}
+body[data-smooth-skin] .smooth-usage-more{align-self:flex-start;margin-top:2px;padding:2px 8px}
+body[data-smooth-skin] .smooth-usage-more:hover{background:color-mix(in srgb,var(--smooth-text) 6%,transparent);color:var(--smooth-text)}
+body[data-smooth-skin] .smooth-usage-models-empty{padding:6px 2px;color:var(--smooth-muted)}
+@media(max-width:760px){body[data-smooth-skin] .smooth-usage-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-usage-heat[data-smooth-skeleton] .smooth-usage-heat-cell{animation:none}}
+
 
 /* Full-workspace settings retain the native store, rows, focus and controls, but
    take the app's own scale. The reference mock-up sized this panel for a 1950px

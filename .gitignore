@@ -9,6 +9,9 @@ lib/*.tmp
 tools/.dsh-client-ui-*.txt
 tools/.native-*.css
 
+# agent 运行期产物（worktree、截图），不是项目内容
+.agents/
+
 # 编辑器与系统
 .DS_Store
 Thumbs.db

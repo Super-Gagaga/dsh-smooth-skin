@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -63,7 +63,11 @@ test('the host bridge creates and switches branches', async () => {
 
 test('the bridge listener authenticates and answers status with a capability token', async () => {
   const cwd = repository();
-  const bridge = ensureGitServerForTest({});
+  // A throwaway home keeps the persisted capability token out of the real profile.
+  const home = mkdtempSync(join(tmpdir(), 'smooth-home-'));
+  const previousHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = home;
+  const bridge = ensureGitServerForTest({}, 39617);
   try {
     await new Promise((resolve) => setTimeout(resolve, 150));
     const injection = bridge.injection();
@@ -97,8 +101,15 @@ test('the bridge listener authenticates and answers status with a capability tok
     const denied = await call({ action: 'status', cwd }, 'wrong-token');
     assert.equal(denied.statusCode, 403);
     assert.equal(denied.body.ok, false);
+
+    // The token survives an activation: it is the value a reloaded window keeps using.
+    const persisted = readFileSync(join(home, 'cache', 'smooth-bridge-token'), 'utf8').trim();
+    assert.equal(persisted, token, 'the injected token is the persisted one');
   } finally {
     bridge.dispose();
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
     rmSync(cwd, { recursive: true, force: true });
   }
 });

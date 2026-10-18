@@ -74,41 +74,23 @@ test('compact prompts preserve native unavailable, workspace, planning and runni
   assert.equal(sandbox.installHint(null, [], ''), undefined);
 });
 
-test('model wrappers preserve native state, child slots and actions, and yield when disabled', () => {
-  const children = { 'conversation.input.model.label': { kind: 'single', scope: 'session', inline: true } };
-  const native = { component: () => 'native', options: { id: 'native-model-entry', priority: 0, children }, locale: 'native', inject: () => ({}), store: {} };
-  const names = ['conversation.input.model'];
-  const entries = new Map(names.map(name => [name, [native]]));
+test('the model seat is contributed through the composer right slot', () => {
   const overrides = new Map();
-  let enabled = true;
   sandbox.h = (type, props, ...children) => ({ type, props, children });
   sandbox.require = name => name === 'react-dom' ? { createPortal() {} } : {};
   const slots = {
-    inject: (_name, setup) => setup(), entries: name => entries.get(name) || [],
+    inject: (_name, setup) => setup(), entries: () => [],
     register: (options, component) => { overrides.set(options.name, { options, component }); return () => overrides.delete(options.name); },
   };
-  const dispose = sandbox.install({ slots, text: () => 'Short prompt', useSmoothState: () => ({ state: { enabled } }) });
-  const props = { t: key => key, placeholder: 'placeholder.hero', keyboard: {}, stop() {} };
-  for (const name of names) {
-    const entry = overrides.get(name);
-    assert.equal(entry.options.inject, native.inject);
-    assert.equal(entry.options.store, native.store);
-    assert.equal(entry.options.locale, native.locale);
-    assert.equal(entry.options.children, children, 'the nested model-label slot must keep its declaration');
-    assert.equal(entry.options.id, undefined, 'the wrapper must not reuse the native registration id');
-    assert.equal(entry.options.priority, -10);
-  }
+  const dispose = sandbox.install({
+    slots, modelDirectories: {}, text: () => 'Short prompt',
+    useSmoothState: () => ({ state: { enabled: true } }),
+  });
+  const seat = overrides.get('conversation.input.right');
+  assert.ok(seat, 'the model/effort seat lives in the generic right-control list');
+  assert.equal(seat.options.id, 'smooth.model');
+  assert.equal(typeof seat.component, 'function');
   assert.equal(overrides.has('conversation.composer.bar'), false, 'the native composer retains its child-slot ownership');
-  const model = overrides.get(names[0]).component(props);
-  assert.equal(model.props.className, 'smooth-composer-model');
-  assert.equal(model.children[0].type, native.component);
-  assert.equal(model.children[0].props, props);
-  enabled = false;
-  for (const name of names) {
-    const view = overrides.get(name).component(props);
-    assert.equal(view.type, native.component);
-    assert.equal(view.props, props);
-  }
   dispose(); assert.equal(overrides.size, 0);
 });
 

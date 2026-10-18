@@ -6,7 +6,7 @@
 
 const React = require('react');
 const h = React.createElement;
-const inject = ['slots', 'theme', 'locale', 'layout', 'uiWorkspace', 'remote', 'remote.workspaceFiles'];
+const inject = ['slots', 'theme', 'locale', 'layout', 'uiWorkspace', 'modelDirectories', 'remote', 'remote.workspaceFiles'];
 const LOCALE_NS = 'smooth';
 
 const CSS = `/* injected through the package stylesheet; kept beside the skin rules */
@@ -72,6 +72,7 @@ function apply(ctx) {
   const locale = ctx.locale && typeof ctx.locale.register === 'function' ? ctx.locale : undefined;
   const layout = ctx.layout;
   const uiWorkspace = ctx.uiWorkspace;
+  const modelDirectories = ctx.modelDirectories;
   const remote = ctx.remote;
 
   const listeners = new Set();
@@ -418,7 +419,7 @@ function apply(ctx) {
     document.body.removeAttribute(NO_TABS_ATTRIBUTE);
   }, 'smooth-skin');
 
-  referenceShell = installReferenceShell({ slots, layout, uiWorkspace, theme, remote, useSmoothState, text,
+  referenceShell = installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, theme, remote, useSmoothState, text,
     subscribeTheme: (listener) => ctx.on('theme/change', listener),
     chooseTheme: (preference) => { writeState({ ...state, theme: 'auto' }); theme?.setTheme(preference); },
   });

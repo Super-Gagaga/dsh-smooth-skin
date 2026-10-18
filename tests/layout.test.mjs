@@ -38,7 +38,7 @@ function runtime({ width = 1282, overflow = null } = {}) {
   const React = { Fragment: 'fragment', useState: value => [value && typeof value === 'object' && 'right' in value ? { left: false, right: false, ...overflow } : value, () => {}], useSyncExternalStore: (_subscribe, read) => read(), useEffect: fn => fn(), useRef: () => ({ current: null }) };
   const bodyAttributes = new Set();
   const sandbox = {
-    React, h, PLUGIN_ID: 'smooth', hostPart: name => `.${name}`, NO_TABS_ATTRIBUTE: 'data-smooth-no-tabs', window: { innerWidth: width }, installComposerLayout: () => () => {}, installAccountMenu: () => () => {},
+    React, h, PLUGIN_ID: 'smooth', hostPart: name => `.${name}`, NO_TABS_ATTRIBUTE: 'data-smooth-no-tabs', window: { innerWidth: width }, installComposerLayout: () => () => {}, installAccountMenu: () => () => {}, installUsage: () => () => {},
     document: {
       addEventListener: (type, fn) => events.set(type, fn), removeEventListener: type => events.delete(type),
       body: {

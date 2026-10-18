@@ -15,6 +15,9 @@ const layout = await read('../src/layout.js');
 const composer = await read('../src/composer.js');
 const account = await read('../src/account.js');
 const scrollbar = await read('../src/scrollbar.js');
+const think = await read('../src/think.js');
+const bridge = await read('../src/bridge.js');
+const usage = await read('../src/usage.js');
 
 /** Evaluate the shared + boot + host half as an ESM module through a data: URL. */
 async function loadHostHalf() {
@@ -98,6 +101,42 @@ test('buildTokens always carries both tones for every token', async () => {
     assert.equal(typeof tokens[name].dark, 'string', `${name} lacks a dark value`);
     assert.match(tokens[name].light, /^(#|rgba?\()/, `${name} light value is not a literal colour`);
   }
+});
+
+test('the model effort slider has separate light and dark surfaces', async () => {
+  const { buildTokens } = await loadHostHalf();
+  const tokens = buildTokens({ enabled: true, theme: 'auto' });
+  for (const name of ['--smooth-model-track', '--smooth-model-blue', '--smooth-model-thumb', '--smooth-model-dot']) {
+    assert.equal(typeof tokens[name]?.light, 'string', `${name} lacks a light value`);
+    assert.equal(typeof tokens[name]?.dark, 'string', `${name} lacks a dark value`);
+    assert.notEqual(tokens[name].light, tokens[name].dark, `${name} must adapt between tones`);
+  }
+  assert.match(skin, /var\(--smooth-model-track\)/);
+  assert.match(skin, /var\(--smooth-model-blue\)/);
+  assert.match(skin, /var\(--smooth-model-thumb\)/);
+  assert.match(skin, /var\(--smooth-model-dot\)/);
+  assert.match(skin, /\.smooth-model-dot\{/);
+});
+
+test('the effort thumb is a glider that slides between stops and follows a drag', () => {
+  // The native thumb paints nothing; the visible ball is the glider. Both the ball and
+  // the blue fill read one registered, animatable number, so a slide can never split
+  // them — the fill edge stays under the ball on every frame of the transition.
+  assert.match(skin, /\.smooth-model-slider input\[type="range"\]::-webkit-slider-thumb\{[^}]*opacity:0/);
+  assert.match(skin, /@property --smooth-model-ratio\{syntax:"<number>";inherits:true;initial-value:0\}/, 'the ratio must be registered to be animatable');
+  assert.match(skin, /\.smooth-model-slider\{[^}]*transition:--smooth-model-ratio \.3s/, 'one transition drives the slide');
+  const glider = skin.match(/\.smooth-model-glider\{[^}]*\}/)?.[0] || '';
+  assert.match(glider, /left:calc\(14px \+ \(100% - 28px\) \* var\(--smooth-model-ratio\)\)/, 'the ball rides the ratio');
+  assert.doesNotMatch(glider, /transition:left/, 'the ball must not animate separately from the fill');
+  const fill = skin.match(/\.smooth-model-fill\{[^}]*\}/)?.[0] || '';
+  assert.match(fill, /width:calc\(13px \+ \(100% - 26px\) \* var\(--smooth-model-ratio\)\)/, 'the fill edge lands on the ball centre, track border included');
+  assert.doesNotMatch(fill, /transition:/, 'the fill must not animate separately from the ball');
+  assert.match(skin, /\.smooth-model-slider\.is-dragging\{transition:none\}/, 'a held drag snaps both to the pointer');
+  // Stop dots sit on the bar: above the fill, below the ball.
+  const dot = skin.match(/\.smooth-model-dot\{[^}]*\}/)?.[0] || '';
+  const zOf = (rule) => Number(rule.match(/z-index:(\d+)/)?.[1]);
+  assert.ok(zOf(fill) < zOf(dot), 'the dots must paint over the blue fill');
+  assert.ok(zOf(dot) < zOf(glider), 'the ball must paint over the dots');
 });
 
 test('hostPart and accountPart match both host class-name conventions', () => {
@@ -222,7 +261,7 @@ test('the skin stylesheet is scoped to the gating body attribute and never hides
       .replace(/body\[data-smooth-skin\] \[data-shortcut-modal="settings"\] \$\{hostPart\('header'\)\}>\$\{accountPart\('close'\)\}\{display:none\}/, '')
       .replace(/body\[data-smooth-skin\] \$\{hostPart\('composerHero'\)\} \$\{hostPart\('heroWorkspaceRow'\)\}\{[^}]*display:none[^}]*\}/, '')
       .replace(/body\[data-smooth-skin\]\[data-smooth-no-tabs\][\s\S]*?\{display:none/, '');
-    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, the settings close button, the welcome row and the empty-workspace card may be hidden');
+    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, settings close, welcome row and empty-workspace card may be hidden');
   }
   assert.ok(rules > 10, 'the skin stylesheet has almost no scoped rules');
 });
@@ -263,7 +302,7 @@ test('the built artifacts exist and agree with the sources', async () => {
   const index = await read('../lib/index.js');
   const bundle = await read('../lib/client.js');
   assert.equal(index, `${shared}\n${boot}\n${host}`, 'rebuild the Host artifact after changing its sources');
-  assert.equal(bundle, `window.__ModuleLoader__.load({id:'dsh-smooth-skin',factory:(require)=>{const exports={};\n${shared}\n${skin}\n${boot}\n${watch}\n${composer}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`, 'rebuild the Client artifact after changing its sources');
+  assert.equal(bundle, `window.__ModuleLoader__.load({id:'dsh-smooth-skin',factory:(require)=>{const exports={};\n${shared}\n${skin}\n${boot}\n${watch}\n${bridge}\n${think}\n${composer}\n${usage}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`, 'rebuild the Client artifact after changing its sources');
   assert.ok(index.includes(shared.trim().slice(0, 60)));
   assert.ok(index.includes('webserver/index-inject'));
   assert.ok(index.includes('export default plugin'));

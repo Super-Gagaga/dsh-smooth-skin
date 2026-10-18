@@ -173,7 +173,7 @@ function tabOverflow(node) {
   };
 }
 
-function installReferenceShell({ slots, layout, uiWorkspace, theme, remote, subscribeTheme, chooseTheme, useSmoothState, text }) {
+function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, theme, remote, subscribeTheme, chooseTheme, useSmoothState, text }) {
   if (!slots || !layout || !uiWorkspace) return { dispose() {} };
   const ui = require('@deepseek-ai/dsh-client-ui-primitives');
   const layoutStore = sharedSurfaceStore(slots, 'root', 'setSidebar');
@@ -187,6 +187,7 @@ function installReferenceShell({ slots, layout, uiWorkspace, theme, remote, subs
   let headingDispose;
   let composerDispose;
   let accountDispose;
+  let usageDispose;
   const disposers = [];
   // The home view is the page itself, not a tab, so it never becomes a pin target.
   const recordOperation = (event) => { if (active && currentView && isWorkspaceOperation(event)) workspaceTabs.pin(currentView); };
@@ -202,11 +203,13 @@ function installReferenceShell({ slots, layout, uiWorkspace, theme, remote, subs
     if (enabled === active) return;
     active = enabled;
     if (enabled) {
-      composerDispose = installComposerLayout({ slots, remote, useSmoothState, text });
+      composerDispose = installComposerLayout({ slots, modelDirectories, remote, useSmoothState, text });
       accountDispose = installAccountMenu({ slots, text });
+      usageDispose = installUsage({ slots, useSmoothState, text });
     } else {
       composerDispose?.(); composerDispose = undefined;
       accountDispose?.(); accountDispose = undefined;
+      usageDispose?.(); usageDispose = undefined;
     }
     if (enabled && theme) {
       appearanceDispose = slots.inject('settings.general.item', () => slots.register({ name: 'settings.general.item', id: 'appearance', order: 10, priority: -10 }, Appearance));

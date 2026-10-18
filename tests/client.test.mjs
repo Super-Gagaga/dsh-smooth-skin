@@ -158,7 +158,7 @@ test('built client exports an activatable plugin with every service declared', (
 test('the metadata button labels exist in both locales', () => {
   const runtime = loadClient();
   runtime.plugin.apply(runtime.ctx);
-  for (const key of ['composer.copied', 'composer.switchWorkspace', 'composer.chooseWorkspace', 'composer.copyBranch', 'composer.branchMenu', 'composer.searchBranch', 'composer.createBranch', 'composer.newBranch', 'composer.create', 'composer.cancel', 'composer.uncommitted', 'composer.files', 'composer.clean', 'composer.noBranches', 'composer.loading', 'composer.gitUnavailable', 'composer.gitConnectionFailed', 'composer.gitFailed']) {
+  for (const key of ['composer.copied', 'composer.switchWorkspace', 'composer.chooseWorkspace', 'composer.copyBranch', 'composer.branchMenu', 'composer.modelMenu', 'composer.searchModel', 'composer.modelLoading', 'composer.noModels', 'composer.reasoningEffort', 'composer.modelFailed', 'composer.searchBranch', 'composer.createBranch', 'composer.newBranch', 'composer.create', 'composer.cancel', 'composer.uncommitted', 'composer.files', 'composer.clean', 'composer.noBranches', 'composer.loading', 'composer.gitUnavailable', 'composer.gitConnectionFailed', 'composer.gitFailed']) {
     assert.equal(typeof runtime.dictionaries.zh[key], 'string', `missing zh ${key}`);
     assert.equal(typeof runtime.dictionaries.en[key], 'string', `missing en ${key}`);
   }
