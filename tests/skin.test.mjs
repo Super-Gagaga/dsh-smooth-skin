@@ -288,10 +288,10 @@ test('the workspace list keeps the reference list rhythm and its leading dot', (
   assert.match(skin, /\$\{hostPart\('sectionLabel'\)\}\{font-size:12px;line-height:18px\}/);
 });
 
-test('inline code borrows the reference blue while fenced blocks keep their palette', () => {
-  // The native file chips paint themselves with the business colour; inline code is the
-  // same kind of reference, so it takes that blue instead of the body text colour.
-  assert.match(skin, /body\[data-smooth-skin\] \[data-conversation-scroll\] :not\(pre\)>code\{color:var\(--dsw-alias-state-business-primary\)\}/);
+test('inline code borrows the link blue while fenced blocks keep their palette', () => {
+  // Native file mentions paint themselves with the link colour; inline code is the same
+  // kind of reference, so it takes that blue instead of the body text colour.
+  assert.match(skin, /body\[data-smooth-skin\] \[data-conversation-scroll\] :not\(pre\)>code\{color:var\(--dsw-alias-link\)\}/);
   assert.ok(!/\[data-conversation-scroll\] pre\s*\{[^}]*color:/.test(skin), 'fenced code blocks are not recoloured');
 });
 
