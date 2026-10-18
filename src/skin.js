@@ -168,8 +168,11 @@ body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${host
    as plain buttons under data-conversation-tabs, so the thumb is the container's own
    ::before, moved by the selected button's index; two equal halves make that exact. */
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]{position:absolute;left:50%;top:6px;transform:translateX(-50%);display:inline-flex;box-sizing:border-box;gap:0;margin:0;padding:0;border:1px solid var(--smooth-line);border-radius:999px;background:transparent;overflow:hidden;z-index:3;opacity:0;transition:opacity .18s ease}
+/* Reveal on the column hover or on *keyboard* focus. Keying this on :focus-within
+   pinned the switch open after a click: the clicked 对话/轨迹 tab keeps :focus when the
+   pointer leaves, while a mouse click never matches :focus-visible. */
 body[data-smooth-skin] ${hostPart('centerCol')}:hover ${hostPart('header')} [data-conversation-tabs],
-body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]:focus-within{opacity:1}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]:has(:focus-visible){opacity:1}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;border-radius:999px;background:var(--smooth-surface-3);transition:transform .26s cubic-bezier(.22,1,.36,1)}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]:has(>[role="tab"]:nth-child(2)[aria-selected="true"])::before{transform:translateX(100%)}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"]{position:relative;z-index:1;flex:1 1 0;padding:6px 18px;border:0;border-radius:0;background:transparent;color:var(--smooth-muted);font-size:13px;font-weight:500;line-height:16px}
@@ -636,7 +639,11 @@ body[data-smooth-skin] .smooth-workspace-tab.smooth-tab-dragging{opacity:.45}
 body[data-smooth-skin] .smooth-tab-drop{position:absolute;top:8px;bottom:8px;width:2px;margin-left:-1px;border-radius:999px;background:var(--smooth-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--smooth-accent) 16%,transparent);z-index:2;pointer-events:none}
 @media(hover:hover){
   body[data-smooth-skin] .smooth-tab-close{opacity:0;pointer-events:none;transition:opacity .12s ease}
-  body[data-smooth-skin] .smooth-workspace-tab:is(:hover,:focus-within) .smooth-tab-close{opacity:1;pointer-events:auto}
+  /* Same rule as the conversation switch: a mouse click must not pin the close button
+     on a tab after the pointer leaves; keyboard focus (including the close button's own)
+     still reveals it. */
+  body[data-smooth-skin] .smooth-workspace-tab:hover .smooth-tab-close,
+  body[data-smooth-skin] .smooth-workspace-tab:has(:focus-visible) .smooth-tab-close{opacity:1;pointer-events:auto}
 }
 @media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-tab-close{transition:none}}
 body[data-smooth-skin] .smooth-tab-close:hover{background:var(--smooth-line-strong);color:var(--smooth-text)}
@@ -672,7 +679,7 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('logoRow')}{height:c
 /* The collapsed rail has no room for the brand row; the host removes it, so the skin's
    fixed logo-row height must not leave an empty band above the fixed caption buttons. */
 body[data-smooth-skin]:has([data-sidebar-collapsed]) ${hostPart('sidebarCol')} ${hostPart('logoRow')}{height:0;min-height:0;margin:0;padding:0;overflow:hidden}
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}{height:calc(46 * var(--smooth-l));min-height:calc(46 * var(--smooth-l));margin-top:calc(6 * var(--smooth-l));margin-bottom:calc(8 * var(--smooth-l) + 1px);border-radius:calc(15 * var(--smooth-l));font-size:calc(15 * var(--smooth-l))}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}{height:calc(30 * var(--smooth-l));min-height:calc(30 * var(--smooth-l));margin-top:calc(2 * var(--smooth-l));margin-bottom:calc(3 * var(--smooth-l) + 1px);border-radius:calc(10 * var(--smooth-l));font-size:calc(14 * var(--smooth-l))}
 /* Collapsed, the host turns the new-conversation row into a 28px icon button next to the
    expand toggle. Keep its box on the host's fixed 28px geometry so the two stay aligned. */
 body[data-smooth-skin]:has([data-sidebar-collapsed]) ${hostPart('sidebarCol')} ${hostPart('newSession')}{
@@ -684,6 +691,45 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostP
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')}{width:var(--smooth-rail-button-size);height:var(--smooth-rail-button-size);min-height:0}
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="tree"]{font-size:calc(19 * var(--smooth-l))}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('regionArea')}{border-top:1px solid var(--smooth-line);padding-top:10px;margin-inline:0;padding-inline:0}
+/* The left column's archive switch: hovering anywhere in the column layers a
+   two-segment filter over the region title, so running sessions and the archive flip
+   without opening the host's view-options menu. The chrome measures the section header
+   and publishes its fixed coordinates; this sheet only draws the control. Colours are
+   mixed from the skin tokens, which gives the reference's #262626 track with a #454545
+   selected pill on the dark presets and the same relationship in light presets. */
+body[data-smooth-skin] .smooth-workspace-filter{
+  position:fixed;left:0;top:0;z-index:40;display:inline-flex;align-items:center;box-sizing:border-box;
+  height:24px;padding:2px;border:0;border-radius:7px;corner-shape:round;
+  background:color-mix(in srgb,var(--smooth-text) 6%,var(--smooth-sidebar));
+  opacity:0;pointer-events:none;user-select:none;-webkit-app-region:no-drag;
+  transition:opacity .16s cubic-bezier(.2,0,0,1);
+}
+/* The control is frame-fixed, so hovering it is not hovering the sidebar underneath it;
+   both are named here or the reveal would flicker off the moment the pointer lands.
+   :where() keeps the hover's specificity below the collapse/search suppression below.
+   The keyboard reveal keys on :focus-visible, never :focus-within: a clicked option
+   keeps :focus after the pointer leaves, so :focus-within left the overlay pinned open
+   until focus moved somewhere else. A mouse click is not :focus-visible, so the control
+   follows the pointer again, while Tab still reveals it. */
+body[data-smooth-skin]:where(:has(${hostPart('sidebarCol')}:hover, .smooth-workspace-filter:hover)) .smooth-workspace-filter,
+body[data-smooth-skin] .smooth-workspace-filter:has(:focus-visible){opacity:1;pointer-events:auto}
+body[data-smooth-skin] .smooth-filter-option{
+  appearance:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;
+  height:20px;min-width:0;margin:0;padding:0 9px;border:0;border-radius:5px;background:transparent;
+  color:color-mix(in srgb,var(--smooth-muted) 62%,var(--smooth-sidebar));
+  font-family:inherit;font-size:12px;font-weight:500;line-height:20px;letter-spacing:.01em;white-space:nowrap;cursor:pointer;
+  transition:background-color .14s ease,color .14s ease;
+}
+body[data-smooth-skin] .smooth-filter-option:hover{color:var(--smooth-text)}
+body[data-smooth-skin] .smooth-filter-option[data-selected="true"]{background:color-mix(in srgb,var(--smooth-text) 18%,var(--smooth-sidebar));color:var(--smooth-text)}
+body[data-smooth-skin] .smooth-filter-option:active{transform:translateY(1px)}
+body[data-smooth-skin] .smooth-filter-option:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:1px}
+/* The collapsed rail has no title row, and an expanded search owns the same strip: the
+   filter yields to it instead of covering the input. The skin hides nothing of the
+   host's here, only its own overlay, which is why this is an opacity rule. */
+body[data-smooth-skin]:has([data-sidebar-collapsed]) .smooth-workspace-filter,
+body[data-smooth-skin]:has(${hostPart('sectionLabelHidden')}) .smooth-workspace-filter{opacity:0;pointer-events:none}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-workspace-filter,body[data-smooth-skin] .smooth-filter-option{transition:none}}
 
 /* Blank-session welcome. The host keeps its own stacking and proportions — headline,
    workspace chip, input card — and this skin centers that stack in the workspace instead

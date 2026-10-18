@@ -100,11 +100,36 @@ function installSmoothCaret(input) {
   let placed = false;
   let composing = false;
   let frame = 0;
+  let lastX;
+  let lastY;
   const nativeCaret = (on) => {
     if (on) card.removeAttribute('data-smooth-caret');
     else card.setAttribute('data-smooth-caret', '');
   };
   const hide = () => { caret.hidden = true; };
+  /** Where the editor's text starts. A collapsed range that anchors on the editable
+   * itself measures its border box, which begins in the padding: the bar then sits in
+   * front of the text instead of at the caret. */
+  const textOrigin = () => {
+    const box = input.getBoundingClientRect();
+    const style = typeof window.getComputedStyle === 'function' ? window.getComputedStyle(input) : null;
+    const offset = (name) => {
+      const value = style ? parseFloat(style[name]) : 0;
+      return Number.isFinite(value) ? value : 0;
+    };
+    return { left: box.left + offset('borderLeftWidth') + offset('paddingLeft'), top: box.top + offset('borderTopWidth') + offset('paddingTop'), height: offset('lineHeight') || box.height };
+  };
+  /** The caret an empty editor should show: the start of its contents, not its border. */
+  const startRect = () => {
+    try {
+      const probe = document.createRange();
+      probe.selectNodeContents(input);
+      probe.collapse(true);
+      const rect = probe.getBoundingClientRect();
+      if (rect && rect.height) return rect;
+    } catch (error) { /* fall back to the text box below */ }
+    return { left: textOrigin().left, top: input.getBoundingClientRect().top, height: textOrigin().height };
+  };
   const update = () => {
     frame = 0;
     if (document.activeElement !== input) { hide(); nativeCaret(true); return; }
@@ -119,19 +144,36 @@ function installSmoothCaret(input) {
     }
     if (!input.contains(range.startContainer)) { hide(); nativeCaret(true); return; }
     const host = grow.getBoundingClientRect();
+    // A mount that has not been laid out yet reports an empty grow box; placing the bar
+    // against it would pin the caret to the card's corner until the next keystroke.
+    if (!host.width && !host.height) { hide(); nativeCaret(true); return; }
     let rect = range.getBoundingClientRect();
-    if ((!rect || !rect.height) && range.startContainer.nodeType === 1) rect = range.startContainer.getBoundingClientRect();
-    if (!rect || !rect.height) {
-      const parent = range.startContainer.parentElement;
-      rect = parent ? parent.getBoundingClientRect() : null;
+    if (!rect || !rect.height) rect = startRect();
+    // A container-level selection may still report the editor's own box; never park the
+    // bar on the border when the caret itself has to start inside the text area.
+    const origin = textOrigin();
+    if (rect && rect.height) {
+      const left = rect.left < origin.left - .5 ? origin.left : rect.left;
+      const top = rect.top < origin.top - .5 ? origin.top : rect.top;
+      if (left !== rect.left || top !== rect.top) rect = { left, top, height: rect.height };
     }
     if (!rect || !rect.height) { hide(); nativeCaret(true); return; }
     nativeCaret(false);
-    if (!placed) caret.style.transition = 'none';
-    caret.style.transform = `translate(${Math.round(rect.left - host.left)}px,${Math.round(rect.top - host.top)}px)`;
+    const x = Math.round(rect.left - host.left);
+    const y = Math.round(rect.top - host.top);
+    // The first placement and every jump to another line is a snap: a glide out of a
+    // stale spot is exactly how a wrong initial position stays visible for a second.
+    const snap = !placed || Math.abs(y - lastY) > 18 || Math.abs(x - lastX) > 24;
+    if (snap) caret.style.transition = 'none';
+    caret.style.transform = `translate(${x}px,${y}px)`;
     caret.style.height = `${Math.round(rect.height)}px`;
     caret.hidden = false;
-    if (!placed) {
+    lastX = x;
+    lastY = y;
+    if (snap) {
+      // The first measurement can land before the editor commits its empty paragraph, so
+      // the caret is read once more on the next frame while the bar still cannot animate.
+      if (!placed) schedule();
       placed = true;
       window.requestAnimationFrame(() => { caret.style.transition = ''; });
     }

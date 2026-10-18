@@ -190,6 +190,22 @@ test('the metadata button labels exist in both locales', () => {
   runtime.dispose();
 });
 
+test('hover-revealed controls cannot be pinned open by a clicked control', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  const sheet = [...runtime.styles][0].textContent;
+  // A clicked control keeps :focus but never :focus-visible. Keying a reveal on
+  // :focus-within leaves that control visible after the pointer leaves the region.
+  assert.match(sheet, /\.smooth-workspace-filter:has\(:focus-visible\)\{opacity:1;pointer-events:auto\}/);
+  assert.ok(!/\.smooth-workspace-filter:focus-within\b/.test(sheet), 'a clicked option must not hold the overlay open');
+  assert.match(sheet, /body\[data-smooth-skin\] \.smooth-workspace-filter\{[^}]*opacity:0/, 'the idle state is hidden');
+  // The conversation 对话 / 轨迹 switch and a tab's close button follow the same rule.
+  assert.match(sheet, /\[data-conversation-tabs\]:has\(:focus-visible\)\{opacity:1\}/);
+  assert.ok(!/\[data-conversation-tabs\]:focus-within/.test(sheet), 'a clicked view must not pin the switch open');
+  assert.ok(!/\.smooth-workspace-tab:is\(:hover,:focus-within\)/.test(sheet), 'a clicked tab must not pin its close button');
+  runtime.dispose();
+});
+
 test('the launch window size is left to the opening and edited in settings', async () => {
   const runtime = loadClient();
   runtime.plugin.apply(runtime.ctx);

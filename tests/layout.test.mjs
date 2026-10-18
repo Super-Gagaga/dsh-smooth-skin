@@ -4,10 +4,11 @@ import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 
 const source = await readFile(new URL('../src/layout.js', import.meta.url), 'utf8');
-function runtime({ width = 1282, overflow = null } = {}) {
+function runtime({ width = 1282, overflow = null, workspaceStore = true } = {}) {
   const registrations = new Map();
   const properties = new Map();
   const calls = [];
+  const workspaceCalls = [];
   const settingsCloses = [];
   const layoutState = { layoutInfo: { sidebar: 280 } };
   const settingsState = { open: false };
@@ -24,9 +25,23 @@ function runtime({ width = 1282, overflow = null } = {}) {
     getSnapshot: () => settingsState, subscribe: () => () => {},
     actions: { open: () => { settingsState.open = true; }, close: () => { settingsCloses.push(settingsState.open); settingsState.open = false; }, openSection: id => { settingsState.open = true; calls.push(['settings', id]); } },
   };
+  // The host's workspace browser publishes its persisted viewing store on the region
+  // entry; archivedFilter is the state the hover filter and the view menu share.
+  const workspaceState = { archivedFilter: 'default' };
+  const workspaceEntry = {
+    getSnapshot: () => workspaceState,
+    subscribe: () => () => {},
+    actions: { setArchivedFilter: filter => { workspaceCalls.push([filter]); workspaceState.archivedFilter = filter; } },
+  };
   const slots = {
     // SlotCore publishes store on the entry, outside the serialized options.
-    entries: name => [{ options: {}, store: { create: () => name === 'root' ? layoutStore : settingsStore } }],
+    entries: name => [{
+      options: {},
+      store: { create: () => !workspaceStore && name === 'sidebar.workspaces' ? undefined
+        : name === 'root' ? layoutStore
+        : name === 'sidebar.workspaces' ? workspaceEntry
+        : settingsStore },
+    }],
     inject: (_name, fn) => fn(),
     register: (options, component) => {
       const key = `${options.name}/${options.id}`;
@@ -57,7 +72,7 @@ function runtime({ width = 1282, overflow = null } = {}) {
     },
     require: name => { assert.equal(name, '@deepseek-ai/dsh-client-ui-primitives'); return new Proxy({}, { get: (_t, key) => key }); },
   };
-  runInNewContext(source + '\nglobalThis.install = installReferenceShell; globalThis.createTabs = createWorkspaceTabs; globalThis.currentTab = currentWorkspaceTab; globalThis.isCreated = isCreatedSession; globalThis.applyWidth = applyConversationWidth; globalThis.isOperation = isWorkspaceOperation; globalThis.installScroll = installTabScroll; globalThis.tabOverflow = tabOverflow;', sandbox);
+  runInNewContext(source + '\nglobalThis.install = installReferenceShell; globalThis.createTabs = createWorkspaceTabs; globalThis.currentTab = currentWorkspaceTab; globalThis.isCreated = isCreatedSession; globalThis.applyWidth = applyConversationWidth; globalThis.isOperation = isWorkspaceOperation; globalThis.installScroll = installTabScroll; globalThis.tabOverflow = tabOverflow; globalThis.placeFilter = placeWorkspaceFilter;', sandbox);
   const shell = sandbox.install({ slots, layout: { selectPanel: id => { panelState.activePanelId = id; calls.push(['panel', id]); } }, uiWorkspace: {
     clearMain: () => { snapshot.current = undefined; panelState.activePanelId = null; calls.push(['home']); },
     startSession: () => { snapshot.current = 'blank'; calls.push(['new']); },
@@ -75,7 +90,7 @@ function runtime({ width = 1282, overflow = null } = {}) {
   };
   const flatten = node => node ? [node, ...node.children.flat(Infinity).filter(x => x && typeof x === 'object').flatMap(flatten)] : [];
   const operate = () => events.get('input')({ type: 'input', target: { closest: selector => selector.includes('[data-slot="main"]') || selector.startsWith('input,') ? {} : null } });
-  return { shell, render, flatten, registrations, calls, layoutState, settingsState, settingsCloses, snapshot, panelState, events, operate, properties, subscriptions, sandbox, bodyAttributes };
+  return { shell, render, flatten, registrations, calls, layoutState, settingsState, settingsCloses, snapshot, panelState, events, operate, properties, subscriptions, sandbox, bodyAttributes, workspaceState, workspaceCalls };
 }
 
 test('the welcome block follows the main surface, not the tab count', () => {
@@ -525,4 +540,104 @@ test('the tab wheel respects the reduced-motion preference', () => {
   assert.equal(node.scrollLeft, 120);
   controller.scrollBy(240); assert.equal(node.scrollLeft, 360);
   controller.dispose();
+});
+
+/** The hover filter is a nested component, so the harness renders it on demand. */
+function workspaceFilter(r, inSettings = false) {
+  const node = r.flatten(r.render(inSettings)).find(entry => typeof entry.type === 'function');
+  return node ? node.type(node.props) : undefined;
+}
+
+const filterOptions = tree => tree.children.filter(child => child.props.className === 'smooth-filter-option');
+
+test('hovering the left column flips the workspace list between running and archived sessions', () => {
+  const r = runtime();
+  r.shell.setEnabled(true);
+  let filter = workspaceFilter(r);
+  assert.ok(filter, 'the chrome layers the filter over the workspace title row');
+  assert.equal(filter.props.role, 'group');
+  assert.equal(filter.props['aria-label'], '工作区筛选');
+  assert.equal(filter.props['data-smooth-workspace-filter'], '');
+  let options = filterOptions(filter);
+  assert.deepEqual(Array.from(options, option => option.children[0]), ['进行中', '已归档']);
+  assert.deepEqual(Array.from(options, option => option.props['aria-pressed']), [true, false]);
+
+  // Picking the archive publishes the host's own archived-only filter.
+  options[1].props.onClick();
+  assert.deepEqual(r.workspaceCalls, [['only']]);
+  assert.equal(r.workspaceState.archivedFilter, 'only');
+  filter = workspaceFilter(r);
+  options = filterOptions(filter);
+  assert.deepEqual(Array.from(options, option => option.props['aria-pressed']), [false, true], 'the archived side is highlighted');
+  assert.deepEqual(Array.from(options, option => option.props['data-selected']), [false, true]);
+
+  // The native menu can also show both; the quick switch reads that as the running
+  // view and picking 进行中 normalizes it back to running-only.
+  r.workspaceState.archivedFilter = 'show';
+  options = filterOptions(workspaceFilter(r));
+  assert.deepEqual(Array.from(options, option => option.props['aria-pressed']), [true, false]);
+  options[0].props.onClick();
+  assert.deepEqual(r.workspaceCalls, [['only'], ['default']]);
+  // Re-picking the side that is already shown writes nothing.
+  options[0].props.onClick();
+  assert.deepEqual(r.workspaceCalls, [['only'], ['default']]);
+  r.shell.dispose();
+});
+
+test('a clicked option releases focus so the overlay can follow the pointer out', () => {
+  const r = runtime();
+  r.shell.setEnabled(true);
+  let options = filterOptions(workspaceFilter(r));
+  let blurred = 0;
+  const currentTarget = { blur: () => { blurred += 1; } };
+  // A pointer click leaves :focus on the button (without :focus-visible); release it,
+  // or the fixed overlay would stay visible after the pointer leaves the sidebar.
+  options[1].props.onClick({ detail: 1, currentTarget });
+  assert.equal(blurred, 1, 'a pointer click must not leave focus behind');
+  assert.equal(r.workspaceState.archivedFilter, 'only');
+  // Keyboard activation keeps focus: the option stays :focus-visible and is not blurred
+  // out from under the keyboard user.
+  options = filterOptions(workspaceFilter(r));
+  options[0].props.onClick({ detail: 0, currentTarget });
+  assert.equal(blurred, 1, 'a keyboard click keeps its focus');
+  assert.equal(r.workspaceState.archivedFilter, 'default');
+  r.shell.dispose();
+});
+
+test('a host without the workspace view store leaves the title alone', () => {
+  const r = runtime({ workspaceStore: false });
+  r.shell.setEnabled(true);
+  assert.equal(workspaceFilter(r), null, 'the filter exists only when the host list can be driven');
+  r.shell.dispose();
+});
+
+test('the hover filter covers the measured workspace title row', () => {
+  const r = runtime();
+  const header = {
+    getBoundingClientRect: () => ({ left: 168, top: 204, width: 240, height: 36 }),
+    querySelector: () => ({ getBoundingClientRect: () => ({ left: 180, top: 210, width: 36, height: 20 }) }),
+  };
+  r.sandbox.document.querySelector = selector => selector.includes('[data-slot="sidebar"]') ? header : null;
+  const node = { style: {} };
+  assert.equal(r.sandbox.placeFilter(node), true);
+  assert.equal(node.style.left, '178px', 'the box starts at the title text');
+  assert.equal(node.style.top, '210px', 'its 24px height is centred on the 36px header');
+  // Without the label the header's own left padding is the anchor.
+  header.querySelector = () => null;
+  assert.equal(r.sandbox.placeFilter(node), true);
+  assert.equal(node.style.left, '170px');
+  // No header (collapsed sidebar) leaves the fixed coordinates untouched.
+  r.sandbox.document.querySelector = () => null;
+  assert.equal(r.sandbox.placeFilter(node), false);
+});
+
+test('the hover filter labels exist in both locales', async () => {
+  const shared = await readFile(new URL('../src/shared.js', import.meta.url), 'utf8');
+  const zh = shared.slice(shared.indexOf('const zhCN'), shared.indexOf('const enUS'));
+  const en = shared.slice(shared.indexOf('const enUS'));
+  for (const key of ['shell.workspaceFilter', 'shell.inProgress', 'shell.archived']) {
+    const pattern = new RegExp(`'${key.replace(/\./g, '\\.')}':`);
+    assert.match(zh, pattern, `missing zh ${key}`);
+    assert.match(en, pattern, `missing en ${key}`);
+  }
 });

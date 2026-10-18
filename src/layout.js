@@ -8,6 +8,42 @@ function sharedSurfaceStore(slots, name, action) {
   }
 }
 
+/** The workspace browser publishes its persisted viewing store on the
+ * `sidebar.workspaces` entry: `archivedFilter` is `default` (running sessions),
+ * `show` (both) or `only` (archived sessions). The hover filter reads that same
+ * store, so the quick switch and the host's own view-options menu never disagree.
+ * It is resolved per render rather than cached: a replaced region must hand the
+ * filter the new handle, not a stale one. */
+function workspaceFilterStore(slots) {
+  return sharedSurfaceStore(slots, 'sidebar.workspaces', 'setArchivedFilter');
+}
+
+/** The browser's section header, the row that carries the region's 工作区 title.
+ * Scoped to the sidebar so the same class suffix in another surface is ignored. */
+function workspaceHeaderNode() {
+  if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return undefined;
+  return document.querySelector(`[data-slot="sidebar"] ${hostPart('sectionHeader')}`) || undefined;
+}
+
+/** The segmented control's height: its centre is matched to the header's. */
+const WORKSPACE_FILTER_HEIGHT = 24;
+
+/** Cover the header's title text with the fixed filter. The header sits in the
+ * sidebar's normal flow at a stable offset, so it is measured on mount and again on
+ * a window resize or a host relayout instead of being polled every frame. */
+function placeWorkspaceFilter(node) {
+  if (!node || !node.style) return false;
+  const header = workspaceHeaderNode();
+  const rect = header && header.getBoundingClientRect?.();
+  if (!rect) return false;
+  const label = header.querySelector?.(hostPart('sectionLabel'));
+  const labelRect = label && label.getBoundingClientRect?.();
+  const left = labelRect ? labelRect.left - 2 : rect.left + 2;
+  node.style.left = `${Math.round(left)}px`;
+  node.style.top = `${Math.round(rect.top + (rect.height - WORKSPACE_FILTER_HEIGHT) / 2)}px`;
+  return true;
+}
+
 /** The sidebar width the skin opens with. This is the 352px layout the user
  * resized to and asked to keep: deriving 28.5vw on every enable overwrote that
  * choice whenever the window width changed. The bounds still guard the native
@@ -256,6 +292,7 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
   let composerDispose;
   let accountDispose;
   let usageDispose;
+  let placeWorkspaceFilterNode;
   const disposers = [];
   // The home view is the page itself, not a tab, so it never becomes a pin target.
   // A conversation opened from the tree pins on any real interaction; a newly created
@@ -324,6 +361,9 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
     const right = rect && rect.width > 0 ? Math.round(rect.right + 8) : 0;
     if (right > 0) document.body.style.setProperty('--smooth-caption-leading', `${right}px`);
     else document.body.style.removeProperty('--smooth-caption-leading');
+    // The same relayout that moves the caption moves the sidebar's section header; the
+    // hover filter is fixed over that header and follows it without its own listener.
+    placeWorkspaceFilterNode?.();
   };
   const scheduleCaptionLeading = () => {
     if (captionFrame) return;
@@ -418,6 +458,59 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
     if (result.next) activateTab(result.next);
     // Closing the last tab leaves the strip empty; the welcome page stands on its own.
     else openHome();
+  }
+  /* Hovering the left column layers a two-state archive filter over the browser's
+   * 工作区 title. The host keeps the list state (`archivedFilter`) in its workspace
+   * view store; the buttons only publish that choice, so the quick switch and the
+   * native view-options menu stay one filter. The control is fixed over the measured
+   * header instead of inside the host tree: the host may re-render or remount the
+   * region, while the overlay keeps its own React state and pointer events. */
+  function WorkspaceFilter() {
+    const node = React.useRef(null);
+    const store = workspaceFilterStore(slots);
+    const filter = React.useSyncExternalStore(
+      store?.subscribe || (() => () => {}),
+      store ? () => store.getSnapshot().archivedFilter || 'default' : () => 'default',
+    );
+    React.useEffect(() => {
+      if (!store) return undefined;
+      let frame = 0;
+      let tries = 0;
+      const place = () => {
+        if (placeWorkspaceFilter(node.current)) return;
+        // The region may mount a frame after the chrome; retry briefly instead of
+        // listening for it. The caption relayout hook below covers later moves.
+        if (tries++ < 40) frame = window.requestAnimationFrame?.(place);
+      };
+      // Re-measure on every caption/sidebar relayout: expanding the sidebar or resizing
+      // the window moves the header, and the fixed control has to move with it.
+      placeWorkspaceFilterNode = place;
+      place();
+      return () => {
+        if (frame && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(frame);
+        if (placeWorkspaceFilterNode === place) placeWorkspaceFilterNode = undefined;
+      };
+    }, [store]);
+    if (!store) return null;
+    const archived = filter === 'only';
+    const pick = (only) => (event) => {
+      // A pointer click focuses the option. Release that focus: the control is a
+      // transient overlay, and a focused button would keep Space/Enter bound to a
+      // switch that has already faded out with the pointer.
+      if (event?.detail > 0) event.currentTarget?.blur?.();
+      const next = only ? 'only' : 'default';
+      if ((store.getSnapshot().archivedFilter || 'default') === next) return;
+      store.actions.setArchivedFilter(next);
+    };
+    return h('div', {
+      ref: node,
+      className: 'smooth-workspace-filter',
+      role: 'group',
+      'aria-label': text('shell.workspaceFilter', '工作区筛选'),
+      'data-smooth-workspace-filter': '',
+    },
+    h('button', { type: 'button', className: 'smooth-filter-option', 'data-selected': !archived, 'aria-pressed': !archived, onClick: pick(false) }, text('shell.inProgress', '进行中')),
+    h('button', { type: 'button', className: 'smooth-filter-option', 'data-selected': archived, 'aria-pressed': archived, onClick: pick(true) }, text('shell.archived', '已归档')));
   }
   function Chrome(props) {
     const skin = useSmoothState();
@@ -594,7 +687,8 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
            never sits over a strip with nothing left behind it. The bar keeps the right
            arrow's slot as padding either way, so its appearance never moves a tab. */
         overflow.right && h('button', { type: 'button', className: 'smooth-tab-scroll', 'data-side': 'right', 'aria-label': '向右滚动标签页', onClick: () => tabScroll.current?.scrollBy(240) }, h(ui.IconChevronRightOutlineRegular, { size: 15 })),
-      ));
+      ),
+      h(WorkspaceFilter));
   }
   disposers.push(slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: `${PLUGIN_ID}.chrome`, order: 10 }, Chrome)));
   if (settingsStore) disposers.push(slots.inject('settings.action', () => slots.register({ name: 'settings.action', id: `${PLUGIN_ID}.tabs`, order: 10 }, (props) => h(Chrome, { ...props, inSettings: true }))));

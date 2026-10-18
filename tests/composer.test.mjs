@@ -122,6 +122,81 @@ test('the smooth caret degrades when the platform cannot report a selection', ()
   assert.equal(sandbox.installCaret({ parentElement: {}, closest: () => ({}) }), undefined);
 });
 
+/** A composer whose editor reports the selection shapes that broke the first placement:
+ * a container-level caret with no rect at all, and one that measures the border box. */
+function caretHarness({ liveRect, probeRect }) {
+  const frames = [];
+  const caret = { style: {}, hidden: true, className: '', setAttribute() {}, remove() { this.removed = true; } };
+  const grow = { appended: [], append(node) { this.appended.push(node); }, getBoundingClientRect: () => ({ left: 100, top: 50, width: 320, height: 22 }) };
+  const card = { attributes: new Set(), setAttribute(name) { this.attributes.add(name); }, removeAttribute(name) { this.attributes.delete(name); } };
+  const input = {
+    parentElement: grow,
+    closest: (selector) => selector === '[data-composer-card]' ? card : null,
+    contains: () => true,
+    addEventListener() {}, removeEventListener() {},
+    getBoundingClientRect: () => ({ left: 100, top: 50, width: 290, height: 22 }),
+  };
+  const live = { startContainer: input, getBoundingClientRect: () => liveRect, cloneRange() { return this; }, collapse() {} };
+  const probe = { selectNodeContents() {}, collapse() {}, getBoundingClientRect: () => probeRect };
+  const document = {
+    activeElement: input,
+    createElement: () => caret,
+    createRange: () => probe,
+    addEventListener() {}, removeEventListener() {},
+  };
+  const window = {
+    getSelection: () => ({ rangeCount: 1, isCollapsed: true, getRangeAt: () => live }),
+    getComputedStyle: () => ({ paddingLeft: '14px', borderLeftWidth: '0px', paddingTop: '4px', borderTopWidth: '0px', lineHeight: '22px' }),
+    requestAnimationFrame: (fn) => { frames.push(fn); return frames.length; },
+    cancelAnimationFrame() {},
+    addEventListener() {}, removeEventListener() {},
+  };
+  sandbox.document = document;
+  sandbox.window = window;
+  const dispose = sandbox.installCaret(input);
+  const flush = () => { for (let guard = 0; guard < 20 && frames.length; guard++) frames.shift()(16); };
+  flush();
+  const result = { caret, card, grow, input, flush, dispose, document, window };
+  // The sandbox is shared between tests; drop the DOM so later tests start clean.
+  result.reset = () => { delete sandbox.document; delete sandbox.window; };
+  return result;
+}
+
+test('an empty editor puts the smooth caret where its text starts, not in the padding', () => {
+  // Lexical can anchor the caret on the editable itself: no rect (left) or the border box
+  // (right). Both used to place the bar 14px early, inside the card's leading padding.
+  for (const liveRect of [{ left: 100, top: 50, width: 0, height: 0 }, { left: 100, top: 50, width: 0, height: 22 }]) {
+    const harness = caretHarness({ liveRect, probeRect: { left: 114, top: 54, width: 0, height: 22 } });
+    try {
+      assert.equal(harness.caret.hidden, false, 'the bar is shown once a caret exists');
+      assert.equal(harness.caret.style.transform, 'translate(14px,4px)', 'the bar sits at the text origin, offset from the grow box');
+      assert.equal(harness.caret.style.height, '22px');
+      assert.equal(harness.card.attributes.has('data-smooth-caret'), true, 'the native caret stays hidden while the bar is drawn');
+      assert.equal(harness.grow.appended.length, 1, 'the bar lives in the editor grow box');
+      harness.dispose();
+      assert.equal(harness.caret.removed, true);
+      assert.equal(harness.card.attributes.has('data-smooth-caret'), false, 'disposing hands the native caret back');
+    } finally {
+      harness.reset();
+    }
+  }
+});
+
+test('the smooth caret measures twice before it animates, so a late layout does not stick', () => {
+  // The first pass can land before the editor commits its paragraph; the second pass
+  // re-reads the same frame budget and the bar still has no transition.
+  const harness = caretHarness({
+    liveRect: { left: 100, top: 50, width: 0, height: 0 },
+    probeRect: { left: 114, top: 54, width: 0, height: 22 },
+  });
+  try {
+    assert.equal(harness.caret.style.transition, '', 'the settle frame restores the glide');
+  } finally {
+    harness.dispose();
+    harness.reset();
+  }
+});
+
 test('the model seat is contributed through the composer right slot', () => {
   const overrides = new Map();
   sandbox.h = (type, props, ...children) => ({ type, props, children });

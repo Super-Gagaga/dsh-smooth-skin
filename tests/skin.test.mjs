@@ -247,6 +247,12 @@ test('a collapsed sidebar keeps its caption buttons clear of the tab strip', () 
   assert.match(collapsedSession, /left:48px;top:calc\(\(var\(--smooth-caption\) - 28px\) \/ 2\)/);
 });
 
+test('the new-conversation row is a compact button above the session list', () => {
+  // The wide 46-unit row pushed the session list's divider below the conversation
+  // header's; a 30-unit button with hairline margins restores the two rows' rhythm.
+  assert.match(skin, /\$\{hostPart\('newSession'\)\}\{height:calc\(30 \* var\(--smooth-l\)\);min-height:calc\(30 \* var\(--smooth-l\)\);margin-top:calc\(2 \* var\(--smooth-l\)\);margin-bottom:calc\(3 \* var\(--smooth-l\) \+ 1px\);border-radius:calc\(10 \* var\(--smooth-l\)\);font-size:calc\(14 \* var\(--smooth-l\)\)\}/);
+});
+
 test('the light selected workspace tab uses the soft selection fill, not the muted grey', () => {
   // Mixing the white caption surface with the dark muted label produced a grey chip
   // that read as black in light mode; the palette's selected token is the blue the
@@ -319,6 +325,16 @@ test('the conversation header follows the reference: chips under the title, tabs
   assert.match(skin, /\[data-conversation-tabs\]::before\{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;[^}]*transition:transform \.26s cubic-bezier\(\.22,1,\.36,1\)\}/);
   assert.match(skin, /\[data-conversation-tabs\]:has\(>\[role="tab"\]:nth-child\(2\)\[aria-selected="true"\]\)::before\{transform:translateX\(100%\)\}/);
   assert.match(skin, /\$\{hostPart\('centerCol'\)\}:hover \$\{hostPart\('header'\)\} \[data-conversation-tabs\]/);
+  // Clicking a view leaves :focus on the tab; only keyboard focus may pin the switch
+  // open, so the reveal keys on :focus-visible rather than :focus-within.
+  assert.match(skin, /\[data-conversation-tabs\]:has\(:focus-visible\)\{opacity:1\}/);
+  assert.ok(!/\[data-conversation-tabs\]:focus-within/.test(skin), 'a clicked view must not pin the switch open');
+});
+
+test('a clicked tab does not pin its close button open', () => {
+  assert.match(skin, /\.smooth-workspace-tab:hover \.smooth-tab-close/);
+  assert.match(skin, /\.smooth-workspace-tab:has\(:focus-visible\) \.smooth-tab-close\{opacity:1;pointer-events:auto\}/);
+  assert.ok(!/\.smooth-workspace-tab:is\(:hover,:focus-within\)/.test(skin), 'a mouse click must not leave the close button visible');
 });
 
 const luminance = hex => {
