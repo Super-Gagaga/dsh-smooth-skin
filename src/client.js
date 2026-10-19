@@ -6,7 +6,7 @@
 
 const React = require('react');
 const h = React.createElement;
-const inject = ['slots', 'theme', 'locale', 'layout', 'uiWorkspace', 'modelDirectories', 'remote', 'remote.workspaceFiles'];
+const inject = ['slots', 'theme', 'locale', 'layout', 'uiWorkspace', 'sessions', 'modelDirectories', 'remote', 'remote.workspaceFiles'];
 const LOCALE_NS = 'smooth';
 
 const CSS = `/* injected through the package stylesheet; kept beside the skin rules */
@@ -87,6 +87,9 @@ function apply(ctx) {
   const locale = ctx.locale && typeof ctx.locale.register === 'function' ? ctx.locale : undefined;
   const layout = ctx.layout;
   const uiWorkspace = ctx.uiWorkspace;
+  // The session catalog face: the archived-row delete dialog refreshes it after the
+  // Host half removes the stored log, so the row disappears without a page reload.
+  const sessions = ctx.sessions;
   const modelDirectories = ctx.modelDirectories;
   const remote = ctx.remote;
 
@@ -533,7 +536,7 @@ function apply(ctx) {
     document.body.removeAttribute(HOME_ATTRIBUTE);
   }, 'smooth-skin');
 
-  referenceShell = installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, theme, remote, useSmoothState, text });
+  referenceShell = installReferenceShell({ slots, layout, uiWorkspace, sessions, modelDirectories, theme, remote, useSmoothState, text });
   readState();
 }
 

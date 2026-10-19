@@ -10,6 +10,8 @@ function runtime({ width = 1282, overflow = null, workspaceStore = true } = {}) 
   const calls = [];
   const workspaceCalls = [];
   const settingsCloses = [];
+  const bridgeCalls = [];
+  let sessionRefreshes = 0;
   const layoutState = { layoutInfo: { sidebar: 280 } };
   const settingsState = { open: false };
   const subscriptions = new Set();
@@ -33,6 +35,9 @@ function runtime({ width = 1282, overflow = null, workspaceStore = true } = {}) 
     subscribe: () => () => {},
     actions: { setArchivedFilter: filter => { workspaceCalls.push([filter]); workspaceState.archivedFilter = filter; } },
   };
+  // The workspace *list* snapshot (not the viewing store): archivedSessionIds is what
+  // the tab ledger follows when a conversation is archived.
+  const workspaceList = { items: [], archivedSessionIds: [] };
   const slots = {
     // SlotCore publishes store on the entry, outside the serialized options.
     entries: name => [{
@@ -60,6 +65,9 @@ function runtime({ width = 1282, overflow = null, workspaceStore = true } = {}) 
       removeEventListener: type => events.delete(`window:${type}`),
     },
     installComposerLayout: () => () => {}, installAccountMenu: () => () => {}, installUsage: () => () => {},
+    // The archived-row dialog's irreversible call rides the Host bridge; the harness
+    // records the action and settles immediately.
+    bridgeRequest: (action, payload) => { bridgeCalls.push([action, payload]); return Promise.resolve({ deleted: true }); },
     document: {
       addEventListener: (type, fn) => events.set(type, fn), removeEventListener: type => events.delete(type),
       querySelector: () => null,
@@ -77,10 +85,10 @@ function runtime({ width = 1282, overflow = null, workspaceStore = true } = {}) 
     clearMain: () => { snapshot.current = undefined; panelState.activePanelId = null; calls.push(['home']); },
     startSession: () => { snapshot.current = 'blank'; calls.push(['new']); },
     openSession: id => { snapshot.current = id; panelState.activePanelId = null; calls.push(['session', id]); },
-  }, theme: { getTheme: () => ({ preference: 'system' }) }, useSmoothState: () => ({ state: { enabled: true } }), text: (_key, fallback) => fallback });
+  }, sessions: { refresh: () => { sessionRefreshes += 1; return Promise.resolve(); } }, theme: { getTheme: () => ({ preference: 'system' }) }, useSmoothState: () => ({ state: { enabled: true } }), text: (_key, fallback) => fallback });
   const render = (inSettings = false) => {
     const registration = registrations.get(inSettings ? 'settings.action/smooth.tabs' : 'shell.overlay/smooth.chrome');
-    const props = { useSessions: fn => fn(snapshot), usePanelInfo: fn => fn(panelState) };
+    const props = { useSessions: fn => fn(snapshot), usePanelInfo: fn => fn(panelState), useWorkspaces: fn => fn(workspaceList) };
     let view = registration.component(props);
     // The harness runs effects immediately; reread the external tab ledger after
     // the route effect publishes, as useSyncExternalStore does in React.
@@ -90,7 +98,7 @@ function runtime({ width = 1282, overflow = null, workspaceStore = true } = {}) 
   };
   const flatten = node => node ? [node, ...node.children.flat(Infinity).filter(x => x && typeof x === 'object').flatMap(flatten)] : [];
   const operate = () => events.get('input')({ type: 'input', target: { closest: selector => selector.includes('[data-slot="main"]') || selector.startsWith('input,') ? {} : null } });
-  return { shell, render, flatten, registrations, calls, layoutState, settingsState, settingsCloses, snapshot, panelState, events, operate, properties, subscriptions, sandbox, bodyAttributes, workspaceState, workspaceCalls };
+  return { shell, render, flatten, registrations, calls, layoutState, settingsState, settingsCloses, snapshot, panelState, events, operate, properties, subscriptions, sandbox, bodyAttributes, workspaceState, workspaceCalls, workspaceList, bridgeCalls, get sessionRefreshes() { return sessionRefreshes; } };
 }
 
 test('the welcome block follows the main surface, not the tab count', () => {
@@ -222,6 +230,87 @@ test('a new conversation stays a preview until a message is sent', () => {
   keydown({ type: 'keydown', key: 'Enter', isComposing: false, shiftKey: false, target: { textContent: 'hello', closest: selector => selector === '[data-composer-card]' || selector === '[data-composer-input]' ? {} : null } });
   r.render();
   assert.equal(tab().props['data-preview'], false, 'sending the first message pins the tab');
+});
+
+test('archiving a conversation removes its tab and nothing brings it back', () => {
+  const r = runtime();
+  r.shell.setEnabled(true);
+  const tabs = () => r.flatten(r.render()).filter(node => node.props?.role === 'tab');
+  const titles = () => Array.from(tabs(), tab => tab.props.title);
+  // Two opened conversations: 'a' pinned first, then 'b'.
+  r.snapshot.current = 'a';
+  r.render(); r.render();
+  r.operate();
+  r.snapshot.byId.b = { title: 'B' };
+  r.snapshot.current = 'b';
+  r.render(); r.render();
+  r.operate();
+  assert.deepEqual(titles(), ['B', '实际会话'], 'both conversations hold tabs');
+
+  // Archiving a background conversation drops only that tab.
+  r.workspaceList.archivedSessionIds = ['a'];
+  r.render(); r.render();
+  assert.deepEqual(titles(), ['B'], 'the archived conversation leaves the strip');
+
+  // Archiving the current conversation clears the main view in the host and the
+  // strip loses its last tab; nothing is selected afterwards.
+  r.workspaceList.archivedSessionIds = ['a', 'b'];
+  r.snapshot.current = undefined;
+  r.render(); r.render();
+  assert.deepEqual(titles(), [], 'no tab remains once the current conversation is archived');
+  assert.equal(tabs().filter(node => node.props['aria-selected']).length, 0, 'and no tab is current');
+
+  // The host may keep the archived conversation on screen until it clears it; operating
+  // inside it must not pin the dead tab back into the strip.
+  r.snapshot.current = 'a';
+  r.render(); r.render();
+  r.operate();
+  r.render();
+  assert.deepEqual(titles(), [], 'an archived conversation never regains a tab');
+});
+
+test('an archived conversation offers a trailing delete action that confirms first', async () => {
+  const r = runtime();
+  r.shell.setEnabled(true);
+  const row = r.registrations.get('sidebar.workspaces.session.row.action/smooth.delete');
+  assert.ok(row, 'the delete action is registered in the host row-action slot');
+  assert.equal(row.options.order, 300, 'it sits after the host archive/pin buttons');
+  const renderRow = () => row.component({ sessionId: 'a', displayTitle: '实际会话', useWorkspaces: fn => fn(r.workspaceList) });
+  assert.equal(renderRow(), null, 'a running conversation has no delete action');
+  r.workspaceList.archivedSessionIds = ['a'];
+  const button = r.flatten(renderRow()).find(node => node.props?.className === 'smooth-session-delete');
+  assert.ok(button, 'the archived row carries the trailing delete button');
+  assert.match(button.props['aria-label'], /实际会话/);
+  button.props.onClick({ stopPropagation() {} });
+
+  const dialogRegistration = r.registrations.get('shell.overlay/smooth.session-delete');
+  assert.ok(dialogRegistration, 'the confirmation dialog is an overlay entry');
+  const dialog = () => dialogRegistration.component({});
+  let tree = dialog();
+  assert.ok(tree, 'the request opens the confirmation');
+  assert.match(tree.props.description, /实际会话/, 'the dialog names the conversation');
+  let footer = tree.props.footer;
+  const cancel = footer.children.find(node => node.children.includes('取消'));
+  let confirm = footer.children.find(node => node.children.includes('删除'));
+  assert.ok(cancel && confirm, 'the dialog offers cancel and delete');
+  // Cancelling closes without touching the Host.
+  cancel.props.onClick();
+  assert.equal(dialog(), null, 'cancel drops the request');
+  assert.deepEqual(r.bridgeCalls, [], 'cancel issues no bridge request');
+
+  // Reopen and confirm: the bridge removes the stored log, then the session list is
+  // re-pulled so the workspace tree drops the deleted row.
+  button.props.onClick({ stopPropagation() {} });
+  tree = dialog();
+  footer = tree.props.footer;
+  confirm = footer.children.find(node => node.children.includes('删除'));
+  confirm.props.onClick();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(r.bridgeCalls.length, 1, 'one bridge request is sent');
+  assert.equal(r.bridgeCalls[0][0], 'session-delete');
+  assert.equal(r.bridgeCalls[0][1].sessionId, 'a');
+  assert.equal(r.sessionRefreshes, 1, 'the deleted row is dropped by a fresh session list pull');
+  assert.equal(dialog(), null, 'the dialog closes after the deletion');
 });
 
 test('the conversation width the user runs with becomes the plugin default', () => {

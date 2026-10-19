@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   checkoutBranchForTest,
+  deleteArchivedSessionForTest,
   ensureGitServerForTest,
   gitStatusForTest,
 } from '../lib/index.js';
@@ -102,6 +103,13 @@ test('the bridge listener authenticates and answers status with a capability tok
     assert.equal(denied.statusCode, 403);
     assert.equal(denied.body.ok, false);
 
+    // The delete action rides the same authenticated route; without the Session
+    // services it refuses with a business error instead of guessing a path.
+    const refused = await call({ action: 'session-delete', sessionId: 'session-01234567-89ab-cdef-0123-456789abcdef' }, token);
+    assert.equal(refused.statusCode, 200);
+    assert.equal(refused.body.ok, false);
+    assert.equal(refused.body.error.code, 'session-root');
+
     // The token survives an activation: it is the value a reloaded window keeps using.
     const persisted = readFileSync(join(home, 'cache', 'smooth-bridge-token'), 'utf8').trim();
     assert.equal(persisted, token, 'the injected token is the persisted one');
@@ -111,5 +119,48 @@ test('the bridge listener authenticates and answers status with a capability tok
     else process.env.DSH_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
     rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('the bridge permanently deletes an archived Session log and refuses unsafe targets', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'smooth-home-'));
+  const root = join(home, 'sessions');
+  const id = 'session-01234567-89ab-cdef-0123-456789abcdef';
+  const sessionDir = join(root, '--tmp-project--', id);
+  mkdirSync(sessionDir, { recursive: true });
+  writeFileSync(join(sessionDir, 'session.v4.jsonl.zstd'), 'stored-session');
+  const cacheDir = join(home, 'storages', 'session_projcache', 'sessions');
+  mkdirSync(cacheDir, { recursive: true });
+  const cacheFile = join(cacheDir, `${id}.json`);
+  writeFileSync(cacheFile, '{}');
+  let unarchived = 0;
+  const context = ({ archived = [id], live } = {}) => ({
+    get(name) {
+      if (name === 'sessions') return { get: () => live };
+      if (name === 'workspaceRegistry') {
+        return {
+          archivedSessionIds: archived,
+          unarchiveSession: async (value) => { assert.equal(value, id); unarchived += 1; },
+        };
+      }
+      if (name === 'sessionPersistence') {
+        return { root, stat: async (value) => (value === id ? { header: { id: value } } : undefined) };
+      }
+      return undefined;
+    },
+  });
+  try {
+    const result = await deleteArchivedSessionForTest(context(), id);
+    assert.equal(result.deleted, true);
+    assert.equal(existsSync(sessionDir), false, 'the stored Session directory is removed');
+    assert.equal(existsSync(cacheFile), false, 'its projection cache goes with it');
+    assert.equal(unarchived, 1, 'the stale archive marker is dropped');
+
+    await assert.rejects(() => deleteArchivedSessionForTest(context({ live: {} }), id), /正在使用/);
+    await assert.rejects(() => deleteArchivedSessionForTest(context({ archived: [] }), id), /已归档/);
+    await assert.rejects(() => deleteArchivedSessionForTest(context(), '../outside'), /ID 无效/);
+    await assert.rejects(() => deleteArchivedSessionForTest(context({ archived: ['session-unknown-0000'] }), 'session-unknown-0000'), /不存在/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
   }
 });

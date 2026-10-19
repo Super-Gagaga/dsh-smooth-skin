@@ -49,6 +49,7 @@ export const HOST_SLOTS = [
   'sidebar.settings',
   'sidebar.panellist',
   'sidebar.workspaces',
+  'sidebar.workspaces.session.row.action',
   'conversation.input.overlay',
   'conversation.input.right',
   'conversation.input.model',

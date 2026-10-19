@@ -190,6 +190,16 @@ test('the metadata button labels exist in both locales', () => {
   runtime.dispose();
 });
 
+test('the archived-conversation delete labels exist in both locales', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  for (const key of ['shell.close', 'shell.deleteSession', 'shell.deleteSessionTitle', 'shell.deleteSessionDesc', 'shell.deleteSessionConfirm', 'shell.deleteSessionPending']) {
+    assert.equal(typeof runtime.dictionaries.zh[key], 'string', `missing zh ${key}`);
+    assert.equal(typeof runtime.dictionaries.en[key], 'string', `missing en ${key}`);
+  }
+  runtime.dispose();
+});
+
 test('hover-revealed controls cannot be pinned open by a clicked control', () => {
   const runtime = loadClient();
   runtime.plugin.apply(runtime.ctx);

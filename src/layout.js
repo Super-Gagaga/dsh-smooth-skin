@@ -128,16 +128,37 @@ function isCreatedSession(view) {
 /** UI-only ledger: one replaceable preview and an ordered list of operated tabs.
  * New tabs open at the front of the strip: the preview owns the leading slot while it
  * exists, and pinning it keeps it there. Closing an entry only changes this ledger;
- * session lifetime belongs to DSH. */
+ * session lifetime belongs to DSH. Archived Sessions cannot be opened again, so a tab
+ * standing for one is dropped as soon as the host archives it. */
 function createWorkspaceTabs() {
   let state = { pinned: [], preview: null, activeKey: null };
+  let archived = new Set();
   const listeners = new Set();
   const publish = (next) => { state = next; for (const listener of listeners) listener(); };
   const items = () => [...(state.preview ? [state.preview] : []), ...state.pinned];
+  const isArchived = (tab) => tab?.kind === 'session' && archived.has(tab.id);
   return {
     getSnapshot: () => state,
     subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
+    isArchived,
+    /** Adopt the host's archived Session ids and drop the tabs they cover. The host
+     * clears the main view when the current Session is archived, so a removed active
+     * tab leaves nothing current behind: the strip simply has no selected tab. */
+    setArchived(ids) {
+      const next = new Set(ids || []);
+      if (next.size === archived.size && [...next].every((id) => archived.has(id))) return;
+      archived = next;
+      const pinned = state.pinned.filter((tab) => !isArchived(tab));
+      const preview = isArchived(state.preview) ? null : state.preview;
+      const active = state.preview?.key === state.activeKey
+        ? state.preview
+        : state.pinned.find((tab) => tab.key === state.activeKey);
+      const activeKey = active && isArchived(active) ? null : state.activeKey;
+      if (pinned.length === state.pinned.length && preview === state.preview && activeKey === state.activeKey) return;
+      publish({ pinned, preview, activeKey });
+    },
     show(tab) {
+      if (!tab || isArchived(tab)) return;
       const existing = state.pinned.find(item => item.key === tab.key);
       if (state.activeKey === tab.key && (existing || state.preview)?.title === tab.title) return;
       publish({ activeKey: tab.key,
@@ -145,7 +166,7 @@ function createWorkspaceTabs() {
         preview: existing ? state.preview : tab });
     },
     pin(tab) {
-      if (!tab) return;
+      if (!tab || isArchived(tab)) return;
       const existing = state.pinned.find(item => item.key === tab.key);
       if (existing?.title === tab.title) return;
       publish({ ...state, activeKey: tab.key,
@@ -278,7 +299,7 @@ function tabOverflow(node) {
   };
 }
 
-function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, theme, remote, useSmoothState, text }) {
+function installReferenceShell({ slots, layout, uiWorkspace, sessions, modelDirectories, theme, remote, useSmoothState, text }) {
   if (!slots || !layout || !uiWorkspace) return { dispose() {} };
   const ui = require('@deepseek-ai/dsh-client-ui-primitives');
   const layoutStore = sharedSurfaceStore(slots, 'root', 'setSidebar');
@@ -294,10 +315,17 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
   let usageDispose;
   let placeWorkspaceFilterNode;
   const disposers = [];
+  /* One pending "delete this archived conversation" confirmation. The row action only
+   * raises the request; the dialog in `shell.overlay` owns the irreversible call so the
+   * list row itself never becomes a destructive click target. */
+  let deleteTarget;
+  const deleteListeners = new Set();
+  const setDeleteTarget = (next) => { deleteTarget = next; for (const listener of deleteListeners) listener(); };
+  const subscribeDeleteTarget = (listener) => { deleteListeners.add(listener); return () => deleteListeners.delete(listener); };
   // The home view is the page itself, not a tab, so it never becomes a pin target.
   // A conversation opened from the tree pins on any real interaction; a newly created
   // one only pins when a message is actually sent (see recordSend below).
-  const recordOperation = (event) => { if (active && currentView && !isCreatedSession(currentView) && isWorkspaceOperation(event)) workspaceTabs.pin(currentView); };
+  const recordOperation = (event) => { if (active && currentView && !isCreatedSession(currentView) && !workspaceTabs.isArchived(currentView) && isWorkspaceOperation(event)) workspaceTabs.pin(currentView); };
   for (const type of ['input', 'change', 'click']) {
     document.addEventListener(type, recordOperation, true);
     disposers.push(() => document.removeEventListener(type, recordOperation, true));
@@ -311,7 +339,7 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
         && String(target.textContent || '').trim() !== ''
         && !!target.closest('[data-composer-input]')
       : !!target.closest(`${hostPart('primary')}`);
-    if (sent) workspaceTabs.pin(currentView);
+    if (sent && !workspaceTabs.isArchived(currentView)) workspaceTabs.pin(currentView);
   };
   for (const type of ['click', 'keydown']) {
     document.addEventListener(type, recordSend, true);
@@ -512,6 +540,62 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
     h('button', { type: 'button', className: 'smooth-filter-option', 'data-selected': !archived, 'aria-pressed': !archived, onClick: pick(false) }, text('shell.inProgress', '进行中')),
     h('button', { type: 'button', className: 'smooth-filter-option', 'data-selected': archived, 'aria-pressed': archived, onClick: pick(true) }, text('shell.archived', '已归档')));
   }
+  /* The archived list's trailing delete button. The host's row action area is a list
+   * slot (archive 100, pin 200), so this entry rides the same layout and appears after
+   * the host's buttons for archived rows only. Clicking it only raises the confirmation
+   * request; the dialog below performs the deletion. */
+  function DeleteArchivedSessionButton(props) {
+    const skin = useSmoothState();
+    const archived = props.useWorkspaces((state) => !!state?.archivedSessionIds?.includes(props.sessionId));
+    if (!skin.state.enabled || !archived) return null;
+    const label = text('shell.deleteSession', '删除归档对话');
+    return h(ui.Tooltip, { label, side: 'bottom', align: 'end', delayMs: 500, portal: true },
+      h('button', {
+        type: 'button',
+        className: 'smooth-session-delete',
+        'aria-label': `${label}：${props.displayTitle || props.sessionId}`,
+        onClick: (event) => {
+          event.stopPropagation();
+          setDeleteTarget({ sessionId: props.sessionId, title: props.displayTitle });
+        },
+      }, h(ui.IconTrashOutlineRegular, { size: 14 })));
+  }
+  /* The irreversible step lives in one dialog and only runs after a second click. The
+   * Host half removes the Session's stored log; the session catalog is then re-pulled so
+   * the archived row leaves the tree without a page reload. */
+  function SessionDeleteConfirm() {
+    const skin = useSmoothState();
+    const target = React.useSyncExternalStore(subscribeDeleteTarget, () => deleteTarget);
+    const [busy, setBusy] = React.useState(false);
+    const [error, setError] = React.useState('');
+    if (!skin.state.enabled || !target) return null;
+    const close = () => { if (!busy) setDeleteTarget(undefined); };
+    const remove = () => {
+      if (busy) return;
+      setBusy(true);
+      setError('');
+      bridgeRequest('session-delete', { sessionId: target.sessionId }).then(async () => {
+        setDeleteTarget(undefined);
+        // The Host's list baseline reconciles the query index against the persistence
+        // root; re-reading it is what drops the deleted row from the workspace tree.
+        await sessions?.refresh?.();
+      }).catch((reason) => {
+        setError(reason instanceof Error && reason.message ? reason.message : String(reason));
+      }).finally(() => { setBusy(false); });
+    };
+    return h(ui.Modal, {
+      open: true,
+      onClose: close,
+      closeLabel: text('shell.close', '关闭'),
+      title: text('shell.deleteSessionTitle', '删除归档对话'),
+      description: text('shell.deleteSessionDesc', '将永久删除「%s」的本地会话记录，无法恢复。').replace('%s', target.title || target.sessionId),
+      footer: h(React.Fragment, null,
+        h(ui.Button, { variant: 'outline', disabled: busy, onClick: close }, text('composer.cancel', '取消')),
+        h(ui.Button, { variant: 'outline', disabled: busy, onClick: remove }, text('shell.deleteSessionConfirm', '删除'))),
+    },
+    busy ? h('div', { role: 'status' }, text('shell.deleteSessionPending', '正在删除…')) : null,
+    error ? h('div', { role: 'alert', className: 'smooth-session-delete-error' }, error) : null);
+  }
   function Chrome(props) {
     const skin = useSmoothState();
     const snapshot = props.useSessions((value) => value);
@@ -524,14 +608,21 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
     const panelTitle = typeof panelEntry?.options.label === 'function' ? panelEntry.options.label() : panelEntry?.options.label;
     const view = currentWorkspaceTab(snapshot, panel, settingsOpen, panelTitle, text);
     const tabState = React.useSyncExternalStore(workspaceTabs.subscribe, workspaceTabs.getSnapshot);
+    // The host publishes the archived Session ids on the workspace snapshot; their tabs
+    // are dead entries because an archived conversation cannot be opened again.
+    const archivedSessionIds = props.useWorkspaces((value) => value && value.archivedSessionIds);
+    const archivedSignature = (archivedSessionIds || []).join('\n');
     const ownsSurface = skin.state.enabled && !!props.inSettings === settingsOpen;
     React.useEffect(() => {
       if (!ownsSurface) return;
+      // Adopt the archive set before showing the current view, so a Session the host
+      // just archived is never re-added by the same render.
+      workspaceTabs.setArchived(archivedSessionIds);
       currentView = view.kind === 'home' ? undefined : view;
       if (currentView) workspaceTabs.show(view);
       // Adopt the width of the view that just mounted (once), then keep applying it.
       applyConversationWidth();
-    }, [ownsSurface, view.key, view.title]);
+    }, [ownsSurface, view.key, view.title, archivedSignature]);
     const scroll = React.useRef(null);
     const tabScroll = React.useRef(null);
     // Declared before the scroll effect so its callbacks can re-read the strip.
@@ -691,6 +782,10 @@ function installReferenceShell({ slots, layout, uiWorkspace, modelDirectories, t
       h(WorkspaceFilter));
   }
   disposers.push(slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: `${PLUGIN_ID}.chrome`, order: 10 }, Chrome)));
+  // The archived row's trailing delete button (after the host's archive/pin entries)
+  // and the confirmation dialog that owns the irreversible call.
+  disposers.push(slots.inject('sidebar.workspaces.session.row.action', () => slots.register({ name: 'sidebar.workspaces.session.row.action', id: `${PLUGIN_ID}.delete`, order: 300 }, DeleteArchivedSessionButton)));
+  disposers.push(slots.inject('shell.overlay', () => slots.register({ name: 'shell.overlay', id: `${PLUGIN_ID}.session-delete`, order: 30 }, SessionDeleteConfirm)));
   if (settingsStore) disposers.push(slots.inject('settings.action', () => slots.register({ name: 'settings.action', id: `${PLUGIN_ID}.tabs`, order: 10 }, (props) => h(Chrome, { ...props, inSettings: true }))));
   return {
     setEnabled,

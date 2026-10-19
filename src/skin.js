@@ -730,6 +730,18 @@ body[data-smooth-skin] .smooth-filter-option:focus-visible{outline:2px solid var
 body[data-smooth-skin]:has([data-sidebar-collapsed]) .smooth-workspace-filter,
 body[data-smooth-skin]:has(${hostPart('sectionLabelHidden')}) .smooth-workspace-filter{opacity:0;pointer-events:none}
 @media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-workspace-filter,body[data-smooth-skin] .smooth-filter-option{transition:none}}
+/* The archived row's trailing delete action: the host's own 16px row-action icon
+   button (4px radius, tertiary label, 14px glyph); only the hover colour turns
+   destructive, so an archived row stays quiet at rest. */
+body[data-smooth-skin] .smooth-session-delete{
+  appearance:none;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;
+  width:16px;height:16px;margin:0;padding:0;border:0;border-radius:4px;background:transparent;
+  color:var(--dsw-alias-label-tertiary);cursor:pointer;flex:none;
+}
+body[data-smooth-skin] .smooth-session-delete svg{width:14px;height:14px}
+body[data-smooth-skin] .smooth-session-delete:hover{color:var(--dsw-alias-state-error-primary)}
+body[data-smooth-skin] .smooth-session-delete:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:-2px}
+body[data-smooth-skin] .smooth-session-delete-error{margin-top:8px;padding:6px 8px;border-radius:8px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px;white-space:pre-wrap}
 
 /* Blank-session welcome. The host keeps its own stacking and proportions — headline,
    workspace chip, input card — and this skin centers that stack in the workspace instead
@@ -780,9 +792,9 @@ body[data-smooth-skin] .smooth-meta-button:hover{background:var(--smooth-surface
 body[data-smooth-skin] .smooth-meta-button:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:-2px}
 body[data-smooth-skin] .smooth-meta-divider{flex:none;height:12px;width:1px;background:var(--smooth-line)}
 /* The access mode and plan live natively in the row's modes group, right beside the add
-   button: keep them as one quiet line of text, not as card furniture. The mode leads and
-   the plus follows, the way the reference footer reads. */
-body[data-smooth-skin] [data-composer-card] ${hostPart('tools')} ${hostPart('modes')}{order:-1}
+   button: keep them as one quiet line of text, not as card furniture. The plus leads and
+   the mode follows, so the attach/command action sits before the access-mode chip. */
+body[data-smooth-skin] [data-composer-card] ${hostPart('tools')} ${hostPart('modes')}{order:0}
 body[data-smooth-skin] [data-composer-card] ${hostPart('modes')} :is(button,[role="button"]){height:28px;min-height:28px;padding:0 6px;border:0;border-radius:8px;background:transparent;color:var(--smooth-text);font-size:13px;line-height:18px;gap:5px;cursor:pointer}
 body[data-smooth-skin] [data-composer-card] ${hostPart('modes')} :is(button,[role="button"]):hover:not(:disabled){background:var(--smooth-surface-3);color:var(--smooth-text)}
 body[data-smooth-skin] [data-composer-card] ${hostPart('modes')} svg{width:14px;height:14px}

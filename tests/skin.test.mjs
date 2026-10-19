@@ -331,6 +331,22 @@ test('the conversation header follows the reference: chips under the title, tabs
   assert.ok(!/\[data-conversation-tabs\]:focus-within/.test(skin), 'a clicked view must not pin the switch open');
 });
 
+test('the attach button leads the access-mode chip in the composer footer', () => {
+  // The host renders the add button before the modes group; the skin must not pull the
+  // modes ahead of it, so the plus stays first and the access-mode chip follows it.
+  assert.match(skin, /\$\{hostPart\('tools'\)\} \$\{hostPart\('modes'\)\}\{order:0\}/);
+  assert.ok(!/\$\{hostPart\('tools'\)\} \$\{hostPart\('modes'\)\}\{order:-1\}/.test(skin), 'the plus must not be pushed behind the mode chip');
+});
+
+test('the archived-row delete action follows the host icon-button geometry', () => {
+  // 16px hit box, 4px radius and the host's tertiary label colour keep the trailing
+  // delete button indistinguishable from the archive/pin row actions at rest.
+  assert.match(skin, /body\[data-smooth-skin\] \.smooth-session-delete\{[^}]*width:16px;height:16px[^}]*border-radius:4px[^}]*color:var\(--dsw-alias-label-tertiary\)/);
+  assert.match(skin, /\.smooth-session-delete svg\{width:14px;height:14px\}/);
+  assert.match(skin, /\.smooth-session-delete:hover\{color:var\(--dsw-alias-state-error-primary\)\}/);
+  assert.match(skin, /\.smooth-session-delete:focus-visible\{outline:2px solid var\(--smooth-accent\)/);
+});
+
 test('a clicked tab does not pin its close button open', () => {
   assert.match(skin, /\.smooth-workspace-tab:hover \.smooth-tab-close/);
   assert.match(skin, /\.smooth-workspace-tab:has\(:focus-visible\) \.smooth-tab-close\{opacity:1;pointer-events:auto\}/);
