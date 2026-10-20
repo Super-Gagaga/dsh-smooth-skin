@@ -6,7 +6,7 @@
 
 const React = require('react');
 const h = React.createElement;
-const inject = ['slots', 'theme', 'locale', 'layout', 'uiWorkspace', 'sessions', 'modelDirectories', 'remote', 'remote.workspaceFiles'];
+const inject = ['slots', 'theme', 'locale', 'layout', 'uiWorkspace', 'sessions', 'modelDirectories', 'remote', 'remote.session', 'remote.workspaceFiles'];
 const LOCALE_NS = 'smooth';
 
 const CSS = `/* injected through the package stylesheet; kept beside the skin rules */
@@ -42,6 +42,13 @@ const CSS = `/* injected through the package stylesheet; kept beside the skin ru
 .smooth-theme:disabled{opacity:.5;cursor:default}
 .smooth-theme-swatch{display:flex;align-items:center;gap:4px}
 .smooth-theme-swatch i{display:block;width:12px;height:12px;border-radius:50%;border:1px solid rgba(128,128,128,.28)}
+.smooth-marks{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;width:100%;flex:none}
+.smooth-mark{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 4px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:16px;cursor:pointer;font-family:inherit}
+.smooth-mark:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
+.smooth-mark[aria-checked="true"]{border-color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-active,rgba(128,128,128,.16));color:var(--dsw-alias-label-primary);font-weight:600}
+.smooth-mark:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px}
+.smooth-mark:disabled{opacity:.5;cursor:default}
+.smooth-mark i{display:block;width:14px;height:14px;border-radius:50%;border:1px solid rgba(128,128,128,.28)}
 .smooth-footer{display:flex;align-items:center;justify-content:space-between;gap:10px 20px;flex-wrap:wrap}
 .smooth-footer-copy{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .smooth-note{font-size:12px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
@@ -363,6 +370,28 @@ function apply(ctx) {
         }, h(ThemeSwatch, { id: option.value }), h('span', null, option.label)))));
   }
 
+  /** One chip per mark colour. The chosen colour is written to the host's link token and
+   * to the plugin's mark token, so the conversation's referenced files/key hints and the
+   * sidebar's workspace names all follow the same choice. */
+  function MarkRow(props) {
+    return h('div', { className: 'smooth-row smooth-row--appearance' },
+      h('div', { className: 'smooth-row-copy' },
+        h('h3', null, props.title),
+        props.hint ? h('small', null, props.hint) : null),
+      h('div', { className: 'smooth-marks', role: 'radiogroup', 'aria-label': props.title },
+        ...props.options.map((option) => h('button', {
+          key: option.value,
+          type: 'button',
+          role: 'radio',
+          'aria-checked': props.value === option.value,
+          className: 'smooth-mark',
+          'data-mark': option.value,
+          title: option.label,
+          disabled: props.disabled,
+          onClick: () => props.onChange(option.value),
+        }, h('i', { style: { background: option.color } }), h('span', null, option.label)))));
+  }
+
   /** The outer size of the window the settings page is drawn in, or an empty string when
    * the platform does not expose it (a browser tab still exposes it, a frame does not). */
   function windowSizeReadout() {
@@ -440,6 +469,14 @@ function apply(ctx) {
       ['sunset', 'Sunset orange'],
       ['deepsea', 'Deep sea blue'],
     ].map(([value, fallback]) => ({ value, label: text(`settings.theme.${value}`, fallback) }));
+    const markOptions = [
+      ['blue', 'Blue'],
+      ['cyan', 'Cyan'],
+      ['violet', 'Violet'],
+      ['green', 'Green'],
+      ['orange', 'Orange'],
+      ['rose', 'Rose'],
+    ].map(([value, fallback]) => ({ value, label: text(`settings.mark.${value}`, fallback), color: MARK_CHOICES[value].dark }));
     return h('div', { className: 'smooth-settings' },
       h('header', null,
         h('div', { className: 'smooth-page-title' },
@@ -465,6 +502,14 @@ function apply(ctx) {
           disabled: disabled || !current.enabled,
           options: themeOptions,
           onChange: (value) => view.update({ ...current, theme: value }),
+        }),
+        h(MarkRow, {
+          title: text('settings.mark', 'Mark colour'),
+          hint: text('settings.markHint', 'Referenced files and key hints in the conversation, and the workspace names in the sidebar.'),
+          value: current.mark,
+          disabled: disabled || !current.enabled,
+          options: markOptions,
+          onChange: (value) => view.update({ ...current, mark: value }),
         })),
       h('section', null,
         h('h4', { className: 'smooth-group-title' }, text('settings.groupStartup', 'Startup')),
@@ -500,7 +545,7 @@ function apply(ctx) {
               type: 'button',
               className: 'smooth-button',
               disabled,
-              onClick: () => view.update({ enabled: true, theme: 'auto', boot: true, windowSize: { enabled: true, ...DEFAULT_WINDOW_SIZE } }),
+              onClick: () => view.update({ enabled: true, theme: 'auto', boot: true, mark: 'blue', windowSize: { enabled: true, ...DEFAULT_WINDOW_SIZE } }),
             }, text('settings.reset', 'Reset to defaults')),
             h('span', { className: 'smooth-note' }, text('settings.autosave', 'Changes are saved automatically.'))),
           h('span', {

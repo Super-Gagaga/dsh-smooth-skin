@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "private": true,
+  "icon": "./icon.svg",
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
@@ -12,7 +13,7 @@
     "./locale/zh.json": "./locale/zh.json",
     "./locale/en.json": "./locale/en.json"
   },
-  "files": ["lib", "locale", "cordis.patch.yml", "README.md"],
+  "files": ["lib", "locale", "cordis.patch.yml", "README.md", "icon.svg"],
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch",

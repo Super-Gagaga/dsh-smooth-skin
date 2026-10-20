@@ -750,12 +750,27 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
    * click is captured, so the expansion can show the larger effort slider. The panel
    * has two pages — effort and the model catalogue — that slide into each other the
    * way the account menu slides its help page over the launcher rows. */
-  function ModelPanel({ anchor, directory, load, select, text, onClose }) {
+  function ModelPanel({ anchor, directory, load, select, text, onClose, closeRef }) {
     const panelRef = React.useRef(null);
     const effortRef = React.useRef(null);
     const modelsRef = React.useRef(null);
     const [view, setView] = React.useState('effort');
-    const [height, setHeight] = React.useState(0);
+    // The pane's measured height plus the motion phase. The panel mounts already at
+    // its final size and plays a short CSS entrance animation, so the click reads as
+    // immediate; a close request flips to `closing`, plays the exit animation and only
+    // then unmounts the portal.
+    const [contentHeight, setContentHeight] = React.useState(0);
+    const [phase, setPhase] = React.useState('open');
+    const closingRef = React.useRef(false);
+    const closeTimer = React.useRef(0);
+    const reduced = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+    const requestClose = () => {
+      if (closingRef.current) return;
+      closingRef.current = true;
+      if (reduced()) { onClose(); return; }
+      setPhase('closing');
+      closeTimer.current = window.setTimeout(onClose, 160);
+    };
     const state = React.useSyncExternalStore(
       (listener) => directory.subscribe(listener),
       () => directory.getSnapshot(),
@@ -765,17 +780,26 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     React.useLayoutEffect(() => {
       const pane = (view === 'models' ? modelsRef : effortRef).current;
       if (!pane) return undefined;
-      const update = () => setHeight(pane.offsetHeight);
+      const update = () => setContentHeight(pane.offsetHeight);
       update();
       const observer = new ResizeObserver(update);
       observer.observe(pane);
       return () => observer.disconnect();
     }, [view]);
+    React.useEffect(() => () => { if (closeTimer.current) window.clearTimeout(closeTimer.current); }, []);
+    // The host's trigger click toggles the panel; route its close through the motion
+    // instead of unmounting on the spot. Assigning after every render keeps the
+    // callback current without a dependency array that would churn the listener.
+    React.useEffect(() => {
+      if (!closeRef) return undefined;
+      closeRef.current = requestClose;
+      return () => { if (closeRef.current === requestClose) closeRef.current = null; };
+    });
     React.useEffect(() => {
       const outside = (event) => {
         if (panelRef.current?.contains?.(event.target)) return;
         if (event.target?.closest?.('[data-slot="conversation.input.model"]')) return;
-        onClose();
+        requestClose();
       };
       document.addEventListener('pointerdown', outside, true);
       return () => document.removeEventListener('pointerdown', outside, true);
@@ -784,7 +808,7 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
       const escape = (event) => {
         if (event.key !== 'Escape') return;
         if (view === 'models') setView('effort');
-        else onClose();
+        else requestClose();
       };
       document.addEventListener('keydown', escape);
       return () => document.removeEventListener('keydown', escape);
@@ -806,11 +830,11 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     // floating over the conversation above it.
     const bottom = Math.max(8, window.innerHeight - anchor.top + 8);
     return createPortal(h('div', {
-      ref: panelRef, className: 'smooth-git-menu smooth-model-panel', 'data-view': view,
+      ref: panelRef, className: 'smooth-git-menu smooth-model-panel', 'data-view': view, 'data-state': phase,
       style: { left: `${left}px`, bottom: `${bottom}px`, width: `${width}px` },
       role: 'dialog', 'aria-label': view === 'models' ? text('composer.modelMenu', '模型') : text('composer.reasoningEffort', '思考强度'),
     },
-      h('div', { className: 'smooth-model-panel-viewport', style: height ? { height: `${height}px` } : undefined },
+      h('div', { className: 'smooth-model-panel-viewport', style: contentHeight ? { height: `${contentHeight}px` } : undefined },
         h('div', {
           ref: effortRef, className: 'smooth-model-panel-pane', 'data-pane': 'effort',
           'data-active': view === 'effort' ? 'true' : undefined, 'aria-hidden': view === 'models', inert: view === 'models',
@@ -844,14 +868,19 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     }
     const ready = Boolean(directory?.store);
     const [anchor, setAnchor] = React.useState(undefined);
+    // The panel routes its own close through the expand/collapse transition; the
+    // trigger click uses this handle so a second click plays the collapse instead of
+    // yanking the portal out of the DOM.
+    const closeRef = React.useRef(null);
     React.useEffect(() => {
       if (!ready) return undefined;
       let trigger;
       const capture = (event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (closeRef.current) { closeRef.current(); return; }
         const rect = trigger.getBoundingClientRect();
-        setAnchor((current) => current ? undefined : {
+        setAnchor({
           left: rect.left, top: rect.top, width: rect.width, right: rect.right,
         });
       };
@@ -886,7 +915,7 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     };
     return anchor
       ? h(ModelPanel, {
-        anchor, directory: directory.store, load, select, text,
+        anchor, directory: directory.store, load, select, text, closeRef,
         onClose: () => setAnchor(undefined),
       })
       : null;
@@ -1049,8 +1078,14 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
       return skin.state.enabled && target ? createPortal(h('div', { className }, control), target) : control;
     });
   }
-  disposers.push(slots.inject('conversation.input.right', () => slots.register({
-    name: 'conversation.input.right', id: `${PLUGIN_ID}.model`, order: 20,
+  // The model/effort overlay's mount point. `conversation.input.right` only renders once
+  // the composer owns an active input state, so the welcome (new-session) hero — which
+  // still renders the model seat — never mounted this host and the native menu opened
+  // there. `conversation.input.overlay` renders inside the same composer card for every
+  // session in both the hero and the resident composer, so the custom panel now covers
+  // new sessions too. The component renders nothing; it only attaches the trigger click.
+  disposers.push(slots.inject('conversation.input.overlay', () => slots.register({
+    name: 'conversation.input.overlay', id: `${PLUGIN_ID}.model`, order: -70,
   }, ModelPanelHost)));
   // The mode selector appears in two different slots depending on whether the welcome
   // page already owns a draft session: the hero slot when it does not, the generic left

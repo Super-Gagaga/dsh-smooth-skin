@@ -132,6 +132,8 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hos
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')} svg g>circle:first-child{opacity:.4}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')}{height:29px;border-radius:8px}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')} :is(${hostPart('folder')},${hostPart('chevron')}){display:none}
+/* Workspace group titles are the sidebar's section headers: they keep the host's own
+   title colour so the tree reads as one list; only their size/weight is tightened. */
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')} ${hostPart('title')}{font-size:13.5px;line-height:19px;font-weight:500}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sectionLabel')}{font-size:12px;line-height:18px}
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"][aria-selected="true"]{background:var(--smooth-selected);border-color:transparent;box-shadow:none}
@@ -317,6 +319,15 @@ body[data-smooth-skin] .smooth-model-slider input[type="range"]:disabled + .smoo
 body[data-smooth-skin] .smooth-model-error{padding:1px 4px;color:var(--dsw-alias-state-error-primary);font-size:10.5px;line-height:14px}
 body[data-smooth-skin] .smooth-model-group{display:flex;flex-direction:column;gap:1px}
 body[data-smooth-skin] .smooth-git-menu.smooth-model-panel{padding:0;gap:0;overflow:hidden;max-height:none;--smooth-model-fade:color-mix(in srgb,var(--smooth-surface-3) 80%,var(--dsw-specific-input-major))}
+/* The panel answers the click at its final size: the first frame already shows the
+   full panel, and only a short fade plus a 6px rise settles it in. Closing plays the
+   same motion out for .15s before the portal is removed, so both directions stay
+   responsive instead of delaying the readable content. */
+body[data-smooth-skin] .smooth-model-panel{transform-origin:bottom center}
+body[data-smooth-skin] .smooth-model-panel[data-state="open"]{animation:smooth-model-panel-in .16s cubic-bezier(.2,.8,.3,1)}
+body[data-smooth-skin] .smooth-model-panel[data-state="closing"]{animation:smooth-model-panel-out .15s cubic-bezier(.4,0,1,1) forwards;pointer-events:none}
+@keyframes smooth-model-panel-in{from{opacity:0;transform:translateY(6px) scale(.99)}to{opacity:1;transform:none}}
+@keyframes smooth-model-panel-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(6px) scale(.99)}}
 /* Two pages share one slot: the active page fades in from the side the navigation
    comes from while the other leaves the opposite way, the same language as the account
    menu's help page. The viewport height follows the page on screen, so the
@@ -345,7 +356,7 @@ body[data-smooth-skin] .smooth-model-body{display:flex;flex-direction:column;ali
 body[data-smooth-skin] .smooth-model-panel .smooth-model-trigger{height:24px;min-height:24px;font-size:13px}
 body[data-smooth-skin] .smooth-model-panel .smooth-model-slider{margin-top:4px}
 @media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-model-art{transition:none}}
-@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-model-panel-viewport,body[data-smooth-skin] .smooth-model-panel-pane{transition:none}}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-model-panel{animation:none}body[data-smooth-skin] .smooth-model-panel-viewport,body[data-smooth-skin] .smooth-model-panel-pane{transition:none}}
 /* Keep TodoPanel's projection, native StateDot and conditional list rendering.
    Scope every local name to its public panel hook so chat headers stay untouched. */
 body[data-smooth-skin] [data-testid="todo-panel"]{border:0;border-radius:16px;background:var(--smooth-surface);background-image:var(--smooth-light-wash);box-shadow:var(--smooth-light-edge),var(--smooth-shadow-1);backdrop-filter:none}

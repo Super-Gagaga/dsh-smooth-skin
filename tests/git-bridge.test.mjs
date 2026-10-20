@@ -103,12 +103,12 @@ test('the bridge listener authenticates and answers status with a capability tok
     assert.equal(denied.statusCode, 403);
     assert.equal(denied.body.ok, false);
 
-    // The delete action rides the same authenticated route; without the Session
-    // services it refuses with a business error instead of guessing a path.
+    // The delete action rides the same authenticated route; without the archive
+    // state it refuses (fail closed) instead of guessing a path.
     const refused = await call({ action: 'session-delete', sessionId: 'session-01234567-89ab-cdef-0123-456789abcdef' }, token);
     assert.equal(refused.statusCode, 200);
     assert.equal(refused.body.ok, false);
-    assert.equal(refused.body.error.code, 'session-root');
+    assert.equal(refused.body.error.code, 'session-not-archived');
 
     // The token survives an activation: it is the value a reloaded window keeps using.
     const persisted = readFileSync(join(home, 'cache', 'smooth-bridge-token'), 'utf8').trim();

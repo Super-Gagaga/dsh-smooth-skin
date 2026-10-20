@@ -11,6 +11,7 @@ tools/.native-*.css
 
 # agent 运行期产物（worktree、截图），不是项目内容
 .agents/
+.impeccable/
 
 # 思考强度插图的原始 PNG：单张 3.5–4.5MB，只用来生成 cutout/*.webp，不入库
 assets/think/*.png

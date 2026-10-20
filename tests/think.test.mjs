@@ -76,7 +76,7 @@ test('the model catalogue slides in from the effort page, like the account help 
   assert.match(skin, /\.smooth-model-panel-pane\{[^}]*opacity:0[^}]*transform:translateX\(14px\)[^}]*transition:opacity \.2s ease,transform \.26s/);
   assert.match(skin, /\.smooth-model-panel-pane\[data-pane="effort"\]\{transform:translateX\(-14px\)\}/);
   assert.match(skin, /\.smooth-model-panel-pane\[data-active="true"\]\{opacity:1;pointer-events:auto;transform:none\}/);
-  assert.match(skin, /prefers-reduced-motion:reduce\)\{body\[data-smooth-skin\] \.smooth-model-panel-viewport,body\[data-smooth-skin\] \.smooth-model-panel-pane\{transition:none\}\}/);
+  assert.match(skin, /prefers-reduced-motion:reduce\)\{body\[data-smooth-skin\] \.smooth-model-panel\{animation:none\}body\[data-smooth-skin\] \.smooth-model-panel-viewport,body\[data-smooth-skin\] \.smooth-model-panel-pane\{transition:none\}\}/);
 });
 
 test('the model page shares the panel surface instead of the host menu card', async () => {

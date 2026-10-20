@@ -197,7 +197,7 @@ test('the smooth caret measures twice before it animates, so a late layout does 
   }
 });
 
-test('the model seat is contributed through the composer right slot', () => {
+test('the model panel host mounts for every session, the new-session hero included', () => {
   const overrides = new Map();
   sandbox.h = (type, props, ...children) => ({ type, props, children });
   sandbox.require = name => name === 'react-dom' ? { createPortal() {} } : {};
@@ -209,10 +209,15 @@ test('the model seat is contributed through the composer right slot', () => {
     slots, modelDirectories: {}, text: () => 'Short prompt',
     useSmoothState: () => ({ state: { enabled: true } }),
   });
-  const seat = overrides.get('conversation.input.right');
-  assert.ok(seat, 'the model/effort seat lives in the generic right-control list');
+  // The overlay renders inside the composer card with any Session — the hero (new
+  // conversation) and the resident composer both. `conversation.input.right` requires
+  // an active input state, so the hero never mounted the host and the native model
+  // menu opened there instead of the effort panel.
+  const seat = overrides.get('conversation.input.overlay');
+  assert.ok(seat, 'the model/effort panel host lives beside the composer overlays');
   assert.equal(seat.options.id, 'smooth.model');
-  assert.equal(typeof seat.component, 'function');
+  assert.equal(seat.options.order, -70);
+  assert.equal(overrides.has('conversation.input.right'), false, 'input.right only renders with an active input state');
   assert.equal(overrides.has('conversation.composer.bar'), false, 'the native composer retains its child-slot ownership');
   dispose(); assert.equal(overrides.size, 0);
 });
@@ -269,4 +274,18 @@ test('relocated native controls retain injection, locale, store, child slots and
   assert.equal(entries.get('conversation.hero.agentPreset').length, 1);
   assert.equal(entries.get('conversation.input.overlay').length, 0);
   assert.equal(listeners.size, 0);
+});
+
+test('the model panel keeps its open/close motion in the component, not just the stylesheet', () => {
+  // The portal mount is the open animation's first frame: collapsed, then flipped to
+  // `open` after the browser painted that frame. Closing flips to `closing` and only
+  // unmounts when the 280ms timer (the .26s transition plus a frame) settles.
+  assert.match(source, /'data-state': phase/);
+  assert.match(source, /React\.useState\('open'\)/, 'the panel mounts already open: no frame is spent collapsed');
+  assert.match(source, /setPhase\('closing'\)/);
+  assert.match(source, /window\.setTimeout\(onClose, 160\)/, 'the exit animation is short and the portal is removed right after it');
+  assert.match(source, /window\.matchMedia\?\.\('\(prefers-reduced-motion: reduce\)'\)/, 'reduced motion skips the animation');
+  // The trigger's own second click is routed through the panel so the collapse plays.
+  assert.match(source, /if \(closeRef\.current\) \{ closeRef\.current\(\); return; \}/);
+  assert.match(source, /closeRef\.current = requestClose/);
 });

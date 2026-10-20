@@ -25,6 +25,17 @@ async function loadHostHalf() {
   return module;
 }
 
+test('the mark colour choice paints the link family only', async () => {
+  const { buildTokens, DEFAULTS } = await loadHostHalf();
+  const blue = buildTokens({ ...DEFAULTS, mark: 'blue' });
+  assert.equal(blue['--dsw-alias-link'].light, '#2f62c9', 'blue is the default mark');
+  assert.equal(blue['--dsw-alias-link'].dark, '#85b2ff');
+  const violet = buildTokens({ ...DEFAULTS, mark: 'violet' });
+  assert.equal(violet['--dsw-alias-link'].dark, '#b39dff', 'the link family follows the choice');
+  assert.notEqual(violet['--dsw-alias-link'].dark, blue['--dsw-alias-link'].dark);
+  assert.equal(violet['--smooth-mark'], undefined, 'the mark no longer paints the sidebar workspace names');
+});
+
 test('host half parses and exposes the plugin contract', async () => {
   const module = await loadHostHalf();
   assert.equal(module.plugin.name, 'dsh-smooth-skin');
@@ -60,8 +71,11 @@ test('normalize clamps unknown persisted values to the defaults', async () => {
   const { normalize, DEFAULTS } = await loadHostHalf();
   assert.deepEqual(normalize(null), DEFAULTS);
   assert.deepEqual(normalize({ enabled: 'yes', theme: 'neon' }), DEFAULTS);
-  assert.deepEqual(normalize({ enabled: false, theme: 'iron' }), { enabled: false, theme: 'iron', boot: true, windowSize: DEFAULTS.windowSize });
-  assert.deepEqual(normalize({ enabled: true, theme: 'auto', boot: false }), { enabled: true, theme: 'auto', boot: false, windowSize: DEFAULTS.windowSize });
+  assert.deepEqual(normalize({ enabled: false, theme: 'iron' }), { enabled: false, theme: 'iron', boot: true, mark: DEFAULTS.mark, windowSize: DEFAULTS.windowSize });
+  assert.deepEqual(normalize({ enabled: true, theme: 'auto', boot: false }), { enabled: true, theme: 'auto', boot: false, mark: DEFAULTS.mark, windowSize: DEFAULTS.windowSize });
+  // The mark colour is one of the offered choices; anything else falls back to blue.
+  assert.equal(normalize({ mark: 'violet' }).mark, 'violet');
+  assert.equal(normalize({ mark: 'chartreuse' }).mark, DEFAULTS.mark);
   // The old day/night values and the previous preset ids map onto the new presets.
   assert.equal(normalize({ theme: 'dark' }).theme, 'iron');
   assert.equal(normalize({ theme: 'light' }).theme, 'snow');
@@ -184,6 +198,18 @@ test('the top-stop wash stays on the blue fill and its core lands on the strip',
   assert.match(skin, /\.smooth-model-sparks\{[^}]*z-index:2/, 'the particles paint over the wash');
 });
 
+test('the model panel settles in fast and closes before it unmounts', () => {
+  // The panel is usable on the first frame: it mounts at full size and only a short
+  // fade/rise settles it, so the click never waits for a collapsed frame or a height
+  // transition. Closing plays the same motion out briefly before the portal is removed.
+  assert.match(skin, /\.smooth-model-panel\{transform-origin:bottom center\}/);
+  assert.match(skin, /\.smooth-model-panel\[data-state="open"\]\{animation:smooth-model-panel-in \.16s cubic-bezier\(\.2,\.8,\.3,1\)\}/);
+  assert.match(skin, /@keyframes smooth-model-panel-in\{from\{opacity:0;transform:translateY\(6px\) scale\(\.99\)\}to\{opacity:1;transform:none\}\}/);
+  assert.match(skin, /\.smooth-model-panel\[data-state="closing"\]\{animation:smooth-model-panel-out \.15s cubic-bezier\(\.4,0,1,1\) forwards;pointer-events:none\}/);
+  assert.match(skin, /@keyframes smooth-model-panel-out\{from\{opacity:1;transform:none\}to\{opacity:0;transform:translateY\(6px\) scale\(\.99\)\}\}/);
+  assert.match(skin, /@media\(prefers-reduced-motion:reduce\)\{body\[data-smooth-skin\] \.smooth-model-panel\{animation:none\}/, 'reduced motion skips the animation');
+});
+
 test('hostPart and accountPart match both host class-name conventions', () => {
   const sandbox = {};
   vm.runInNewContext(`${skin}\nglobalThis.__hostPart = hostPart; globalThis.__accountPart = accountPart;`, sandbox);
@@ -290,7 +316,10 @@ test('the workspace list keeps the reference list rhythm and its leading dot', (
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\} svg \*\{stroke-width:2\.71\}/);
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\} svg g>circle:first-child\{opacity:\.4\}/);
   assert.match(skin, /\$\{hostPart\('projectRow'\)\}\{height:29px;border-radius:8px\}/);
+  // Workspace group titles keep the host's title colour (the workspace-name colouring is
+  // gone); only their size and weight are tightened.
   assert.match(skin, /\$\{hostPart\('projectRow'\)\} \$\{hostPart\('title'\)\}\{font-size:13\.5px;line-height:19px;font-weight:500\}/);
+  assert.ok(!/\$\{hostPart\('projectRow'\)\} \$\{hostPart\('title'\)\}\{[^}]*color:/.test(skin), 'workspace names must not be recoloured');
   assert.match(skin, /\$\{hostPart\('sectionLabel'\)\}\{font-size:12px;line-height:18px\}/);
 });
 

@@ -278,7 +278,7 @@ test('theme and animation switches never move the window; only a size edit does'
   await rows()[1].props.onChange('snow');
   assert.equal(runtime.preference, 'light');
   assert.deepEqual(runtime.resizes, [], 'switching the theme must not resize or reposition the window');
-  await rows()[2].props.onChange(false);
+  await rows()[3].props.onChange(false);
   assert.deepEqual(runtime.resizes, [], 'the launch-animation toggle must not touch the window either');
 
   const size = runtime.render(rows()[rows().length - 1]);
@@ -473,22 +473,23 @@ test('the settings page carries the enable switch, the mode choice and the launc
   const rows = settingRows(runtime);
   assert.equal(rows[0].props.checked, true, 'the enable switch stays the first row');
   assert.equal(rows[1].props.value, 'auto');
-  assert.equal(rows[2].props.checked, true, 'the launch animation is on by default');
-  assert.equal(rows[2].props.disabled, false);
-  await rows[2].props.onChange(false);
+  assert.equal(rows[2].props.value, 'blue', 'the mark colour follows the theme row');
+  assert.equal(rows[3].props.checked, true, 'the launch animation is on by default');
+  assert.equal(rows[3].props.disabled, false);
+  await rows[3].props.onChange(false);
   assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')),
-    { enabled: true, theme: 'auto', boot: false, windowSize: { enabled: true, width: 1440, height: 900 } });
-  assert.equal(settingRows(runtime)[2].props.checked, false);
+    { enabled: true, theme: 'auto', boot: false, mark: 'blue', windowSize: { enabled: true, width: 1440, height: 900 } });
+  assert.equal(settingRows(runtime)[3].props.checked, false);
   await resetButton(runtime).props.onClick();
   assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')),
-    { enabled: true, theme: 'auto', boot: true, windowSize: { enabled: true, width: 1440, height: 900 } });
+    { enabled: true, theme: 'auto', boot: true, mark: 'blue', windowSize: { enabled: true, width: 1440, height: 900 } });
   runtime.dispose();
 });
 
 test('the settings page replays the index opening without touching the stored state', () => {
   const runtime = loadClient();
   runtime.plugin.apply(runtime.ctx);
-  const rowOf = () => settingRows(runtime)[2];
+  const rowOf = () => settingRows(runtime)[3];
   const preview = rowOf().props.action;
   assert.equal(preview.children[0], '预览');
   assert.equal(preview.props.disabled, false, 'the preview is available while the skin is on');
@@ -538,4 +539,28 @@ test('manifest loads the providers before activating the client', () => {
   for (const name of ['layout', 'workspace', 'session', 'settings-general']) {
     assert.ok(manifest.dsh.client.inject.includes(`@deepseek-ai/dsh-client-ui-${name}`));
   }
+});
+
+test('the client injects remote.session so the model directory resolves for a fresh session', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  // `ctx.modelDirectories.directoryFor(sessionId)` resolves the session's remote
+  // binding; Cordis checks the property against the *calling* plugin's inject list.
+  // A brand-new session (empty composer) has no model directory until that call
+  // succeeds, so without `remote.session` the model panel host reported "not ready",
+  // never attached its trigger listener, and clicking the model button fell through
+  // to the native menu (or opened nothing until the first keystroke).
+  assert.ok(runtime.plugin.inject.includes('remote.session'), 'remote.session must be declared: directoryFor guards it against the caller');
+  assert.ok(runtime.plugin.inject.includes('modelDirectories'));
+  runtime.dispose();
+});
+
+test('the mark colour labels exist in both locales', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  for (const key of ['settings.mark', 'settings.markHint', 'settings.mark.blue', 'settings.mark.cyan', 'settings.mark.violet', 'settings.mark.green', 'settings.mark.orange', 'settings.mark.rose']) {
+    assert.equal(typeof runtime.dictionaries.zh[key], 'string', `missing zh ${key}`);
+    assert.equal(typeof runtime.dictionaries.en[key], 'string', `missing en ${key}`);
+  }
+  runtime.dispose();
 });
