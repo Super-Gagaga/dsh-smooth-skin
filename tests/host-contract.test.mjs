@@ -44,7 +44,7 @@ test('the host contract covers the selectors and hooks the skin actually reaches
     assert.ok(contract.packages.includes(name), `contract.packages is missing ${name}`);
   }
   // Data attributes created by the plugin itself must not be demanded from the host.
-  for (const own of ['data-smooth-skin', 'data-smooth-home', 'data-selected', 'data-preview', 'data-error']) {
+  for (const own of ['data-smooth-skin', 'data-smooth-home', 'data-selected', 'data-preview', 'data-error', 'data-default']) {
     assert.ok(!contract.attributes.includes(own), `the host must not be required to carry ${own}`);
   }
 

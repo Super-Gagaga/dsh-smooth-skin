@@ -163,6 +163,27 @@ test('the model effort slider has separate light and dark surfaces', async () =>
   assert.match(skin, /\.smooth-model-dot\{/);
 });
 
+test('the context ring replaces the dock row and keeps the occupancy look', () => {
+  // The host dock (two stat pills plus its own context ring) is gone; the ring the
+  // composer seat draws next to the model selector is the only occupancy reading.
+  assert.match(skin, /body\[data-smooth-skin\] \[data-composer-dock\]\{display:none\}/);
+  const button = skin.match(/\.smooth-context-button\{[^}]*\}/)?.[0] || '';
+  assert.match(button, /width:22px;height:22px/, 'the ring matches the other footer controls');
+  const track = skin.match(/\.smooth-context-ring-track\{[^}]*\}/)?.[0] || '';
+  const fill = skin.match(/\.smooth-context-ring-fill\{[^}]*\}/)?.[0] || '';
+  assert.match(track, /stroke:color-mix\(in srgb,var\(--smooth-muted\) 42%,transparent\)/, 'the remaining share is a pale ring');
+  assert.match(fill, /stroke:var\(--smooth-accent\)/, 'the used share is the accent blue');
+  assert.match(fill, /stroke-width:2\.1/, 'the band is thick like the supplied ring asset');
+  assert.match(skin, /\.smooth-context-ring-label\{[^}]*font-size:7\.2px/, 'the percentage sits inside the ring');
+  // The panel carries the readings the removed pills used to open.
+  assert.match(skin, /\.smooth-context-menu\{[^}]*position:fixed/);
+  assert.match(skin, /\.smooth-context-bar\{/);
+  assert.match(skin, /\.smooth-context-legend-row\{/);
+  assert.match(skin, /\.smooth-context-grid\{[^}]*grid-template-columns:repeat\(2/);
+  assert.match(skin, /\.smooth-context-metric-value\{/);
+  assert.match(skin, /@media\(prefers-reduced-motion:reduce\)\{body\[data-smooth-skin\] \.smooth-context-menu\{animation:none\}/);
+});
+
 test('the effort thumb is a glider that slides between stops and follows a drag', () => {
   // The native thumb paints nothing; the visible ball is the glider. Both the ball and
   // the blue fill read one registered, animatable number, so a slide can never split
@@ -182,6 +203,10 @@ test('the effort thumb is a glider that slides between stops and follows a drag'
   const zOf = (rule) => Number(rule.match(/z-index:(\d+)/)?.[1]);
   assert.ok(zOf(fill) < zOf(dot), 'the dots must paint over the blue fill');
   assert.ok(zOf(dot) < zOf(glider), 'the ball must paint over the dots');
+  // Provider-default models get an auto chip in the level row; it is not a slider stop.
+  assert.match(skin, /\.smooth-model-auto\{[^}]*order:-1/, 'the chip sits left of the level dot');
+  assert.match(skin, /\.smooth-model-auto\[data-active="true"\]\{[^}]*var\(--smooth-model-blue\)/, 'the active chip uses the level blue');
+  assert.match(skin, /\.smooth-model-slider\[data-default="true"\]\{opacity:\.5\}/, 'the explicit scale dims while Default owns the level');
 });
 
 test('the top-stop wash stays on the blue fill and its core lands on the strip', () => {
@@ -443,20 +468,23 @@ test('the skin stylesheet is scoped to the gating body attribute and never hides
     const trimmed = selector.trim();
     if (!trimmed.startsWith('body[data-smooth-skin]')) continue;
     rules += 1;
-    // Four hides and one icon cell are allowed, each one replacing something this layout
+    // Five hides and one icon cell are allowed, each one replacing something this layout
     // already provides: the plugin-owned collapsible balance panel, the settings close
     // button (whose job the tab bar in the same header already does), the welcome row (the
     // card's own info row already names the workspace and the branch), the card itself while
     // no tab is open (there is nowhere to type yet) and the workspace row's folder/chevron
     // glyph (the reference list names the workspace in type alone, and both glyphs share the
     // same 16px cell, so hiding only one would shift the label on hover). The host's own
-    // preview badge is left alone.
+    // preview badge is left alone. The composer dock row is hidden because its two stat
+    // pills and its context meter moved into the ring the composer seat draws next to the
+    // model selector (that ring's panel keeps the readings the pills used to open).
     const contentRules = skin.replace(/body\[data-smooth-skin\] \.smooth-account-balance\{[^}]*\}/, '')
       .replace(/body\[data-smooth-skin\] \[data-shortcut-modal="settings"\] \$\{hostPart\('header'\)\}>\$\{accountPart\('close'\)\}\{display:none\}/, '')
       .replace(/body\[data-smooth-skin\] \$\{hostPart\('composerHero'\)\} \$\{hostPart\('heroWorkspaceRow'\)\}\{[^}]*display:none[^}]*\}/, '')
       .replace(/body\[data-smooth-skin\]\[data-smooth-home\][\s\S]*?\{display:none/, '')
-      .replace(/body\[data-smooth-skin\] \$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('projectRow'\)\} :is\(\$\{hostPart\('folder'\)\},\$\{hostPart\('chevron'\)\}\)\{display:none\}/, '');
-    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, settings close, welcome row, empty-workspace card and the workspace folder cell may be hidden');
+      .replace(/body\[data-smooth-skin\] \$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('projectRow'\)\} :is\(\$\{hostPart\('folder'\)\},\$\{hostPart\('chevron'\)\}\)\{display:none\}/, '')
+      .replace(/body\[data-smooth-skin\] \[data-composer-dock\]\{display:none\}/, '');
+    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, settings close, welcome row, empty-workspace card, workspace folder cell and composer dock row may be hidden');
   }
   assert.ok(rules > 10, 'the skin stylesheet has almost no scoped rules');
 });
@@ -509,3 +537,24 @@ test('the built artifacts exist and agree with the sources', async () => {
   assert.ok(bundle.includes(skin.trim().slice(0, 40)));
 });
 
+
+test('the page keeps a flat finish without the light sheen or ambient shadow', () => {
+  // The page is flat: the white light wash, the inset top highlight, the ambient panel
+  // shadow and the local reflection on selected controls are all gone.
+  assert.ok(!skin.includes('--smooth-light-wash'), 'the white light wash is gone');
+  assert.ok(!skin.includes('--smooth-light-edge'), 'the inset top highlight is gone');
+  assert.ok(!skin.includes('--smooth-shadow-workspace'), 'the ambient workspace shadow is gone');
+  assert.ok(!/linear-gradient\(160deg,#ffffff/.test(skin), 'the white sheen gradient is gone');
+  assert.ok(!/box-shadow:[^;}]*var\(--smooth-light/.test(skin), 'no rule stacks a highlight into its shadow');
+});
+
+test('the skin leaves plugin switches alone and only sizes the host general-settings row', () => {
+  // The old global switch rules resized and recoloured every [role="switch"], which broke
+  // plugin-provided toggles (e.g. the skills list): a plugin's own switch kept its own
+  // geometry while the skin repainted it. The skin now stays off plugin switches; the
+  // only switch it sizes is the host's own general-settings row, re-asserting its size.
+  assert.ok(!/body\[data-smooth-skin\] \[role="switch"\]/.test(skin), 'no global [role=switch] styling');
+  assert.ok(!/\[role="switch"\]:not\(\[data-plugin-panel\] \*\)/.test(skin), 'the old plugin-panel exemption is gone with the rule');
+  assert.ok(!/\[role="switch"\][^{]*\{[^}]*width:44px/.test(skin), 'the skin no longer resizes switches globally');
+  assert.match(skin, /body\[data-smooth-skin\] \[data-shortcut-modal="settings"\] \[data-slot="settings.general.item"\] button\[role="switch"\]\{width:36px;height:20px;padding:2px\}/);
+});

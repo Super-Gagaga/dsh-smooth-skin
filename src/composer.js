@@ -107,6 +107,10 @@ function installSmoothCaret(input) {
     else card.setAttribute('data-smooth-caret', '');
   };
   const hide = () => { caret.hidden = true; };
+  /** An editor with no text and no chips is back at its initial position. */
+  const emptyEditor = () => String(input.textContent || '').replace(/[\u200b\u00a0\s]/g, '') === ''
+    && !input.querySelector?.('img, [contenteditable="false"]');
+  let wasEmpty = emptyEditor();
   /** Where the editor's text starts. A collapsed range that anchors on the editable
    * itself measures its border box, which begins in the padding: the bar then sits in
    * front of the text instead of at the caret. */
@@ -190,9 +194,28 @@ function installSmoothCaret(input) {
   input.addEventListener('compositionend', onCompositionEnd);
   scroller?.addEventListener('scroll', schedule, { passive: true });
   window.addEventListener('resize', schedule);
+  // The host clears the committed draft after a send by editing the editor state
+  // programmatically, and the browser re-anchors the DOM selection to the empty root
+  // without dispatching `selectionchange` (the editor update that clears is not followed
+  // by a selection sync, so our only resync event never arrives). The bar kept its last
+  // transform and stayed where the sent text ended instead of returning to the start.
+  // Follow the editor's own content, and treat the transition to empty as the initial
+  // position: snap there in one frame rather than gliding out of the stale spot.
+  const content = new MutationObserver(() => {
+    const empty = emptyEditor();
+    if (empty && !wasEmpty) {
+      placed = false;
+      lastX = undefined;
+      lastY = undefined;
+    }
+    wasEmpty = empty;
+    schedule();
+  });
+  content.observe(input, { childList: true, subtree: true, characterData: true });
   grow.append(caret);
   schedule();
   return () => {
+    content.disconnect();
     document.removeEventListener('selectionchange', schedule);
     for (const event of ['input', 'keyup', 'mouseup', 'focus', 'blur']) input.removeEventListener(event, schedule);
     input.removeEventListener('compositionstart', onCompositionStart);
@@ -235,6 +258,71 @@ function openNativeWorkspacePicker(button) {
   pointNativeWorkspaceAnchor(chip, button);
   chip.click();
   return chip;
+}
+
+/** Bounded context occupancy from the host's own pressure projection: the same reading
+ * its dock meter used before this skin moved the meter into the composer row. */
+function contextOccupancyOf(pressure) {
+  const usedTokens = pressure?.projectedTokens ?? pressure?.pressureTokens;
+  if (usedTokens === undefined || pressure?.contextWindow === undefined) return null;
+  return {
+    percent: Math.min(100, Math.round(usedTokens / pressure.contextWindow * 100)),
+    usedTokens,
+    contextWindow: pressure.contextWindow,
+  };
+}
+
+/** `%s` substitution for the context panel's counters: the shared locale table has no
+ * formatter, and a whole ICU layer for a handful of strings would outweigh the panel. */
+function contextFill(template, ...values) {
+  let index = 0;
+  return template.replace(/%s/g, () => String(values[index++] ?? ''));
+}
+
+/** Compact token count: 517 / 12.2K / 517K / 1.2M, with the K/M unit from the locale. */
+function contextTokens(value, text) {
+  const total = Number(value) || 0;
+  if (total < 1e3) return String(total);
+  const scaled = (size) => {
+    const number = total / size;
+    return String(number >= 100 ? Math.round(number) : Math.round(number * 10) / 10);
+  };
+  if (total < 1e6) return contextFill(text('composer.context.thousand', '%sK'), scaled(1e3));
+  return contextFill(text('composer.context.million', '%sM'), scaled(1e6));
+}
+
+/** Exact count with three-digit groups: 4,055,212. */
+function contextExactTokens(value, text) {
+  const digits = String(Math.max(0, Math.round(Number(value) || 0)));
+  const groups = [];
+  for (let end = digits.length; end > 0; end -= 3) groups.unshift(digits.slice(Math.max(0, end - 3), end));
+  return groups.join(text('composer.context.group', ','));
+}
+
+/** Host-style duration: 45.2s under a minute, 81m10s from there on. */
+function contextDuration(ms, text) {
+  const seconds = Math.max(0, Number(ms) || 0) / 1e3;
+  if (seconds < 60) return contextFill(text('composer.context.durationSeconds', '%s秒'), Math.round(seconds * 10) / 10);
+  const whole = Math.round(seconds);
+  return contextFill(text('composer.context.durationMinutes', '%s分%s秒'), Math.floor(whole / 60), whole % 60);
+}
+
+/** An honest cache-hit share: a partial hit never displays as a flat 100%. */
+function contextCacheHit(usage) {
+  const cacheRead = Number(usage?.cacheReadTokens) || 0;
+  const prompt = cacheRead + (Number(usage?.uncachedInputTokens) || 0) + (Number(usage?.cacheWriteTokens) || 0);
+  if (!prompt) return null;
+  if (cacheRead >= prompt) return '100';
+  const rounded = Math.round(cacheRead / prompt * 100);
+  return rounded >= 100 ? (Math.round(cacheRead / prompt * 1000) / 10).toFixed(1) : String(rounded);
+}
+
+/** The host adds its provider-decided "Default" reasoning choice to exactly the models
+ * whose catalogue has no fixed default stop (`defaultEffort === undefined`). The effort
+ * panel's auto chip mirrors that condition, so a model that cannot be put back on
+ * Default never shows one. */
+function offersDefaultEffort(reasoning) {
+  return Boolean(reasoning && reasoning.efforts?.length > 0 && reasoning.defaultEffort === undefined);
 }
 
 /** Render native controls into reference positions without moving React-owned DOM.
@@ -534,6 +622,10 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
       () => directory.getSnapshot(),
     );
     const [draft, setDraft] = React.useState(null);
+    // The auto chip paints its active state immediately; the store's `current` only
+    // catches up after the provider round trip, and without this the chip would flash
+    // back to the explicit level for that window.
+    const [autoDraft, setAutoDraft] = React.useState(false);
     const [error, setError] = React.useState('');
     const triggerRef = React.useRef(null);
     const draftRef = React.useRef(null);
@@ -549,9 +641,23 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     const group = choice?.group;
     const reasoning = model?.reasoning;
     const efforts = reasoning?.efforts || [];
-    const effective = current?.reasoningEffort ?? reasoning?.defaultEffort;
-    const currentIndex = Math.max(0, efforts.findIndex((effort) => effort.id === effective));
-    const index = draft == null ? currentIndex : Math.max(0, Math.min(draft, efforts.length - 1));
+    // Provider-decided reasoning: the host's own model menu offers "Default" for
+    // catalogues without a fixed default stop, and selecting it drops reasoningEffort.
+    const defaultOption = offersDefaultEffort(reasoning);
+    const defaultActive = defaultOption && draft == null && (autoDraft || current?.reasoningEffort === undefined);
+    const effective = defaultActive ? undefined : (current?.reasoningEffort ?? reasoning?.defaultEffort);
+    const explicitIndex = defaultActive ? -1 : efforts.findIndex((effort) => effort.id === effective);
+    const currentIndex = Math.max(0, explicitIndex);
+    // While Default is in charge there is no explicit stop to point at; leave the thumb
+    // on the last level the user picked so switching back to an explicit level is a
+    // short move, and let the stylesheet dim the track to say it is not governing.
+    const lastExplicitRef = React.useRef(currentIndex);
+    React.useEffect(() => {
+      if (explicitIndex >= 0) lastExplicitRef.current = explicitIndex;
+    }, [explicitIndex]);
+    const index = draft == null
+      ? (defaultActive ? lastExplicitRef.current : currentIndex)
+      : Math.max(0, Math.min(draft, efforts.length - 1));
     const disabled = Boolean(props.locked) || props.available === false;
     // 0..1 share of the thumb's travel; the fill and the glider share it so the blue
     // edge stops under the thumb centre instead of under its left half.
@@ -642,9 +748,24 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
         setError(reason?.message || text('composer.modelFailed', '模型切换失败'));
       });
     };
+    /** Hand the level back to the provider: the same selection the host's own model menu
+     * makes for its "Default" row — no reasoningEffort in the request. */
+    const chooseDefault = () => {
+      if (!current || !defaultOption || defaultActive) return;
+      committedRef.current = null;
+      draftRef.current = null;
+      setDraft(null);
+      setAutoDraft(true);
+      setError('');
+      Promise.resolve(props.select({ provider: current.provider, model: current.model })).catch((reason) => {
+        setAutoDraft(false);
+        setError(reason?.message || text('composer.modelFailed', '模型切换失败'));
+      });
+    };
     // Commit on every stop the thumb crosses, so the Host selection changes while
     // dragging; the draft only keeps the visual thumb ahead until the store catches up.
     const preview = (next) => {
+      setAutoDraft(false);
       setDraft(next); draftRef.current = next;
       if (committedRef.current !== next) commit(next);
     };
@@ -660,11 +781,17 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
         setDraft(null);
       }
     }, [currentIndex, draft]);
+    React.useEffect(() => {
+      // The provider settled a Default pick (no explicit effort) — stop faking it.
+      if (autoDraft && current?.reasoningEffort === undefined) setAutoDraft(false);
+    }, [autoDraft, current?.reasoningEffort]);
     // The top stop is a release: a stream of sparks runs left along the filled track.
-    const atMax = efforts.length > 0 && index === efforts.length - 1;
-    const level = reasoning && efforts.length > 0 ? thinkArtFor(efforts, index) : undefined;
+    // Neither decoration may run while the provider decides the level: the thumb still
+    // remembers the last explicit stop, but that stop is not governing.
+    const atMax = !defaultActive && efforts.length > 0 && index === efforts.length - 1;
+    const level = !defaultActive && reasoning && efforts.length > 0 ? thinkArtFor(efforts, index) : undefined;
     const backdrop = Boolean(level && deepseekBackdrop(group));
-    const levelName = efforts[index]?.name || '';
+    const levelName = defaultActive ? text('composer.effortDefault', 'Default') : efforts[index]?.name || '';
     return h('div', { className: 'smooth-model-effort' },
       // The panel's backdrop follows the level the thumb is on, so a drag previews it
       // the moment the thumb crosses a stop. All four cutouts stay mounted and cross-fade.
@@ -676,8 +803,19 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
       h('div', { className: 'smooth-model-body' },
         // The slider carries no tick labels any more: the current level sits above the
         // model selector and re-enters on every change, so the panel still names it.
-        levelName && h('div', { className: 'smooth-model-level', 'aria-live': 'polite' },
-          h('span', { key: level, className: 'smooth-model-level-name' }, levelName)),
+        // The auto chip appears exactly for models whose catalogue offers the host's
+        // "Default" effort; it sits before the level dot and returns the level to it.
+        (levelName || defaultOption) && h('div', { className: 'smooth-model-level', 'aria-live': 'polite' },
+          defaultOption && h('button', {
+            type: 'button', className: 'smooth-model-auto',
+            'data-active': defaultActive ? 'true' : undefined,
+            'aria-pressed': defaultActive ? 'true' : 'false',
+            'aria-label': text('composer.effortAuto', '使用 Default 思考强度'),
+            title: text('composer.effortAuto', '使用 Default 思考强度'),
+            disabled,
+            onClick: chooseDefault,
+          }, 'auto'),
+          levelName && h('span', { key: levelName, className: 'smooth-model-level-name' }, levelName)),
         h('button', {
           ref: triggerRef, type: 'button', className: 'smooth-model-trigger',
           'data-smooth-model-trigger': '', disabled, title: model?.name,
@@ -688,6 +826,7 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
           h(ui.IconChevronRightOutlineRegular, { size: 14, 'aria-hidden': true })),
         reasoning && efforts.length > 0 && h('div', {
           ref: sliderRef, className: 'smooth-model-slider',
+          'data-default': defaultActive ? 'true' : undefined,
         },
           h('div', { className: 'smooth-model-track', 'aria-hidden': true },
             h('div', { className: 'smooth-model-fill' }),
@@ -1037,6 +1176,126 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     return null;
   }
   disposers.push(slots.inject('conversation.input.overlay', () => slots.register({ name: 'conversation.input.overlay', id: `${PLUGIN_ID}.caret`, order: -80 }, ComposerCaret)));
+  /** The context meter, moved out of the host's dock row (the stylesheet hides it) and
+   * into the composer row just before the model seat. The ring shows the same bounded
+   * occupancy the dock meter showed; its panel keeps the composition, session timing and
+   * token totals that the removed stat pills used to own. Every reading is a slot
+   * projection — nothing here rescans the session or reads another component's DOM. */
+  function ContextMeterSeat(props) {
+    const skin = useSmoothState();
+    const [open, setOpen] = React.useState(false);
+    const triggerRef = React.useRef(null);
+    const panelRef = React.useRef(null);
+    const pressure = props.useProjection('contextPressure');
+    const breakdown = props.useProjection('contextBreakdown');
+    const stats = props.useProjection('sessionStats');
+    const usage = props.useProjection('tokenUsage');
+    const context = contextOccupancyOf(pressure);
+    React.useEffect(() => {
+      if (!open) return undefined;
+      const dismiss = (event) => {
+        if (panelRef.current?.contains?.(event.target)) return;
+        if (triggerRef.current?.contains?.(event.target)) return;
+        setOpen(false);
+      };
+      const escape = (event) => { if (event.key === 'Escape') setOpen(false); };
+      document.addEventListener('pointerdown', dismiss, true);
+      document.addEventListener('keydown', escape);
+      return () => {
+        document.removeEventListener('pointerdown', dismiss, true);
+        document.removeEventListener('keydown', escape);
+      };
+    }, [open]);
+    if (!skin.state.enabled || !context) return null;
+    const reading = `${context.percent}%`;
+    const size = 22;
+    const radius = 9.1;
+    const circumference = 2 * Math.PI * radius;
+    const title = contextFill(text('composer.context.aria', '上下文已用 %s'), reading);
+    let panel = null;
+    if (open) {
+      const rect = triggerRef.current?.getBoundingClientRect?.();
+      const width = Math.min(268, window.innerWidth - 16);
+      const left = rect ? Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)) : 8;
+      const bottom = rect ? Math.max(8, window.innerHeight - rect.top + 8) : 8;
+      const rows = [
+        { key: 'systemTokens', tint: 'smooth-context-system', label: text('composer.context.system', '系统提示词'), tokens: breakdown?.systemTokens ?? 0 },
+        { key: 'toolsTokens', tint: 'smooth-context-tools', label: text('composer.context.tools', '工具定义'), tokens: breakdown?.toolsTokens ?? 0 },
+        { key: 'messageTokens', tint: 'smooth-context-messages', label: text('composer.context.messages', '对话消息'), tokens: breakdown?.messageTokens ?? 0 },
+      ];
+      const total = rows.reduce((sum, row) => sum + row.tokens, 0);
+      const segments = breakdown && total > 0
+        ? rows.map((row) => ({ key: row.key, tint: row.tint, width: context.percent * row.tokens / total })).filter((segment) => segment.width > 0)
+        : [{ key: 'total', tint: 'smooth-context-messages', width: context.percent }];
+      const statRows = stats ? [
+        { key: 'llm', label: text('composer.context.llmTime', '模型用时'), value: stats.llmMs > 0 ? contextDuration(stats.llmMs, text) : null },
+        { key: 'tool', label: text('composer.context.toolTime', '工具调用用时'), value: stats.toolMs > 0 ? contextDuration(stats.toolMs, text) : null },
+        { key: 'ttft', label: text('composer.context.ttft', '首 token 平均（TTFT）'), value: stats.ttftSteps > 0 ? contextDuration(stats.ttftMs / stats.ttftSteps, text) : null },
+        { key: 'tps', label: text('composer.context.tps', '输出速度（TPS）'), value: stats.decodeMs > 0 ? contextFill(text('composer.context.tpsValue', '%s tok/s'), Math.round(stats.decodeTokens / (stats.decodeMs / 1e3))) : null },
+      ].filter((row) => row.value !== null) : [];
+      const cacheHit = usage ? contextCacheHit(usage) : null;
+      const tokenRows = usage ? [
+        { key: 'cacheHit', label: text('composer.context.cacheHit', '缓存命中'), value: cacheHit === null ? null : `${cacheHit}%` },
+        { key: 'uncachedInput', label: text('composer.context.uncachedInput', '未缓存输入'), value: contextFill(text('composer.context.tok', '%s tok'), contextExactTokens(usage.uncachedInputTokens, text)) },
+        { key: 'cacheRead', label: text('composer.context.cacheRead', '缓存读取'), value: contextFill(text('composer.context.tok', '%s tok'), contextExactTokens(usage.cacheReadTokens, text)) },
+        { key: 'output', label: text('composer.context.output', '输出'), value: contextFill(text('composer.context.tok', '%s tok'), contextExactTokens(usage.outputTokens, text)) },
+      ].filter((row) => row.value !== null) : [];
+      const metric = (row) => h('div', { key: row.key, className: 'smooth-context-metric' },
+        h('span', { className: 'smooth-context-metric-label' }, row.label),
+        h('span', { className: 'smooth-context-metric-value' }, row.value));
+      panel = createPortal(h('div', {
+        ref: panelRef, className: 'smooth-context-menu', role: 'dialog',
+        'aria-label': text('composer.context.title', '上下文占用与用量'),
+        style: { left: `${left}px`, bottom: `${bottom}px`, width: `${width}px` },
+      },
+        h('div', { className: 'smooth-context-head' },
+          h('span', { className: 'smooth-context-heading' }, text('composer.context.used', '上下文已用')),
+          h('span', { className: 'smooth-context-head-value' }, reading),
+          h('span', { className: 'smooth-context-figures' },
+            `~${contextTokens(context.usedTokens, text)} / ${contextTokens(context.contextWindow, text)}`)),
+        h('div', { className: 'smooth-context-bar', 'aria-hidden': true },
+          segments.map((segment) => h('span', {
+            key: segment.key, className: `smooth-context-segment ${segment.tint}`,
+            style: { width: `${segment.width}%` },
+          }))),
+        breakdown ? h('dl', { className: 'smooth-context-legend' },
+          rows.map((row) => h('div', { key: row.key, className: 'smooth-context-legend-row' },
+            h('dt', null, h('i', { className: `smooth-context-swatch ${row.tint}`, 'aria-hidden': true }), row.label),
+            h('dd', null, `~${contextTokens(row.tokens, text)}`)))) : null,
+        statRows.length ? h(React.Fragment, null,
+          h('hr', { className: 'smooth-context-rule' }),
+          h('h4', { className: 'smooth-context-section' }, text('composer.context.stats', '会话统计')),
+          h('div', { className: 'smooth-context-grid' }, statRows.map(metric))) : null,
+        tokenRows.length ? h(React.Fragment, null,
+          h('hr', { className: 'smooth-context-rule' }),
+          h('h4', { className: 'smooth-context-section' }, text('composer.context.tokens', 'Token 用量')),
+          h('div', { className: 'smooth-context-grid' }, tokenRows.map(metric))) : null,
+      ), document.body);
+    }
+    return h(React.Fragment, null,
+      h('button', {
+        ref: triggerRef, type: 'button', className: 'smooth-context-button',
+        title, 'aria-label': title, 'aria-haspopup': 'dialog', 'aria-expanded': open,
+        onClick: () => setOpen((value) => !value),
+      }, h('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size, 'aria-hidden': true },
+        h('circle', { className: 'smooth-context-ring-track', cx: size / 2, cy: size / 2, r: radius }),
+        h('circle', {
+          className: 'smooth-context-ring-fill', cx: size / 2, cy: size / 2, r: radius,
+          strokeDasharray: `${circumference * context.percent / 100} ${circumference}`,
+          transform: `rotate(-90 ${size / 2} ${size / 2})`,
+        }),
+        h('text', {
+          className: 'smooth-context-ring-label', x: size / 2, y: size / 2,
+          'text-anchor': 'middle', dominantBaseline: 'central',
+        }, reading))),
+      panel);
+  }
+  // This list slot renders in the resident composer's control row (the hero has no input
+  // state yet), immediately before the model seat. `order` keeps the seat closest to the
+  // model control; the dock row it replaces is hidden by the stylesheet.
+  disposers.push(slots.inject('conversation.input.right', () => slots.register({
+    name: 'conversation.input.right', id: `${PLUGIN_ID}.context`, order: 60,
+  }, ContextMeterSeat)));
   function decorate(name, wrap, offset = -10) {
     return slots.inject(name, () => {
       let native;

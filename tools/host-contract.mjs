@@ -52,6 +52,7 @@ export const HOST_SLOTS = [
   'sidebar.workspaces.session.row.action',
   'conversation.input.overlay',
   'conversation.input.model',
+  'conversation.input.right',
   'conversation.input.permission',
   'conversation.input.left',
   'conversation.hero.agentPreset',
@@ -102,6 +103,7 @@ export const HOST_VALUES = [
 /** Attributes written by this plugin, so the host does not need to carry them. */
 const OWN_ATTRIBUTES = new Set([
   'data-active',
+  'data-default',
   'data-error',
   'data-expanded',
   'data-pane',

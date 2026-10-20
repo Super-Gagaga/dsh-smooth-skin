@@ -7,7 +7,7 @@ const read = (name) => readFile(new URL(`../src/${name}`, import.meta.url), 'utf
 // The bundle order: composer.js watches surfaces through watch.js.
 const source = `${await read('watch.js')}\n${await read('composer.js')}`;
 const sandbox = { PLUGIN_ID: 'smooth', hostPart: name => `.${name}` };
-runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.installFallback = installComposerFallbackHint; globalThis.installCaret = installSmoothCaret; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker;', sandbox);
+runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.installFallback = installComposerFallbackHint; globalThis.installCaret = installSmoothCaret; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker; globalThis.occupancyOf = contextOccupancyOf; globalThis.tokensText = contextTokens; globalThis.exactText = contextExactTokens; globalThis.durationText = contextDuration; globalThis.cacheHit = contextCacheHit; globalThis.fill = contextFill; globalThis.offersDefault = offersDefaultEffort;', sandbox);
 
 function files(entries) {
   const calls = [];
@@ -131,12 +131,14 @@ function caretHarness({ liveRect, probeRect }) {
   const card = { attributes: new Set(), setAttribute(name) { this.attributes.add(name); }, removeAttribute(name) { this.attributes.delete(name); } };
   const input = {
     parentElement: grow,
+    textContent: 'hello world',
     closest: (selector) => selector === '[data-composer-card]' ? card : null,
     contains: () => true,
+    querySelector: () => null,
     addEventListener() {}, removeEventListener() {},
     getBoundingClientRect: () => ({ left: 100, top: 50, width: 290, height: 22 }),
   };
-  const live = { startContainer: input, getBoundingClientRect: () => liveRect, cloneRange() { return this; }, collapse() {} };
+  const live = { startContainer: input, rect: liveRect, getBoundingClientRect() { return this.rect; }, cloneRange() { return this; }, collapse() {} };
   const probe = { selectNodeContents() {}, collapse() {}, getBoundingClientRect: () => probeRect };
   const document = {
     activeElement: input,
@@ -151,14 +153,28 @@ function caretHarness({ liveRect, probeRect }) {
     cancelAnimationFrame() {},
     addEventListener() {}, removeEventListener() {},
   };
+  // The caret follows the editor's own content mutations; these tests drive the observer.
+  const observers = [];
+  const MutationObserver = class {
+    constructor(callback) { this.callback = callback; observers.push(this); }
+    observe() {}
+    disconnect() { this.disconnected = true; }
+  };
   sandbox.document = document;
   sandbox.window = window;
+  sandbox.MutationObserver = MutationObserver;
   const dispose = sandbox.installCaret(input);
   const flush = () => { for (let guard = 0; guard < 20 && frames.length; guard++) frames.shift()(16); };
   flush();
-  const result = { caret, card, grow, input, flush, dispose, document, window };
+  const result = {
+    caret, card, grow, input, live, flush, dispose, document, window, observers,
+    /** Move the live DOM selection (and its measured rect) somewhere else. */
+    select(rect, node = input) { live.rect = rect; live.startContainer = node; },
+    /** Deliver the editor's content mutation, the way a programmatic clear does. */
+    mutate() { for (const observer of observers) observer.callback(); },
+  };
   // The sandbox is shared between tests; drop the DOM so later tests start clean.
-  result.reset = () => { delete sandbox.document; delete sandbox.window; };
+  result.reset = () => { delete sandbox.document; delete sandbox.window; delete sandbox.MutationObserver; };
   return result;
 }
 
@@ -197,6 +213,36 @@ test('the smooth caret measures twice before it animates, so a late layout does 
   }
 });
 
+test('the caret snaps back to the start when the host clears the draft after a send', () => {
+  // Sending clears the committed draft inside a Lexical update. The browser re-anchors
+  // the DOM selection to the empty root without firing `selectionchange`, so the bar kept
+  // the transform of the sent text's end and stayed there. The content mutation must move
+  // it to the editor's initial position instead.
+  const harness = caretHarness({
+    liveRect: { left: 414, top: 68, width: 0, height: 20 },
+    probeRect: { left: 114, top: 54, width: 0, height: 22 },
+  });
+  try {
+    assert.equal(harness.caret.style.transform, 'translate(314px,18px)', 'the bar sits where the typed text ends');
+    assert.equal(harness.observers.length, 1, 'the caret follows the editor content');
+    // The host's clear: text gone, selection re-anchored to the empty editor, no
+    // selectionchange involved. Only the content observer sees this.
+    harness.input.textContent = '';
+    harness.select({ left: 100, top: 50, width: 0, height: 0 }, harness.input);
+    harness.mutate();
+    harness.flush();
+    assert.equal(harness.caret.style.transform, 'translate(14px,4px)', 'the bar returns to the text origin');
+    assert.equal(harness.caret.style.height, '22px');
+    assert.equal(harness.caret.hidden, false);
+    assert.equal(harness.card.attributes.has('data-smooth-caret'), true, 'the drawn bar keeps replacing the native caret');
+    assert.equal(harness.caret.style.transition, '', 'the settle frame restores the glide after the snap');
+  } finally {
+    harness.dispose();
+    assert.equal(harness.observers[0].disconnected, true, 'disposing stops following the editor content');
+    harness.reset();
+  }
+});
+
 test('the model panel host mounts for every session, the new-session hero included', () => {
   const overrides = new Map();
   sandbox.h = (type, props, ...children) => ({ type, props, children });
@@ -211,15 +257,76 @@ test('the model panel host mounts for every session, the new-session hero includ
   });
   // The overlay renders inside the composer card with any Session — the hero (new
   // conversation) and the resident composer both. `conversation.input.right` requires
-  // an active input state, so the hero never mounted the host and the native model
-  // menu opened there instead of the effort panel.
+  // an active input state, so the hero never mounted it and the native model menu opened
+  // there instead of the effort panel.
   const seat = overrides.get('conversation.input.overlay');
   assert.ok(seat, 'the model/effort panel host lives beside the composer overlays');
   assert.equal(seat.options.id, 'smooth.model');
   assert.equal(seat.options.order, -70);
-  assert.equal(overrides.has('conversation.input.right'), false, 'input.right only renders with an active input state');
+  // The ring does belong in input.right: that list renders immediately before the native
+  // model seat in the resident composer's control row, and only once a session has input
+  // state (the hero has no context to measure, so no ring is expected there).
+  const meter = overrides.get('conversation.input.right');
+  assert.ok(meter, 'the context ring sits in the control row before the model seat');
+  assert.equal(meter.options.id, 'smooth.context');
+  assert.equal(meter.options.order, 60);
+  assert.equal(typeof meter.component, 'function');
   assert.equal(overrides.has('conversation.composer.bar'), false, 'the native composer retains its child-slot ownership');
   dispose(); assert.equal(overrides.size, 0);
+});
+
+test('the context meter keeps the host reading, its ring style and the moved panel', () => {
+  // The ring is the bounded occupancy reading; the host's dock row used the same maths.
+  assert.deepEqual(
+    { ...sandbox.occupancyOf({ pressureTokens: 150, contextWindow: 1000 }) },
+    { percent: 15, usedTokens: 150, contextWindow: 1000 },
+  );
+  assert.equal(sandbox.occupancyOf({ pressureTokens: 3000, contextWindow: 1000 }).percent, 100, 'clamped to 100');
+  assert.equal(sandbox.occupancyOf({ projectedTokens: 640, pressureTokens: 10, contextWindow: 1000 }).percent, 64, 'the projected reading wins');
+  assert.equal(sandbox.occupancyOf({ pressureTokens: 10 }), null, 'no capacity yet means no ring');
+  assert.equal(sandbox.occupancyOf(undefined), null);
+
+  const text = (key, fallback) => fallback;
+  assert.equal(sandbox.tokensText(517, text), '517');
+  assert.equal(sandbox.tokensText(12200, text), '12.2K');
+  assert.equal(sandbox.tokensText(517000, text), '517K');
+  assert.equal(sandbox.tokensText(1200000, text), '1.2M');
+  assert.equal(sandbox.exactText(4055212, text), '4,055,212');
+  assert.equal(sandbox.durationText(45200, text), '45.2秒');
+  assert.equal(sandbox.durationText(4870000, text), '81分10秒');
+  assert.equal(sandbox.cacheHit({ cacheReadTokens: 99, uncachedInputTokens: 1 }), '99');
+  assert.equal(sandbox.cacheHit({ cacheReadTokens: 100 }), '100');
+  assert.equal(sandbox.cacheHit({ cacheReadTokens: 999, uncachedInputTokens: 1 }), '99.9', 'a partial hit never reads as flat 100%');
+  assert.equal(sandbox.cacheHit({}), null);
+  assert.equal(sandbox.fill('~%s / %s', '681K', '1M'), '~681K / 1M');
+  // The dock row is hidden by the stylesheet; the seat draws the ring and its own panel.
+  assert.match(source, /conversation\.input\.right/);
+  assert.match(source, /smooth-context-ring-fill/);
+  assert.match(source, /props\.useProjection\('contextPressure'\)/);
+  assert.match(source, /props\.useProjection\('contextBreakdown'\)/);
+  assert.match(source, /props\.useProjection\('sessionStats'\)/);
+  assert.match(source, /props\.useProjection\('tokenUsage'\)/);
+  assert.match(source, /smooth-context-menu/);
+});
+
+test('the effort panel offers a Default auto chip exactly where the host menu does', () => {
+  // The host adds its "Default" effort choice only to catalogues without a fixed default
+  // stop, so the chip follows the same rule: Kimi-style provider-default models get it,
+  // DeepSeek's fixed-High catalogue does not.
+  assert.equal(sandbox.offersDefault({ efforts: [{ id: 'off' }, { id: 'high' }] }), true, 'no defaultEffort means Default is offered');
+  assert.equal(sandbox.offersDefault({ efforts: [{ id: 'off' }], defaultEffort: 'high' }), false, 'a fixed default stop leaves no Default choice');
+  assert.equal(sandbox.offersDefault({ efforts: [] }), false, 'a model without levels has no effort panel');
+  assert.equal(sandbox.offersDefault(undefined), false);
+  // The chip sits in the level row and returns the selection without reasoningEffort,
+  // which is exactly the host's provider-default request.
+  assert.match(source, /aria-pressed': defaultActive/);
+  assert.match(source, /'data-active': defaultActive/);
+  assert.match(source, /'auto'\)/);
+  assert.match(source, /className: 'smooth-model-auto'/);
+  assert.match(source, /props\.select\(\{ provider: current\.provider, model: current\.model \}\)/);
+  assert.match(source, /const defaultActive = defaultOption && draft == null/);
+  // Default is not a stop on the scale: the slider dims while the provider owns the level.
+  assert.match(source, /'data-default': defaultActive \? 'true' : undefined/);
 });
 
 test('the metadata workspace chip toggles the native picker and anchors it to the visible chip', () => {

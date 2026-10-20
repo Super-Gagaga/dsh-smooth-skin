@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>环形占用百分比图标 · 预览</title>
+<style>
+  body { margin: 0; padding: 32px; font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif; background: #F6F8FB; color: #0F172A; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 24px; color: #475569; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; align-items: stretch; }
+  .card { width: 160px; padding: 20px 8px 12px; background: #fff; border: 1px solid #E7ECF3; border-radius: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .card.dark { background: #0F172A; border-color: #1E293B; }
+  .cap { font-size: 12px; color: #94A3B8; letter-spacing: .04em; }
+  .row .card svg { width: 120px; height: 120px; }
+</style>
+</head>
+<body>
+<h1>环形占用百分比图标 · 不同百分比预览</h1>
+<div class="row">
+  <div class="card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="占用率 0%"><circle cx="60" cy="60" r="50" fill="none" stroke="#E7ECF3" stroke-width="12"/><circle cx="60" cy="60" r="50" fill="none" stroke="#2563EB" stroke-width="12" stroke-dasharray="0 314.16" transform="rotate(-90 60 60)"/><text x="60" y="60" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI',Arial,sans-serif" font-size="26" font-weight="700" fill="#0F172A">0%</text></svg><span class="cap">0%</span></div>
+  <div class="card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="占用率 25%"><circle cx="60" cy="60" r="50" fill="none" stroke="#E7ECF3" stroke-width="12"/><circle cx="60" cy="60" r="50" fill="none" stroke="#2563EB" stroke-width="12" stroke-dasharray="78.54 235.62" transform="rotate(-90 60 60)"/><text x="60" y="60" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI',Arial,sans-serif" font-size="26" font-weight="700" fill="#0F172A">25%</text></svg><span class="cap">25%</span></div>
+  <div class="card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="占用率 50%"><circle cx="60" cy="60" r="50" fill="none" stroke="#E7ECF3" stroke-width="12"/><circle cx="60" cy="60" r="50" fill="none" stroke="#2563EB" stroke-width="12" stroke-dasharray="157.08 157.08" transform="rotate(-90 60 60)"/><text x="60" y="60" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI',Arial,sans-serif" font-size="26" font-weight="700" fill="#0F172A">50%</text></svg><span class="cap">50%</span></div>
+  <div class="card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="占用率 72%"><circle cx="60" cy="60" r="50" fill="none" stroke="#E7ECF3" stroke-width="12"/><circle cx="60" cy="60" r="50" fill="none" stroke="#2563EB" stroke-width="12" stroke-dasharray="226.19 87.97" transform="rotate(-90 60 60)"/><text x="60" y="60" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI',Arial,sans-serif" font-size="26" font-weight="700" fill="#0F172A">72%</text></svg><span class="cap">72%（默认）</span></div>
+  <div class="card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="占用率 100%"><circle cx="60" cy="60" r="50" fill="none" stroke="#E7ECF3" stroke-width="12"/><circle cx="60" cy="60" r="50" fill="none" stroke="#2563EB" stroke-width="12" stroke-dasharray="314.16 314.16" transform="rotate(-90 60 60)"/><text x="60" y="60" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI',Arial,sans-serif" font-size="26" font-weight="700" fill="#0F172A">100%</text></svg><span class="cap">100%</span></div>
+  <div class="card dark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="占用率 72%（深色背景）"><circle cx="60" cy="60" r="50" fill="none" stroke="#273449" stroke-width="12"/><circle cx="60" cy="60" r="50" fill="none" stroke="#60A5FA" stroke-width="12" stroke-dasharray="226.19 87.97" transform="rotate(-90 60 60)"/><text x="60" y="60" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI',Arial,sans-serif" font-size="26" font-weight="700" fill="#F8FAFC">72%</text></svg><span class="cap">深色背景变体</span></div>
+</div>
+</body>
+</html>

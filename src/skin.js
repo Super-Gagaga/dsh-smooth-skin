@@ -18,9 +18,6 @@ body[data-smooth-skin]{
   --smooth-radius-lg:26px;--smooth-radius-md:16px;--smooth-radius-sm:11px;
   --smooth-shadow-1:0 2px 4px #0002,0 6px 12px #0003;
   --smooth-shadow-2:0 2px 5px #0004,0 8px 24px #0003;
-  --smooth-shadow-workspace:-2px 1px 5px #0001,-10px 4px 24px -8px #0002;
-  --smooth-light-wash:linear-gradient(160deg,#ffffff09,#ffffff00 70%);
-  --smooth-light-edge:inset 0 1px 0 #ffffff0f;
   --dsw-radius-panel:26px;--dsw-radius-xl:26px;--dsw-radius-lg:16px;--dsw-radius-md:11px;
   --dsw-focus-ring-color:var(--smooth-accent);
   font-family:"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,sans-serif;
@@ -37,9 +34,6 @@ body[data-smooth-skin]:not([data-ds-dark-theme]){
   color-scheme:light;
   --smooth-shadow-1:0 2px 4px #18202c0a,0 6px 12px #18202c0f;
   --smooth-shadow-2:0 2px 5px #18202c12,0 8px 24px #18202c14;
-  --smooth-shadow-workspace:-2px 1px 5px #18202c07,-10px 4px 24px -8px #18202c0a;
-  --smooth-light-wash:linear-gradient(160deg,#ffffff66,#ffffff00 70%);
-  --smooth-light-edge:inset 0 1px 0 #ffffffb3;
 }
 
 /* Shell geometry continues to be owned by the host, including resize handles. */
@@ -53,9 +47,9 @@ body[data-smooth-skin]>span[style*="--dsw-specific-sidebar-fill"][style*="--dsw-
 /* Leave sidebar color behind the curved tab-bar corner; the rest of the native
    caption remains the workspace color, including the window-button area. */
 body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})::before{background:linear-gradient(to right,var(--smooth-sidebar) 0 calc(var(--smooth-left-width) + 18px),var(--smooth-surface) calc(var(--smooth-left-width) + 18px) 100%)}
-/* Raised surfaces cast contact and ambient shadows onto the sidebar below.
-   The shadow follows the panel's rounded silhouette and leaves its interior flat. */
-body[data-smooth-skin] ${hostPart('frame')}>${hostPart('centerCol')}{position:relative;z-index:1;box-sizing:border-box;background:var(--smooth-app);border-left:0;border-radius:26px 0 0 26px;box-shadow:var(--smooth-shadow-workspace)}
+/* The centre surface is flat: no ambient shadow lifts it off the sidebar, so the page
+   reads as one continuous ground instead of a lit panel floating above it. */
+body[data-smooth-skin] ${hostPart('frame')}>${hostPart('centerCol')}{position:relative;z-index:1;box-sizing:border-box;background:var(--smooth-app);border-left:0;border-radius:26px 0 0 26px}
 body[data-smooth-skin] ${hostPart('sidebarCol')}{background:var(--smooth-sidebar);border-right:0}
 body[data-smooth-skin] [data-sidebar-collapsed]>${hostPart('centerCol')}{border-left:0;border-radius:0;box-shadow:none}
 body[data-smooth-skin] ${hostPart('centerCol')}>${hostPart('root')}{background:var(--smooth-app)}
@@ -256,10 +250,44 @@ body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}:disabled{back
 body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type{position:absolute;top:auto;bottom:calc(var(--smooth-composer-footer-h) + 5px);right:8px;z-index:3;width:32px;height:32px;border:0;border-radius:50%;background:var(--smooth-accent);color:var(--smooth-ink);box-shadow:none;transform:none}
 body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type:hover:not(:disabled){background:color-mix(in srgb,var(--smooth-accent) 85%,var(--smooth-text))}
 body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type:disabled{background:var(--smooth-surface-3);color:var(--smooth-muted);opacity:.6}
-/* The host's own bottom dock (the three status groups: rounds/steps and tok/s, the token
-   total with its cache hit rate, and the context ring) stays where it was rendered, under
-   the card and centred. The card's footer only owns the controls, so the model selector
-   keeps the right end of that row. */
+/* The host's own bottom dock (rounds/steps and tok/s, the token total with its cache hit
+   rate, and its context ring) is removed: those readings moved into the context panel the
+   composer seat opens, and the ring itself now sits before the model selector. */
+body[data-smooth-skin] [data-composer-dock]{display:none}
+/* The context meter, drawn like the supplied occupancy-ring asset: the reading sits in
+   the middle of the ring, and the ring opens a panel above the composer. */
+body[data-smooth-skin] .smooth-context-button{display:grid;place-items:center;flex:none;width:22px;height:22px;margin:0;padding:0;border:0;border-radius:50%;background:transparent;color:var(--smooth-muted);cursor:pointer;transition:background-color .16s ease}
+body[data-smooth-skin] .smooth-context-button:hover,
+body[data-smooth-skin] .smooth-context-button:focus-visible,
+body[data-smooth-skin] .smooth-context-button[aria-expanded="true"]{background:var(--smooth-surface-3)}
+body[data-smooth-skin] .smooth-context-button:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:2px}
+body[data-smooth-skin] .smooth-context-button svg{display:block;overflow:visible}
+body[data-smooth-skin] .smooth-context-ring-track{fill:none;stroke:color-mix(in srgb,var(--smooth-muted) 42%,transparent);stroke-width:2.1}
+body[data-smooth-skin] .smooth-context-ring-fill{fill:none;stroke:var(--smooth-accent);stroke-width:2.1;transition:stroke-dasharray .3s cubic-bezier(.22,1,.36,1)}
+body[data-smooth-skin] .smooth-context-ring-label{fill:var(--smooth-text);font-family:inherit;font-size:7.2px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+body[data-smooth-skin] .smooth-context-menu{position:fixed;z-index:1200;box-sizing:border-box;padding:12px;border:1px solid var(--smooth-line-strong);border-radius:16px;background:var(--dsw-alias-bg-overlay,var(--smooth-surface));box-shadow:var(--smooth-shadow-2);color:var(--smooth-muted);font-size:12px;line-height:20px;animation:smooth-context-in .16s cubic-bezier(.2,0,0,1)}
+@keyframes smooth-context-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+body[data-smooth-skin] .smooth-context-head{display:flex;align-items:baseline;gap:6px;min-width:0}
+body[data-smooth-skin] .smooth-context-heading{color:var(--smooth-muted);white-space:nowrap}
+body[data-smooth-skin] .smooth-context-head-value{color:var(--smooth-text);font-weight:600}
+body[data-smooth-skin] .smooth-context-figures{margin-left:auto;color:var(--smooth-text);font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
+body[data-smooth-skin] .smooth-context-bar{display:flex;gap:1px;height:4px;margin:10px 0;border-radius:999px;overflow:hidden;background:color-mix(in srgb,var(--smooth-text) 8%,transparent)}
+body[data-smooth-skin] .smooth-context-segment{flex:none;min-width:2px;height:100%;border-radius:1px;background:var(--smooth-context-tint,var(--smooth-muted))}
+body[data-smooth-skin] .smooth-context-system{--smooth-context-tint:var(--smooth-muted)}
+body[data-smooth-skin] .smooth-context-tools{--smooth-context-tint:#a78bfa}
+body[data-smooth-skin] .smooth-context-messages{--smooth-context-tint:var(--smooth-accent)}
+body[data-smooth-skin] .smooth-context-legend{display:flex;flex-direction:column;gap:2px;margin:0;padding:0}
+body[data-smooth-skin] .smooth-context-legend-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 0}
+body[data-smooth-skin] .smooth-context-legend-row dt{display:flex;align-items:center;gap:6px;margin:0;color:var(--smooth-muted)}
+body[data-smooth-skin] .smooth-context-legend-row dd{margin:0;color:var(--smooth-text);font-variant-numeric:tabular-nums}
+body[data-smooth-skin] .smooth-context-swatch{flex:none;width:8px;height:8px;border-radius:2px;background:var(--smooth-context-tint,var(--smooth-muted))}
+body[data-smooth-skin] .smooth-context-rule{height:1px;margin:10px 0;border:0;background:var(--smooth-line)}
+body[data-smooth-skin] .smooth-context-section{margin:0 0 6px;font-size:12px;font-weight:500;line-height:20px;color:var(--smooth-muted)}
+body[data-smooth-skin] .smooth-context-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+body[data-smooth-skin] .smooth-context-metric{display:flex;flex-direction:column;gap:1px;min-width:0}
+body[data-smooth-skin] .smooth-context-metric-label{color:var(--smooth-muted);font-size:11.5px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body[data-smooth-skin] .smooth-context-metric-value{color:var(--smooth-text);font-size:13px;font-weight:600;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-context-menu{animation:none}body[data-smooth-skin] .smooth-context-ring-fill{transition:none}}
 body[data-smooth-skin] .smooth-composer-model{display:flex;align-items:center;min-width:0;max-width:100%;font-size:13px;line-height:20px}
 body[data-smooth-skin] .smooth-composer-model button{height:32px;min-height:32px;font-size:inherit;line-height:20px;padding-block:0}
 body[data-smooth-skin] .smooth-model-effort{display:flex;flex-direction:column;align-items:stretch;gap:0;width:100%;min-width:0;max-width:100%}
@@ -267,6 +295,17 @@ body[data-smooth-skin] .smooth-model-effort{display:flex;flex-direction:column;a
    selector, and re-enters with a small rise every time the level changes. */
 body[data-smooth-skin] .smooth-model-level{display:flex;align-items:center;justify-content:center;gap:6px;min-height:18px;margin-bottom:1px;color:var(--smooth-muted);font-size:10.5px;line-height:16px;letter-spacing:.05em}
 body[data-smooth-skin] .smooth-model-level::before{content:"";flex:none;width:4px;height:4px;border-radius:50%;background:var(--smooth-model-blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--smooth-model-blue) 16%,transparent)}
+/* The auto chip returns a provider-decided model to the host's "Default" effort. It sits
+   left of the level dot; the active state uses the same blue as the dot, not a filled
+   button, so the row still reads as one line of text. */
+body[data-smooth-skin] .smooth-model-auto{order:-1;box-sizing:border-box;display:inline-flex;align-items:center;flex:none;height:15px;min-height:15px;padding:0 6px;border:1px solid var(--smooth-line-strong);border-radius:999px;background:transparent;color:var(--smooth-muted);font-family:inherit;font-size:9.5px;line-height:13px;letter-spacing:.04em;cursor:pointer;transition:background-color .16s ease,border-color .16s ease,color .16s ease}
+body[data-smooth-skin] .smooth-model-auto:hover:not(:disabled){background:var(--smooth-surface-3);color:var(--smooth-text)}
+body[data-smooth-skin] .smooth-model-auto[data-active="true"]{border-color:transparent;background:color-mix(in srgb,var(--smooth-model-blue) 20%,transparent);color:var(--smooth-text)}
+body[data-smooth-skin] .smooth-model-auto:focus-visible{outline:2px solid var(--smooth-model-blue);outline-offset:2px}
+body[data-smooth-skin] .smooth-model-auto:disabled{opacity:.5;cursor:default}
+/* Default is not a stop on the explicit scale: dim the track while the provider owns the
+   level, but keep it interactive so picking a stop immediately takes the level back. */
+body[data-smooth-skin] .smooth-model-slider[data-default="true"]{opacity:.5}
 body[data-smooth-skin] .smooth-model-level-name{color:var(--smooth-text);font-size:11px;font-weight:600;animation:smooth-model-level-in .26s cubic-bezier(.22,1,.36,1)}
 @keyframes smooth-model-level-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-model-level-name{animation:none}}
@@ -359,7 +398,7 @@ body[data-smooth-skin] .smooth-model-panel .smooth-model-slider{margin-top:4px}
 @media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-model-panel{animation:none}body[data-smooth-skin] .smooth-model-panel-viewport,body[data-smooth-skin] .smooth-model-panel-pane{transition:none}}
 /* Keep TodoPanel's projection, native StateDot and conditional list rendering.
    Scope every local name to its public panel hook so chat headers stay untouched. */
-body[data-smooth-skin] [data-testid="todo-panel"]{border:0;border-radius:16px;background:var(--smooth-surface);background-image:var(--smooth-light-wash);box-shadow:var(--smooth-light-edge),var(--smooth-shadow-1);backdrop-filter:none}
+body[data-smooth-skin] [data-testid="todo-panel"]{border:0;border-radius:16px;background:var(--smooth-surface);box-shadow:var(--smooth-shadow-1);backdrop-filter:none}
 body[data-smooth-skin] [data-testid="todo-panel"]>${hostPart('body')}{gap:0;padding:0}
 body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('header')}[aria-expanded]{box-sizing:border-box;min-height:40px;height:auto;gap:8px;padding:8px 14px;border:0;border-radius:0;background:transparent;color:var(--smooth-text);transition:background-color .16s ease}
 body[data-smooth-skin] [data-testid="todo-panel"] ${hostPart('header')}:hover{background:color-mix(in srgb,var(--smooth-text) 4%,transparent)}
@@ -378,8 +417,8 @@ body[data-smooth-skin] [data-testid="todo-panel"] [data-smooth-status="completed
 /* Native question form: retain radio/checkbox semantics, draft mirrors, paging,
    countdowns and submission. Only the question seat owns these local classes. */
 body[data-smooth-skin] [data-question-key]{container-type:inline-size;container-name:smooth-question}
-body[data-smooth-skin] ${questionPanel}{max-height:min(68vh,620px);padding:0;border-radius:20px;background:var(--dsw-specific-input-major);box-shadow:var(--smooth-light-edge),var(--smooth-shadow-1)}
-body[data-smooth-skin] ${questionPanel} ${hostPart('header')}{display:flex;gap:16px;min-height:0;max-height:min(24vh,180px);padding:16px 18px 12px;border:0;background:var(--smooth-light-wash);overflow-y:auto;overscroll-behavior:contain}
+body[data-smooth-skin] ${questionPanel}{max-height:min(68vh,620px);padding:0;border-radius:20px;background:var(--dsw-specific-input-major);box-shadow:var(--smooth-shadow-1)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('header')}{display:flex;gap:16px;min-height:0;max-height:min(24vh,180px);padding:16px 18px 12px;border:0;overflow-y:auto;overscroll-behavior:contain}
 body[data-smooth-skin] ${questionPanel} ${hostPart('headingBlock')}{flex:1;overflow-wrap:anywhere}
 body[data-smooth-skin] ${questionPanel} ${hostPart('eyebrow')}{margin-bottom:6px;color:var(--smooth-muted);font-size:12px;line-height:18px}
 body[data-smooth-skin] ${questionPanel} h2${hostPart('title')}{margin:0;font-size:var(--dsh-content-font-size,14px);line-height:1.65;font-weight:550;color:var(--smooth-text);overflow-wrap:anywhere}
@@ -408,7 +447,7 @@ body[data-smooth-skin] ${questionPanel} :is(${hostPart('customRow')},${hostPart(
 body[data-smooth-skin] ${questionPanel} ${hostPart('customRow')}{margin-top:4px}
 body[data-smooth-skin] ${questionPanel} ${hostPart('customRowActive')}{border-color:color-mix(in srgb,var(--smooth-accent) 45%,var(--smooth-line));background:color-mix(in srgb,var(--smooth-accent) 8%,var(--dsw-specific-input-major))}
 body[data-smooth-skin] ${questionPanel} ${hostPart('customBlock')}{margin-inline:0;border-radius:10px;--dsh-answer-field-padding:10px 12px}
-body[data-smooth-skin] ${questionPanel} ${hostPart('customRow')}:focus-within{border-color:var(--smooth-accent);background:var(--dsw-specific-input-major);box-shadow:var(--smooth-light-edge)}
+body[data-smooth-skin] ${questionPanel} ${hostPart('customRow')}:focus-within{border-color:var(--smooth-accent);background:var(--dsw-specific-input-major)}
 body[data-smooth-skin] ${questionPanel} ${hostPart('field')}>*{font-size:14px;line-height:22px}
 body[data-smooth-skin] ${questionPanel} ${hostPart('fieldInput')}::placeholder{color:var(--smooth-muted)}
 body[data-smooth-skin] ${questionPanel} ${hostPart('footer')}{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px 12px;align-items:center;flex-shrink:0;margin:0;padding:12px 16px;border-top:1px solid var(--smooth-line);background:var(--dsw-specific-input-major)}
@@ -460,13 +499,11 @@ body[data-smooth-skin] [data-conversation-scroll] ::selection{background:color-m
    Paint only the native bubble, retaining its content-sized, right-aligned stack. */
 body[data-smooth-skin] :is([data-chat-flow-kind="user"],[data-chat-flow-kind="steering"]) ${hostPart('bubble')}{border-radius:16px;background:var(--dsw-specific-bubble);padding:12px 16px;font-size:var(--dsh-content-font-size,14px);line-height:1.7;color:var(--smooth-text)}
 
-/* State styling only; no glyph/font/image replacement. */
-body[data-smooth-skin] [role="switch"]:not([data-plugin-panel] *){border-radius:999px;transition:background-color .16s ease;background:var(--smooth-line-strong)}
-body[data-smooth-skin] [role="switch"]:not([data-plugin-panel] *):is([aria-checked="true"],:checked){background:var(--dsw-alias-button-primary-fill);color:var(--smooth-ink)}
-body[data-smooth-skin] button[role="switch"]:not([data-plugin-panel] *){width:44px;height:26px;padding:3px;box-sizing:border-box}
-body[data-smooth-skin] button[role="switch"]:not([data-plugin-panel] *)>span{width:20px;height:20px}
-body[data-smooth-skin] button[role="switch"]:not([data-plugin-panel] *)[aria-checked="true"]>span{transform:translateX(18px)}
-body[data-smooth-skin] [role="switch"]:not([data-plugin-panel] *)[aria-checked="true"]>span{background:var(--smooth-ink)}
+/* State styling only; no glyph/font/image replacement. Switches are left entirely to
+   the surface that owns them: plugin pages and the host ship their own switch geometry,
+   and the skin's earlier global width/thumb overrides broke plugin toggles. The only
+   switch the skin sizes is the host's own general-settings row (below), whose default
+   geometry it re-asserts. */
 body[data-smooth-skin] [role="menu"]{border:1px solid var(--smooth-line-strong);border-radius:20px;background:var(--dsw-alias-bg-overlay);box-shadow:var(--smooth-shadow-2)}
 body[data-smooth-skin] [role="menuitem"]{border-radius:13px}
 /* Account popup follows the reference's .75px scale. Keep the native menu,
@@ -922,7 +959,7 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>b
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(2),
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(4),
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(7){margin-top:34px}
-body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{position:relative;z-index:1;border-left:0;border-radius:0 0 0 calc(35 * var(--smooth-u));corner-shape:round;background:var(--smooth-app);box-shadow:var(--smooth-shadow-workspace);overflow:clip}
+body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{position:relative;z-index:1;border-left:0;border-radius:0 0 0 calc(35 * var(--smooth-u));corner-shape:round;background:var(--smooth-app);overflow:clip}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('header')}{height:52px;padding:14px 16px 8px}
 /* The native close button would sit immediately right of whatever action the page itself
    puts in this header (通用设置 puts its "打开配置文件" there), which reads as one button
@@ -950,17 +987,10 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.gen
 body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.general.item"] ${hostPart('button')}{min-height:28px;padding-inline:12px;border:1px solid var(--smooth-line-strong);border-radius:999px;background:transparent;font-size:12px}
 /* Keep the native settings close action in its content header. The workspace
    strip uses exactly the same caption geometry on settings and main surfaces. */
-body[data-smooth-skin] [data-shortcut-modal="settings"] button[role="switch"]{width:36px;height:20px;padding:2px}
-body[data-smooth-skin] [data-shortcut-modal="settings"] button[role="switch"]>span{width:16px;height:16px}
-body[data-smooth-skin] [data-shortcut-modal="settings"] button[role="switch"][aria-checked="true"]>span{transform:translateX(16px)}
+body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.general.item"] button[role="switch"]{width:36px;height:20px;padding:2px}
+body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.general.item"] button[role="switch"]>span{width:16px;height:16px}
+body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.general.item"] button[role="switch"][aria-checked="true"]>span{transform:translateX(16px)}
 body[data-smooth-skin] :is(.smooth-workspace-tab,[data-composer-card]){corner-shape:round}
-/* Local reflections share an upper-left light source; the reading canvas stays flat.
-   Inset highlights do not restore the removed rail shadow or panel dividers. */
-body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"],
-body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"][aria-selected="true"],
-body[data-smooth-skin] .smooth-rail-home[aria-pressed="true"],
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelActive')},
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button[aria-current="true"]{background-image:var(--smooth-light-wash);box-shadow:var(--smooth-light-edge)}
 body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-surface-3) 80%,var(--smooth-muted))}
 /* The caption bar is white in light mode, and mixing its surface with the dark
    muted label turns the selected chip grey (almost black). Use the palette's
@@ -974,7 +1004,7 @@ body[data-smooth-skin] :is(.smooth-composer-preset,.smooth-composer-model) butto
 body[data-smooth-skin] :is(.smooth-rail-home,.smooth-rail-plugins):hover:not(:disabled),
 body[data-smooth-skin] ${hostPart('sidebarCol')} :is(${hostPart('newSession')},${hostPart('panelRow')}):hover:not(:disabled),
 body[data-smooth-skin] [data-composer-card] ${hostPart('add')}:hover:not(:disabled),
-body[data-smooth-skin] :is(.smooth-composer-preset,.smooth-composer-model) button:hover:not(:disabled){background-color:color-mix(in srgb,var(--smooth-surface-3) 95%,var(--smooth-text));box-shadow:var(--smooth-light-edge)}
+body[data-smooth-skin] :is(.smooth-composer-preset,.smooth-composer-model) button:hover:not(:disabled){background-color:color-mix(in srgb,var(--smooth-surface-3) 95%,var(--smooth-text))}
 body[data-smooth-skin] :is(.smooth-rail-home,.smooth-rail-plugins):active:not(:disabled),
 body[data-smooth-skin] ${hostPart('sidebarCol')} :is(${hostPart('newSession')},${hostPart('panelRow')}):active:not(:disabled),
 body[data-smooth-skin] [data-composer-card] ${hostPart('add')}:active:not(:disabled),
@@ -996,4 +1026,3 @@ body[data-smooth-skin] :is(.smooth-composer-preset,.smooth-composer-model) butto
   body[data-smooth-skin] .smooth-meta-host{font-size:12px}
 }
 `;
-

@@ -36,8 +36,9 @@ test('only the DeepSeek provider groups paint the backdrop', async () => {
   assert.match(composer, /\/deepseek\/i\.test\(`\$\{group\.id \|\| ''\} \$\{group\.name \|\| ''\}`\)/);
   assert.match(composer, /const backdrop = Boolean\(level && deepseekBackdrop\(group\)\)/);
   assert.match(composer, /backdrop && h\('div', \{ className: 'smooth-model-media'/, 'the media layer follows the provider check');
-  // The level row and slider stay available for every model with reasoning efforts.
-  assert.match(composer, /levelName && h\('div', \{ className: 'smooth-model-level'/);
+  // The level row and slider stay available for every model with reasoning efforts; the
+  // row also carries the provider-default auto chip when the catalogue offers it.
+  assert.match(composer, /\(levelName \|\| defaultOption\) && h\('div', \{ className: 'smooth-model-level'/);
 });
 
 test('the panel swaps the backdrop with the level and cross-fades the layers', async () => {
@@ -109,9 +110,9 @@ test('the level is named above the model selector instead of under the slider', 
   // whenever the thumb lands on another level.
   assert.doesNotMatch(composer, /smooth-model-stop/, 'no tick labels or per-stop buttons');
   assert.doesNotMatch(skin, /\.smooth-model-stop/);
-  const level = composer.match(/h\('div', \{ className: 'smooth-model-level'[^]*?\),\n\s*h\('button', \{/);
+  const level = composer.match(/\(levelName \|\| defaultOption\) && h\('div', \{ className: 'smooth-model-level'[^]*?\),\n\s*h\('button', \{/);
   assert.ok(level, 'the level row is rendered before the model trigger');
-  assert.match(level[0], /key: level, className: 'smooth-model-level-name'/);
+  assert.match(level[0], /key: levelName, className: 'smooth-model-level-name'/);
   assert.match(level[0], /'aria-live': 'polite'/);
   assert.match(composer, /'aria-valuetext': levelName/, 'the range announces the level too');
   assert.match(skin, /\.smooth-model-level\{[^}]*justify-content:center/);

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" role="img" aria-labelledby="occ-title occ-desc">
+  <title id="occ-title">占用率 72%</title>
+  <desc id="occ-desc">环形进度图标：蓝色弧线表示已占用 72%，浅灰色环表示剩余 28%。</desc>
+
+  <!-- 剩余部分（完整底环） -->
+  <circle cx="60" cy="60" r="50" fill="none" stroke="#E7ECF3" stroke-width="12"/>
+
+  <!-- 已占用部分：周长 C = 2π × 50 ≈ 314.16，72% ≈ 226.19；从 12 点方向顺时针绘制 -->
+  <circle cx="60" cy="60" r="50" fill="none" stroke="#2563EB" stroke-width="12"
+          stroke-dasharray="226.19 87.97"
+          transform="rotate(-90 60 60)"/>
+
+  <!-- 中心百分比数字 -->
+  <text x="60" y="60" text-anchor="middle" dominant-baseline="central"
+        font-family="'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif"
+        font-size="26" font-weight="700" fill="#0F172A">72%</text>
+</svg>
