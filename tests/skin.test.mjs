@@ -332,12 +332,16 @@ test('the new-conversation row is a compact button above the session list', () =
   assert.match(skin, /\$\{hostPart\('newSession'\)\}\{height:calc\(30 \* var\(--smooth-l\)\);min-height:calc\(30 \* var\(--smooth-l\)\);margin-top:calc\(2 \* var\(--smooth-l\)\);margin-bottom:calc\(3 \* var\(--smooth-l\) \+ 1px\);border-radius:calc\(10 \* var\(--smooth-l\)\);font-size:calc\(14 \* var\(--smooth-l\)\)\}/);
 });
 
-test('the light selected workspace tab uses the soft selection fill, not the muted grey', () => {
+test('the selected workspace tab keeps the shared fill and only a whisper of a rim', () => {
   // Mixing the white caption surface with the dark muted label produced a grey chip
   // that read as black in light mode; the palette's selected token is the blue the
-  // rest of the light selection states already use.
-  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]\{background-color:var\(--smooth-selected\)\}/);
-  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]:hover\{background-color:color-mix\(in srgb,var\(--smooth-selected\) 94%,var\(--smooth-text\)\)\}/);
+  // rest of the light selection states already use. The rim is no longer a full-strength
+  // indicator outline: it is mixed mostly into that fill, so it softens the chip's edge
+  // instead of drawing a second border around the active tab.
+  assert.match(skin, /body\[data-smooth-skin\] \.smooth-workspace-tab\[data-selected="true"\]\{background:var\(--smooth-selected\);border-color:transparent;box-shadow:inset 0 0 0 1px color-mix\(in srgb,var\(--smooth-indicator\) 22%,transparent\)\}/);
+  assert.match(skin, /body\[data-smooth-skin\] \.smooth-workspace-tab\[data-selected="true"\]:hover\{background-color:color-mix\(in srgb,var\(--smooth-selected\) 94%,var\(--smooth-text\)\)\}/);
+  assert.ok(!/smooth-workspace-tab\[data-selected="true"\]\{background-color:color-mix/.test(skin), 'the muted-grey mix is gone');
+  assert.ok(!/workspace-tab\[data-selected="true"\]\{[^}]*inset 0 0 0 1px var\(--smooth-indicator\)/.test(skin), 'the full-strength ring is gone');
 });
 
 test('the selected workspace tab keeps the same weight as the others', () => {
@@ -355,7 +359,7 @@ test('the workspace list keeps the reference list rhythm and its leading dot', (
   // own status dot over it, so no second marker appears beside it.
   assert.match(skin, /\$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('sessionRow'\)\}\{height:28px;border-radius:8px\}/);
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\} \$\{hostPart\('title'\)\}\{font-size:12\.5px;line-height:18px;color:var\(--smooth-muted\)\}/);
-  assert.match(skin, /\$\{hostPart\('sessionRow'\)\}[^{]*\[aria-selected="true"\] \$\{hostPart\('title'\)\}\{color:var\(--smooth-text\)\}/);
+  assert.match(skin, /\$\{hostPart\('sessionRow'\)\}[^{]*\[aria-selected="true"\] \$\{hostPart\('title'\)\}\{color:var\(--smooth-text\);font-weight:600\}/);
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\} \$\{hostPart\('time'\)\}\{font-size:11px;line-height:16px;color:var\(--smooth-muted\)\}/);
   // The dot is the host spinner's own circle drawn as a mask (r=9.5, stroke 2.71 in
   // the spinner's 24-unit viewBox, shown at 8.84px): the two states then share one
@@ -466,6 +470,58 @@ test('dark error text is readable on content, input and selected backgrounds', a
     const contrast = contrastRatio(tokens['--dsw-alias-state-error-primary'].dark, tokens[background].dark);
     assert.ok(contrast >= 4.5, `error on ${background}: ${contrast.toFixed(2)}:1`);
   }
+});
+
+/* The two tests above read the host's own light and dark bases. A shipped preset paints
+ * both tones from ONE palette, so it is the presets that decide what users actually see —
+ * and nothing above exercises them. These two walk the real preset ids. */
+const shippedPresets = ['snow', 'iron', 'moss', 'sunset', 'deepsea'];
+
+test('every shipped preset keeps all three label inks readable on every reading surface', async () => {
+  const { buildTokens, themeTone } = await loadHostHalf();
+  for (const id of shippedPresets) {
+    const tokens = buildTokens({ enabled: true, theme: id });
+    const tone = themeTone(id);
+    for (const foreground of ['--dsw-alias-label-primary', '--dsw-alias-label-secondary', '--dsw-alias-label-tertiary']) {
+      for (const background of readingSurfaces) {
+        const contrast = contrastRatio(tokens[foreground][tone], tokens[background][tone]);
+        assert.ok(contrast >= 4.5, `${id}: ${foreground} on ${background}: ${contrast.toFixed(2)}:1`);
+      }
+    }
+  }
+});
+
+test('every shipped preset separates its surfaces and keeps the ring ink legible', async () => {
+  const { buildTokens, themeTone } = await loadHostHalf();
+  const atLeast = (tokens, tone, foreground, background, minimum, label) => {
+    const contrast = contrastRatio(tokens[foreground][tone], tokens[background][tone]);
+    assert.ok(contrast >= minimum, `${label}: ${contrast.toFixed(2)}:1`);
+  };
+  for (const id of shippedPresets) {
+    const tokens = buildTokens({ enabled: true, theme: id });
+    const tone = themeTone(id);
+    // Adjacent surfaces must be visibly apart, or elevation is only a token name.
+    atLeast(tokens, tone, '--smooth-surface', '--smooth-surface-2', 1.07, `${id} layer1/layer2`);
+    atLeast(tokens, tone, '--smooth-surface-2', '--smooth-surface-3', 1.07, `${id} layer2/layer3`);
+    atLeast(tokens, tone, '--smooth-app', '--smooth-surface', 1.09, `${id} app/layer1`);
+    atLeast(tokens, tone, '--smooth-sidebar', '--smooth-app', 1.05, `${id} sidebar/app`);
+    atLeast(tokens, tone, '--smooth-selected', '--smooth-sidebar', 1.10, `${id} selected/sidebar`);
+    // Tertiary has to stay visibly quieter than secondary, or the two dim inks collapse
+    // into one colour and timestamps read as loudly as titles.
+    atLeast(tokens, tone, '--dsw-alias-label-secondary', '--dsw-alias-label-tertiary', 1.12, `${id} muted/faint`);
+    // The indicator inks the selected tab's keyboard focus ring, which is drawn inside
+    // that same selected fill, so it keeps clearing the 3:1 a non-text cue needs.
+    atLeast(tokens, tone, '--smooth-indicator', '--smooth-selected', 3, `${id} indicator/selected`);
+  }
+});
+
+test('the selected sidebar row is named by its fill and title, with no leading bar', () => {
+  // The inset leading bar that marked the selected row is gone: it read as a stripe
+  // pinned to one side of the row rather than as the row's own selection. The fill and
+  // the title's ink and weight carry the state.
+  assert.match(skin, /\[role="treeitem"\]\[aria-selected="true"\]\{background:var\(--smooth-selected\);border-color:transparent;box-shadow:none\}/);
+  assert.match(skin, /\[aria-selected="true"\] \$\{hostPart\('title'\)\}\{color:var\(--smooth-text\);font-weight:600\}/);
+  assert.ok(!/inset 2px 0 0/.test(skin), 'no leading selection bar survives in the sidebar');
 });
 
 test('every CSS custom property the skin reads exists as a plugin token or a literal', async () => {

@@ -108,7 +108,7 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} button[
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"]{border-radius:8px}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}{height:28px;border-radius:8px}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')} ${hostPart('title')}{font-size:12.5px;line-height:18px;color:var(--smooth-muted)}
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}[aria-selected="true"] ${hostPart('title')}{color:var(--smooth-text)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}[aria-selected="true"] ${hostPart('title')}{color:var(--smooth-text);font-weight:600}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')} ${hostPart('time')}{font-size:11px;line-height:16px;color:var(--smooth-muted)}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')}{position:relative}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')}::before{content:"";position:absolute;left:50%;top:50%;width:8.84px;height:8.84px;margin:-4.42px 0 0 -4.42px;background:color-mix(in srgb,var(--smooth-muted) 72%,transparent);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9.5' fill='none' stroke='black' stroke-width='2.71'/%3E%3C/svg%3E") center/8.84px 8.84px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9.5' fill='none' stroke='black' stroke-width='2.71'/%3E%3C/svg%3E") center/8.84px 8.84px no-repeat}
@@ -130,6 +130,10 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')} :is($
    title colour so the tree reads as one list; only their size/weight is tightened. */
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')} ${hostPart('title')}{font-size:13.5px;line-height:19px;font-weight:500}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sectionLabel')}{font-size:12px;line-height:18px}
+/* Selection in the workspace list is named by the row's fill plus the title's own colour
+   and weight. The inset bar that used to run down the selected row's leading edge read as
+   a stripe pinned to one side of the row instead of as the row's own ground, so the row
+   now keeps no shadow at all. */
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"][aria-selected="true"]{background:var(--smooth-selected);border-color:transparent;box-shadow:none}
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"]:not([aria-selected="true"]):hover{background:var(--smooth-surface-2)}
 
@@ -363,9 +367,9 @@ body[data-smooth-skin] .smooth-model-slider input[type="range"]:disabled + .smoo
    channel twice over: this file already spends it on disabled, and a half-transparent
    white thumb on a light track measured 1.05-1.08:1, i.e. gone. Neutralising the fill and
    pushing the track toward muted leaves the one blue-free bar sitting on a visibly darker
-   pill (1.55-1.69:1 against the panel, was 1.02-1.07:1), so it reads as "nothing chosen"
-   rather than "nothing works" - and the thumb keeps full contrast, so it stays live and
-   picking a stop immediately takes the level back. */
+   pill (1.54-1.62:1 against the panel in light, 1.92-1.96:1 in dark; it was 1.02-1.07:1),
+   so it reads as "nothing chosen" rather than "nothing works" - and the thumb keeps full
+   contrast, so it stays live and picking a stop immediately takes the level back. */
 body[data-smooth-skin] .smooth-model-slider[data-default="true"] .smooth-model-fill{background:var(--smooth-muted)}
 body[data-smooth-skin] .smooth-model-slider[data-default="true"] .smooth-model-track{background:color-mix(in srgb,var(--smooth-model-track) 70%,var(--smooth-muted))}
 /* The shared error chip (see .smooth-session-delete-error for why the tint and the ink
@@ -698,7 +702,13 @@ body[data-smooth-skin] .smooth-tab-label{display:flex;align-items:center;justify
 /* Leave room inside the clipping box for italic glyphs extending past their advance. */
 body[data-smooth-skin] .smooth-tab-label>span{min-width:0;padding:.08em .2em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-smooth-skin] .smooth-workspace-tab[data-preview="true"] .smooth-tab-label{font-style:italic}
-body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]{background:color-mix(in srgb,var(--smooth-surface-3) 80%,var(--smooth-muted));border-color:transparent}
+/* Selection in this caption bar is the same fact as selection in the sidebar, so it wears
+   the same fill token in both tones. The rim stays a whisper of the selection hue: the
+   ring is mixed mostly into the fill it borders, so it only softens the chip's edge
+   instead of outlining it at full strength across the caption bar. The label keeps the
+   others' weight — the strip is laid out by the labels' own width, so a weight step would
+   shift every tab when the active one changes. */
+body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]{background:var(--smooth-selected);border-color:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--smooth-indicator) 22%,transparent)}
 body[data-smooth-skin] .smooth-workspace-tab:hover{background:var(--smooth-surface-3)}
 body[data-smooth-skin] .smooth-tab-close{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--smooth-muted);cursor:pointer}
 /* Pointer reorder: a short | floats in the gap, not on a tab border. Tabs clip
@@ -729,6 +739,10 @@ body[data-smooth-skin] .smooth-tab-scroll[data-side="right"]{right:calc(10 * var
    shows one over the end of the list. */
 body[data-smooth-skin] .smooth-tab-scroll:hover{background:var(--smooth-surface-2);color:var(--smooth-text)}
 body[data-smooth-skin] :is(.smooth-tab-label,.smooth-tab-close,.smooth-tab-scroll,.smooth-rail-home,.smooth-rail-plugins):focus-visible{outline:2px solid var(--smooth-accent);outline-offset:-2px}
+/* The ring is drawn inside the element, so on a selected tab it lands on the selection
+   fill — where the accent only reaches ~1.9-2.3:1. The indicator hue is the one that was
+   deepened to clear 3:1 against that fill. */
+body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"] .smooth-tab-label:focus-visible{outline-color:var(--smooth-indicator)}
 body[data-smooth-skin] :is(.smooth-rail-home,.smooth-rail-plugins){
   position:fixed;left:var(--smooth-rail-inset);top:var(--smooth-rail-top);
   display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:var(--smooth-rail-button-size);height:var(--smooth-rail-button-size);padding:0;
@@ -1025,12 +1039,7 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.gen
 body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.general.item"] button[role="switch"]>span{width:16px;height:16px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.general.item"] button[role="switch"][aria-checked="true"]>span{transform:translateX(16px)}
 body[data-smooth-skin] :is(.smooth-workspace-tab,[data-composer-card]){corner-shape:round}
-body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-surface-3) 80%,var(--smooth-muted))}
-/* The caption bar is white in light mode, and mixing its surface with the dark
-   muted label turns the selected chip grey (almost black). Use the palette's
-   selection fill there — the same soft blue every other selected row gets. */
-body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab[data-selected="true"]{background-color:var(--smooth-selected)}
-body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-selected) 94%,var(--smooth-text))}
+body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-selected) 94%,var(--smooth-text))}
 body[data-smooth-skin] :is(.smooth-workspace-tab,.smooth-rail-home,.smooth-rail-plugins),
 body[data-smooth-skin] ${hostPart('sidebarCol')} :is(${hostPart('newSession')},${hostPart('panelRow')}),
 body[data-smooth-skin] [data-composer-card] ${hostPart('add')},
