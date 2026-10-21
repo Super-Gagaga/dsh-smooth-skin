@@ -321,7 +321,10 @@ test('the effort panel offers a Default auto chip exactly where the host menu do
   // which is exactly the host's provider-default request.
   assert.match(source, /aria-pressed': defaultActive/);
   assert.match(source, /'data-active': defaultActive/);
-  assert.match(source, /'auto'\)/);
+  // Its visible label is the state it sets, taken from the locale table, rather than a
+  // hard-coded Latin string sitting inside an otherwise localised row.
+  assert.match(source, /text\('composer\.effortDefault', 'Default'\)/);
+  assert.doesNotMatch(source, /\}, 'auto'\)/, 'the chip label must be reachable by the locale table');
   assert.match(source, /className: 'smooth-model-auto'/);
   assert.match(source, /props\.select\(\{ provider: current\.provider, model: current\.model \}\)/);
   assert.match(source, /const defaultActive = defaultOption && draft == null/);
@@ -395,4 +398,34 @@ test('the model panel keeps its open/close motion in the component, not just the
   // The trigger's own second click is routed through the panel so the collapse plays.
   assert.match(source, /if \(closeRef\.current\) \{ closeRef\.current\(\); return; \}/);
   assert.match(source, /closeRef\.current = requestClose/);
+});
+
+test('the dialog trigger states whether its pane is showing', () => {
+  // 'menu' promised an arrow-key contract this panel never had, so the trigger announces a
+  // dialog. A dialog trigger also has to report its expanded state, the way the context
+  // ring's trigger does, or assistive tech is told about a dialog and never its state.
+  // Pinned as the ordered triple the model trigger actually renders: a bare
+  // `aria-haspopup: 'dialog'` match would pass off the context ring's unrelated trigger.
+  assert.match(source, /'aria-haspopup': 'dialog',\s*'aria-expanded': props\.modelsOpen === undefined \? undefined : \(props\.modelsOpen \? 'true' : 'false'\),\s*onClick: \(\) => props\.onOpenModels\?\.\(\),/);
+  assert.match(source, /modelsOpen: view === 'models'/, 'the pane on screen is what the trigger reports');
+});
+
+test('every composer locale key the panel asks for exists in both tables', () => {
+  // A key that exists only at its call site falls back to the Chinese literal in the English
+  // UI, which is how `composer.back` shipped unreachable. Check the whole keyspace, not a list.
+  const composer = source;
+  const shared = readFile(new URL('../src/shared.js', import.meta.url), 'utf8');
+  return shared.then((table) => {
+    const zh = table.slice(table.indexOf('const zhCN'), table.indexOf('const enUS'));
+    const en = table.slice(table.indexOf('const enUS'));
+    const used = new Set([...composer.matchAll(/text\('([a-z][\w.]*)'/g)].map((match) => match[1]));
+    assert.ok(used.size > 40, `expected the panel to ask for many keys, saw ${used.size}`);
+    for (const key of used) {
+      const pattern = new RegExp(`'${key.replace(/\./g, '\\.')}':`);
+      assert.match(zh, pattern, `missing zh ${key}`);
+      assert.match(en, pattern, `missing en ${key}`);
+    }
+    assert.match(zh, /'composer\.back': '返回'/);
+    assert.match(en, /'composer\.back': 'Back'/);
+  });
 });

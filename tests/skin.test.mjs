@@ -206,7 +206,35 @@ test('the effort thumb is a glider that slides between stops and follows a drag'
   // Provider-default models get an auto chip in the level row; it is not a slider stop.
   assert.match(skin, /\.smooth-model-auto\{[^}]*order:-1/, 'the chip sits left of the level dot');
   assert.match(skin, /\.smooth-model-auto\[data-active="true"\]\{[^}]*var\(--smooth-model-blue\)/, 'the active chip uses the level blue');
-  assert.match(skin, /\.smooth-model-slider\[data-default="true"\]\{opacity:\.5\}/, 'the explicit scale dims while Default owns the level');
+  // Default is not a stop on the scale, so the scale stops looking like the live level.
+  // It is neutralised by repainting the fill and the track, never by fading the control:
+  // an opacity dim read as "disabled" (and took the thumb to ~1.07:1 against its track in
+  // the light presets), which is the one thing a still-interactive control must not say.
+  assert.doesNotMatch(skin, /\.smooth-model-slider\[data-default="true"\]\{opacity:/, 'Default must not be painted with the disabled channel');
+  assert.match(skin, /\.smooth-model-slider\[data-default="true"\] \.smooth-model-fill\{background:var\(--smooth-muted\)\}/, 'the fill goes neutral while Default owns the level');
+  assert.match(skin, /\.smooth-model-slider\[data-default="true"\] \.smooth-model-track\{background:color-mix/, 'the track lifts off the ground so it still reads as a control');
+  // The glide is the panel's only animation the decorative guards did not cover.
+  assert.match(skin, /@media\(prefers-reduced-motion:reduce\)\{body\[data-smooth-skin\] \.smooth-model-slider,body\[data-smooth-skin\] \.smooth-model-glider\{transition:none\}\}/, 'the slide honours reduced motion');
+  // The level dot wears the state blue, so it must stop wearing it once the provider owns
+  // the level; otherwise the one always-present state glyph contradicts the panel.
+  assert.match(skin, /\.smooth-model-effort:has\(\.smooth-model-slider\[data-default="true"\]\) \.smooth-model-level::before\{background:var\(--smooth-muted\)\}/, 'the dot stops asserting a level Default owns');
+  assert.doesNotMatch(skin, /\.smooth-model-level::before\{[^}]*box-shadow/, 'the sub-threshold halo on the dot is gone');
+  // The model list marks the current row with the skin's own selection fill, like every
+  // other selected state, rather than a raw host token with a grey fallback.
+  assert.match(skin, /\.smooth-git-row\[data-current="true"\]\{background:var\(--smooth-selected\)\}/, 'the current model row uses the skin selection token');
+  assert.doesNotMatch(skin, /\.smooth-git-row\[data-current="true"\]\{background:var\(--dsw-alias-interactive-bg-active/, 'no raw host token for a selected row');
+  // A failed effort commit is the same class of event as a failed Git action, so it takes
+  // the same alert chip instead of a bare 10.5px red line. The chip tints over the surface
+  // rather than staying transparent: a red wash behind red text closes the contrast gap it
+  // needs, so the ink is pulled toward the label colour to hold AA on the dark base.
+  const chip = skin.match(/\.smooth-model-error\{[^}]*\}/)?.[0] || '';
+  assert.match(chip, /background:color-mix\(in srgb,var\(--dsw-alias-state-error-primary\) 10%,var\(--smooth-surface-2\)\)/, 'the effort error reads as an alert chip');
+  assert.match(chip, /color:color-mix\(in srgb,var\(--dsw-alias-state-error-primary\) 82%,var\(--smooth-text\)\)/, 'the error ink keeps its contrast over its own tint');
+  // Both pages of the panel share one viewport and cross-fade, so their insets must agree
+  // or the content jumps sideways on every switch.
+  const paneBody = skin.match(/\.smooth-model-body\{[^}]*\}/)?.[0] || '';
+  const paneList = skin.match(/\.smooth-model-list\{[^}]*\}/)?.[0] || '';
+  assert.equal(paneBody.match(/padding:([^;}]+)/)?.[1], paneList.match(/padding:([^;}]+)/)?.[1], 'the two pages share one inset rhythm');
 });
 
 test('the top-stop wash stays on the blue fill and its core lands on the strip', () => {

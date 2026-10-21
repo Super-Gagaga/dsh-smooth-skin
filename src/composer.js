@@ -504,6 +504,10 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
     const [query, setQuery] = React.useState('');
     const [error, setError] = React.useState('');
     const [busy, setBusy] = React.useState(false);
+    // Which single row owns the in-flight pick. `busy` alone would lock the whole
+    // catalogue for the length of one provider round trip; holding the id lets every
+    // other row keep responding while the picked one shows its pending state.
+    const [picking, setPicking] = React.useState(null);
     const searchRef = React.useRef(null);
     React.useEffect(() => { if (active) searchRef.current?.focus?.(); }, [active]);
     const needle = query.trim().toLowerCase();
@@ -512,14 +516,14 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
       models: (group.models || []).filter((model) => !needle || model.name.toLowerCase().includes(needle)),
     })).filter((group) => group.models.length > 0);
     const pick = async (group, model) => {
-      setBusy(true); setError('');
+      setBusy(true); setPicking(`${group.id}:${model.id}`); setError('');
       try {
         await onPick(group, model);
         onDone();
       } catch (reason) {
         setError(reason?.message || text('composer.modelFailed', '模型切换失败'));
       } finally {
-        setBusy(false);
+        setPicking(null); setBusy(false);
       }
     };
     return h('div', { className: 'smooth-model-list', role: 'group', 'aria-label': text('composer.modelMenu', '模型') },
@@ -535,15 +539,19 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
         onChange: (event) => setQuery(event.target.value),
       }),
       error && h('div', { className: 'smooth-git-error', role: 'alert' }, error),
-      h('div', { className: 'smooth-git-list', role: 'listbox', 'aria-label': text('composer.modelMenu', '模型') }, filtered.map((group) =>
+      h('div', { className: 'smooth-git-list', role: 'group', 'aria-label': text('composer.modelMenu', '模型') }, filtered.map((group) =>
         h('div', { key: group.id, className: 'smooth-model-group', role: 'group', 'aria-label': group.name },
           h('div', { className: 'smooth-git-heading' }, group.name),
           (group.models || []).map((model) => {
             const selected = group.id === current?.provider && model.id === current?.model;
             return h('button', {
-              key: model.id, type: 'button', className: 'smooth-git-row', disabled: busy,
-              role: 'option', 'aria-selected': selected, 'data-current': selected ? 'true' : undefined,
-              onClick: () => pick(group, model),
+              key: model.id, type: 'button', className: 'smooth-git-row',
+              // Only the row being picked locks: the listbox/option roles are gone because
+              // nothing here implements the listbox focus contract, so the native buttons
+              // carry the semantics themselves and the rest of the catalogue stays usable.
+              disabled: busy && picking === `${group.id}:${model.id}`,
+              'aria-current': selected ? 'true' : undefined, 'data-current': selected ? 'true' : undefined,
+              onClick: () => { if (busy) return; pick(group, model); },
             },
               h('span', { className: 'smooth-git-row-main' }, h('span', { className: 'smooth-git-name' }, model.name)),
               selected && h('span', { className: 'smooth-git-check', 'aria-hidden': true }, '✓'));
@@ -650,7 +658,9 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     const currentIndex = Math.max(0, explicitIndex);
     // While Default is in charge there is no explicit stop to point at; leave the thumb
     // on the last level the user picked so switching back to an explicit level is a
-    // short move, and let the stylesheet dim the track to say it is not governing.
+    // short move, and let the stylesheet neutralise the fill and track (never the thumb:
+    // a faded control reads as disabled, and this one is still live) to say the provider,
+    // not the scale, owns the level.
     const lastExplicitRef = React.useRef(currentIndex);
     React.useEffect(() => {
       if (explicitIndex >= 0) lastExplicitRef.current = explicitIndex;
@@ -805,7 +815,11 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
         // model selector and re-enters on every change, so the panel still names it.
         // The auto chip appears exactly for models whose catalogue offers the host's
         // "Default" effort; it sits before the level dot and returns the level to it.
-        (levelName || defaultOption) && h('div', { className: 'smooth-model-level', 'aria-live': 'polite' },
+        // The chip is the Default state's own label, so the level name beside it would
+        // only repeat the same word — it is rendered exactly when Default is not active.
+        // No aria-live here: the range below already announces the level through its
+        // value text, and a live region on the container made every move say it twice.
+        (levelName || defaultOption) && h('div', { className: 'smooth-model-level' },
           defaultOption && h('button', {
             type: 'button', className: 'smooth-model-auto',
             'data-active': defaultActive ? 'true' : undefined,
@@ -814,12 +828,19 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
             title: text('composer.effortAuto', '使用 Default 思考强度'),
             disabled,
             onClick: chooseDefault,
-          }, 'auto'),
-          levelName && h('span', { key: levelName, className: 'smooth-model-level-name' }, levelName)),
+          }, text('composer.effortDefault', 'Default')),
+          // The key stays on the current level name: it is what re-runs the CSS entry
+          // animation when the thumb lands somewhere else.
+          levelName && !defaultActive && h('span', { key: levelName, className: 'smooth-model-level-name' }, levelName)),
         h('button', {
           ref: triggerRef, type: 'button', className: 'smooth-model-trigger',
           'data-smooth-model-trigger': '', disabled, title: model?.name,
-          'aria-haspopup': 'menu',
+          // The trigger opens the plugin's own panel, which is role="dialog" — 'menu'
+          // would promise the host menu's arrow-key contract that this panel never had.
+          // A dialog trigger also has to say whether its pane is showing, the way the
+          // context ring's trigger already does.
+          'aria-haspopup': 'dialog',
+          'aria-expanded': props.modelsOpen === undefined ? undefined : (props.modelsOpen ? 'true' : 'false'),
           onClick: () => props.onOpenModels?.(),
         },
           h('span', { className: 'smooth-model-name' }, model?.name || text('composer.modelLoading', '正在读取…')),
@@ -873,6 +894,9 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
             type: 'range', min: 0, max: Math.max(0, efforts.length - 1), step: 1, value: index,
             disabled: disabled,
             'aria-label': text('composer.reasoningEffort', '思考强度'),
+            // Both channels are needed: the value text names the stop, the value number
+            // gives its position, and a range without the latter exposes no position at all.
+            'aria-valuenow': index,
             'aria-valuetext': levelName,
             onChange: (event) => { if (!disabled) preview(Number(event.target.value)); },
             onPointerDown: beginDrag,
@@ -981,6 +1005,9 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
           h(ModelEffortControl, {
             directory, load, select, text, available: true, locked: false,
             onOpenModels: () => setView('models'),
+            // The trigger's own expanded state: it opens the models pane inside this
+            // already-open panel, so the pane on screen is what it reports.
+            modelsOpen: view === 'models',
           })),
         h('div', {
           ref: modelsRef, className: 'smooth-model-panel-pane', 'data-pane': 'models',

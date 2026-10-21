@@ -85,8 +85,21 @@ test('the model page shares the panel surface instead of the host menu card', as
   // A role="menu" container inherits the host's menu chrome (its own fill and radius),
   // which made the list look like a card inside the panel. Radio semantics keep the
   // list a plain list, and the reset wins over any inherited menu surface.
-  assert.match(composer, /className: 'smooth-git-list', role: 'listbox'/);
-  assert.match(composer, /role: 'option', 'aria-selected': selected/);
+  // The list is plain buttons under a named group, not a listbox: nothing here implements
+  // the listbox focus contract (no roving focus, no aria-activedescendant), and a listbox
+  // that never owns focus lies to assistive tech. The current row keeps both its styling
+  // hook and an ARIA statement of being current.
+  assert.match(composer, /className: 'smooth-git-list', role: 'group'/);
+  assert.match(composer, /'data-current': selected \? 'true' : undefined/);
+  assert.match(composer, /'aria-current': selected \? 'true' : undefined/);
+  assert.doesNotMatch(composer, /role: 'listbox'/, 'a listbox must implement focus management or not claim to be one');
+  // One pick locks its own row, not the whole catalogue: a blanket `disabled: busy` froze
+  // every provider's rows for the length of a round trip, so the key is the provider and
+  // model together and the handler still guards a second click.
+  assert.match(composer, /setPicking\(`\$\{group\.id\}:\$\{model\.id\}`\)/, 'the picked row is keyed by provider and model');
+  assert.match(composer, /disabled: busy && picking === `\$\{group\.id\}:\$\{model\.id\}`/, 'only the picked row locks');
+  assert.doesNotMatch(composer, /disabled: busy,\n/, 'no row disables on busy alone');
+  assert.match(composer, /onClick: \(\) => \{ if \(busy\) return; pick\(group, model\); \}/, 'a second click while busy is ignored');
   assert.match(skin, /\.smooth-model-list \.smooth-git-list\{[^}]*border:0;border-radius:0;background:transparent;box-shadow:none/);
 });
 
@@ -113,7 +126,10 @@ test('the level is named above the model selector instead of under the slider', 
   const level = composer.match(/\(levelName \|\| defaultOption\) && h\('div', \{ className: 'smooth-model-level'[^]*?\),\n\s*h\('button', \{/);
   assert.ok(level, 'the level row is rendered before the model trigger');
   assert.match(level[0], /key: levelName, className: 'smooth-model-level-name'/);
-  assert.match(level[0], /'aria-live': 'polite'/);
+  // The range is the single announcement channel: it carries the level's position and its
+// name. A polite live region beside it spoke the same change a second time.
+  assert.doesNotMatch(level[0], /'aria-live'/, 'the range alone announces the level');
+  assert.match(composer, /'aria-valuenow': index,/, 'the range states its position');
   assert.match(composer, /'aria-valuetext': levelName/, 'the range announces the level too');
   assert.match(skin, /\.smooth-model-level\{[^}]*justify-content:center/);
   assert.match(skin, /\.smooth-model-level-name\{[^}]*animation:smooth-model-level-in/);
