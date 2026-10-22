@@ -13,7 +13,9 @@ function runtime({ width = 1282, overflow = null, workspaceStore = true } = {}) 
   const bridgeCalls = [];
   let sessionRefreshes = 0;
   const layoutState = { layoutInfo: { sidebar: 280 } };
-  const settingsState = { open: false };
+  const settingsState = { open: false, activeId: undefined };
+  const settingsListeners = new Set();
+  const notifySettings = () => { for (const listener of settingsListeners) listener(); };
   const subscriptions = new Set();
   const events = new Map();
   const snapshot = { current: 'a', byId: { a: { title: '实际会话', cwd: 'C:\\work\\demo' }, blank: { blank: true } } };
@@ -24,8 +26,13 @@ function runtime({ width = 1282, overflow = null, workspaceStore = true } = {}) 
     actions: { setSidebar: width => { layoutState.layoutInfo.sidebar = width; for (const fn of subscriptions) fn(); } },
   };
   const settingsStore = {
-    getSnapshot: () => settingsState, subscribe: () => () => {},
-    actions: { open: () => { settingsState.open = true; }, close: () => { settingsCloses.push(settingsState.open); settingsState.open = false; }, openSection: id => { settingsState.open = true; calls.push(['settings', id]); } },
+    getSnapshot: () => settingsState,
+    subscribe: listener => { settingsListeners.add(listener); return () => settingsListeners.delete(listener); },
+    actions: {
+      open: () => { settingsState.open = true; notifySettings(); },
+      close: () => { settingsCloses.push(settingsState.open); settingsState.open = false; settingsState.activeId = undefined; notifySettings(); },
+      openSection: id => { settingsState.open = true; settingsState.activeId = id; calls.push(['settings', id]); notifySettings(); },
+    },
   };
   // The host's workspace browser publishes its persisted viewing store on the region
   // entry; archivedFilter is the state the hover filter and the view menu share.
@@ -98,7 +105,7 @@ function runtime({ width = 1282, overflow = null, workspaceStore = true } = {}) 
   };
   const flatten = node => node ? [node, ...node.children.flat(Infinity).filter(x => x && typeof x === 'object').flatMap(flatten)] : [];
   const operate = () => events.get('input')({ type: 'input', target: { closest: selector => selector.includes('[data-slot="main"]') || selector.startsWith('input,') ? {} : null } });
-  return { shell, render, flatten, registrations, calls, layoutState, settingsState, settingsCloses, snapshot, panelState, events, operate, properties, subscriptions, sandbox, bodyAttributes, workspaceState, workspaceCalls, workspaceList, bridgeCalls, get sessionRefreshes() { return sessionRefreshes; } };
+  return { shell, render, flatten, registrations, calls, layoutState, settingsState, settingsCloses, notifySettings, snapshot, panelState, events, operate, properties, subscriptions, sandbox, bodyAttributes, workspaceState, workspaceCalls, workspaceList, bridgeCalls, get sessionRefreshes() { return sessionRefreshes; } };
 }
 
 test('the welcome block follows the main surface, not the tab count', () => {
@@ -146,6 +153,32 @@ test('native shared stores drive width, real navigation and full-page settings',
   assert.equal(r.registrations.size, 0);
   assert.equal(r.subscriptions.size, 0);
   assert.equal(r.events.size, 0);
+});
+
+test('the settings tab returns to the settings page the user left', () => {
+  const r = runtime();
+  r.shell.setEnabled(true);
+  // Give the conversation a pinned tab so the settings surface can open over it.
+  r.render(); r.render();
+  r.operate(); r.render();
+  // Settings opened on the skin's own page: the host publishes that active section.
+  r.settingsState.open = true;
+  r.settingsState.activeId = 'dsh-smooth-skin';
+  r.notifySettings();
+  r.render(true);
+  // Leaving through the conversation tab closes the dialog; the host drops its active
+  // section with it, but the strip keeps the settings tab.
+  const session = () => r.flatten(r.render(true)).find(node => node.props.role === 'tab' && node.props.title === '实际会话');
+  session().props.onClick();
+  assert.equal(r.settingsState.open, false);
+  assert.equal(r.settingsState.activeId, undefined, 'the host cleared its active section');
+  const settingsTab = () => r.flatten(r.render()).find(node => node.props.role === 'tab' && node.props.title === '设置');
+  assert.ok(settingsTab(), 'the settings tab is still in the strip');
+  settingsTab().props.onClick();
+  assert.deepEqual(r.calls.filter(call => call[0] === 'settings'), [['settings', 'dsh-smooth-skin']]);
+  assert.equal(r.settingsState.open, true);
+  assert.equal(r.settingsState.activeId, 'dsh-smooth-skin', 'the tab restored the page that was left');
+  r.shell.dispose();
 });
 
 test('disabling preserves a subsequent manual sidebar resize', () => {
