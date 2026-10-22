@@ -306,7 +306,7 @@ test('the panel keeps the reference layout and the landing-page gate', () => {
 
 test('the stylesheet paints the panel, the four shades and the tooltip', () => {
   const skin = read('skin.js');
-  assert.match(skin, /\.smooth-usage-panel\{[^}]*padding:12px;border-radius:12px/);
+  assert.match(skin, /\.smooth-usage-panel\{[^}]*padding:12px;border-radius:var\(--smooth-radius-lg\)/);
   assert.match(skin, /\.smooth-usage-stats\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\);gap:4px\}/);
   for (const level of [1, 2, 3, 4]) {
     assert.match(skin, new RegExp(`\\.smooth-usage-heat-cell\\[data-smooth-level="${level}"\\]\\{background:`), `level ${level} has a fill`);

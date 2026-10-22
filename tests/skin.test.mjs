@@ -329,7 +329,7 @@ test('a collapsed sidebar keeps its caption buttons clear of the tab strip', () 
 test('the new-conversation row is a compact button above the session list', () => {
   // The wide 46-unit row pushed the session list's divider below the conversation
   // header's; a 30-unit button with hairline margins restores the two rows' rhythm.
-  assert.match(skin, /\$\{hostPart\('newSession'\)\}\{height:calc\(30 \* var\(--smooth-l\)\);min-height:calc\(30 \* var\(--smooth-l\)\);margin-top:calc\(2 \* var\(--smooth-l\)\);margin-bottom:calc\(3 \* var\(--smooth-l\) \+ 1px\);border-radius:calc\(10 \* var\(--smooth-l\)\);font-size:calc\(14 \* var\(--smooth-l\)\)\}/);
+  assert.match(skin, /\$\{hostPart\('newSession'\)\}\{height:calc\(30 \* var\(--smooth-l\)\);min-height:calc\(30 \* var\(--smooth-l\)\);margin-top:calc\(2 \* var\(--smooth-l\)\);margin-bottom:calc\(3 \* var\(--smooth-l\) \+ 1px\);border-radius:var\(--smooth-radius-md\);font-size:calc\(14 \* var\(--smooth-l\)\)\}/);
 });
 
 test('the selected workspace tab keeps the shared fill and only a whisper of a rim', () => {
@@ -357,7 +357,7 @@ test('the workspace list keeps the reference list rhythm and its leading dot', (
   // sharing the title's colour instead of a dimmer step. The leading cell carries the
   // reference's hollow dot as a background ring: a running session paints the host's
   // own status dot over it, so no second marker appears beside it.
-  assert.match(skin, /\$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('sessionRow'\)\}\{height:28px;border-radius:8px\}/);
+  assert.match(skin, /\$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('sessionRow'\)\}\{height:28px;border-radius:var\(--smooth-radius-sm\)\}/);
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\} \$\{hostPart\('title'\)\}\{font-size:12\.5px;line-height:18px;color:var\(--smooth-muted\)\}/);
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\}[^{]*\[aria-selected="true"\] \$\{hostPart\('title'\)\}\{color:var\(--smooth-text\);font-weight:600\}/);
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\} \$\{hostPart\('time'\)\}\{font-size:11px;line-height:16px;color:var\(--smooth-muted\)\}/);
@@ -372,12 +372,39 @@ test('the workspace list keeps the reference list rhythm and its leading dot', (
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\} svg\{width:8\.84px;height:8\.84px;color:color-mix\(in srgb,var\(--smooth-muted\) 72%,transparent\)\}/);
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\} svg \*\{stroke-width:2\.71\}/);
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\} svg g>circle:first-child\{opacity:\.4\}/);
-  assert.match(skin, /\$\{hostPart\('projectRow'\)\}\{height:29px;border-radius:8px\}/);
+  assert.match(skin, /\$\{hostPart\('projectRow'\)\}\{height:29px;border-radius:var\(--smooth-radius-sm\)\}/);
   // Workspace group titles keep the host's title colour (the workspace-name colouring is
   // gone); only their size and weight are tightened.
   assert.match(skin, /\$\{hostPart\('projectRow'\)\} \$\{hostPart\('title'\)\}\{font-size:13\.5px;line-height:19px;font-weight:500\}/);
   assert.ok(!/\$\{hostPart\('projectRow'\)\} \$\{hostPart\('title'\)\}\{[^}]*color:/.test(skin), 'workspace names must not be recoloured');
   assert.match(skin, /\$\{hostPart\('sectionLabel'\)\}\{font-size:12px;line-height:18px\}/);
+});
+
+test('every rectangle corner comes from the shared five-step radius scale', () => {
+  // Shape consistency: the skin's own rectangles snap to 26 / 16 / 11 / 8 / 4 through
+  // the radius tokens. Pills, circles, window chrome and data marks keep their literal
+  // values; a new literal radius anywhere else fails this test.
+  assert.match(skin, /--smooth-radius-xl:26px;--smooth-radius-lg:16px;--smooth-radius-md:11px;--smooth-radius-sm:8px;--smooth-radius-xs:4px/);
+  const allowed = new Set([
+    '0', '999px', '50%', '1px', '2px', '3px', '18px 0 0 0',
+    'var(--smooth-radius-xl)', 'var(--smooth-radius-lg)', 'var(--smooth-radius-md)',
+    'var(--smooth-radius-sm)', 'var(--smooth-radius-xs)', 'var(--smooth-rail-button-radius)',
+    'var(--smooth-radius-md,11px)', 'var(--smooth-radius-xs,4px)',
+    'var(--smooth-radius-xl) 0 0 var(--smooth-radius-xl)',
+    '0 var(--smooth-radius-lg) 0 0',
+    '0 0 0 var(--smooth-radius-xl)',
+    'calc(var(--smooth-radius-lg) - 1px) calc(var(--smooth-radius-lg) - 1px) 0 0',
+    'calc(var(--smooth-radius-sm) - 2px)',
+    '0 0 var(--smooth-radius-sm) var(--smooth-radius-sm)',
+  ]);
+  const stray = [];
+  for (const [name, css] of [['skin', skin], ['client', client]]) {
+    for (const match of css.matchAll(/border-radius\s*:\s*([^;}]+)/g)) {
+      const value = match[1].trim();
+      if (!allowed.has(value)) stray.push(`${name}: ${value}`);
+    }
+  }
+  assert.deepEqual(stray, [], `every corner must use the shared scale: ${stray.join(' | ')}`);
 });
 
 test('inline code borrows the link blue while fenced blocks keep their palette', () => {
@@ -427,7 +454,7 @@ test('the attach button leads the access-mode chip in the composer footer', () =
 test('the archived-row delete action follows the host icon-button geometry', () => {
   // 16px hit box, 4px radius and the host's tertiary label colour keep the trailing
   // delete button indistinguishable from the archive/pin row actions at rest.
-  assert.match(skin, /body\[data-smooth-skin\] \.smooth-session-delete\{[^}]*width:16px;height:16px[^}]*border-radius:4px[^}]*color:var\(--dsw-alias-label-tertiary\)/);
+  assert.match(skin, /body\[data-smooth-skin\] \.smooth-session-delete\{[^}]*width:16px;height:16px[^}]*border-radius:var\(--smooth-radius-xs\)[^}]*color:var\(--dsw-alias-label-tertiary\)/);
   assert.match(skin, /\.smooth-session-delete svg\{width:14px;height:14px\}/);
   assert.match(skin, /\.smooth-session-delete:hover\{color:var\(--dsw-alias-state-error-primary\)\}/);
   assert.match(skin, /\.smooth-session-delete:focus-visible\{outline:2px solid var\(--smooth-accent\)/);
