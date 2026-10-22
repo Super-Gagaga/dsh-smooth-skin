@@ -605,6 +605,24 @@ test('the client half keeps its own durable store and claims its stylesheet', as
   }
 });
 
+test('a palette switch opens the new theme as a circle from the top-left corner', () => {
+  // The View Transition API snapshots the page before the token write: the old palette is
+  // the still image outside the circle, the new one fills it as the circle grows out of
+  // the caption's corner, and the snapshots never cross-fade. The root attribute keeps
+  // that keying off any other view transition in the host page.
+  assert.match(skin, /html\[data-smooth-theme-switch\]::view-transition-old\(root\),\nhtml\[data-smooth-theme-switch\]::view-transition-new\(root\)\{animation:none;mix-blend-mode:normal\}/);
+  assert.match(skin, /html\[data-smooth-theme-switch\]::view-transition-new\(root\)\{clip-path:circle\(0% at 0 0\);animation:smooth-theme-reveal \.52s cubic-bezier\(\.22,1,\.36,1\) both\}/);
+  assert.match(skin, /@keyframes smooth-theme-reveal\{from\{clip-path:circle\(0% at 0 0\)\}to\{clip-path:circle\(150% at 0 0\)\}\}/);
+  assert.match(skin, /@media\(prefers-reduced-motion:reduce\)\{html\[data-smooth-theme-switch\]::view-transition-old\(root\),html\[data-smooth-theme-switch\]::view-transition-new\(root\)\{animation:none\}\}/);
+  // The client starts it only for a real palette replacement, keeps the gate on until the
+  // animation finishes, and writes instantly when the API or motion is unavailable.
+  assert.match(client, /document\.startViewTransition\(async \(\) => \{/);
+  assert.match(client, /if \(committed\.theme !== previous\.theme && previous\.enabled && committed\.enabled\)/);
+  assert.match(client, /root\.setAttribute\(THEME_SWITCH_ATTRIBUTE, ''\)/);
+  assert.match(client, /transition\.finished\.then\(clear, clear\)/);
+  assert.match(client, /prefers-reduced-motion: reduce/);
+});
+
 test('the built artifacts exist and agree with the sources', async () => {
   const index = await read('../lib/index.js');
   const bundle = await read('../lib/client.js');

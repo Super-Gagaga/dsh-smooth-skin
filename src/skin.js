@@ -35,6 +35,17 @@ body[data-smooth-skin]:not([data-ds-dark-theme]){
   --smooth-shadow-1:0 2px 4px #18202c0a,0 6px 12px #18202c0f;
   --smooth-shadow-2:0 2px 5px #18202c12,0 8px 24px #18202c14;
 }
+/* A palette switch is one paint: the View Transition API snapshots the page before the
+   token write, and the new snapshot is unmasked by a circle growing out of the caption's
+   top-left corner. Inside the circle the new theme has already replaced the old one;
+   outside it, the old snapshot stays exactly as it was, so the two palettes never
+   cross-fade. The root attribute is only present while the skin owns the transition. */
+html[data-smooth-theme-switch]::view-transition-old(root),
+html[data-smooth-theme-switch]::view-transition-new(root){animation:none;mix-blend-mode:normal}
+html[data-smooth-theme-switch]::view-transition-group(root){animation:none}
+html[data-smooth-theme-switch]::view-transition-new(root){clip-path:circle(0% at 0 0);animation:smooth-theme-reveal .52s cubic-bezier(.22,1,.36,1) both}
+@keyframes smooth-theme-reveal{from{clip-path:circle(0% at 0 0)}to{clip-path:circle(150% at 0 0)}}
+@media(prefers-reduced-motion:reduce){html[data-smooth-theme-switch]::view-transition-old(root),html[data-smooth-theme-switch]::view-transition-new(root){animation:none}}
 
 /* Shell geometry continues to be owned by the host, including resize handles. */
 /* ChatView also uses a CSS-module class named frame. Only the application frame

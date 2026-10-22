@@ -134,6 +134,78 @@ function installSmoothCaret(input) {
     } catch (error) { /* fall back to the text box below */ }
     return { left: textOrigin().left, top: input.getBoundingClientRect().top, height: textOrigin().height };
   };
+  const isElement = (node) => node?.nodeType === 1;
+  const isText = (node) => node?.nodeType === 3;
+  const isBreak = (node) => isElement(node) && (node.nodeName || node.tagName) === 'BR';
+  const rectOf = (node) => {
+    try {
+      const box = node?.getBoundingClientRect?.();
+      return box && (box.height || box.width) ? box : null;
+    } catch (error) { return null; }
+  };
+  /** The caret rect of a text node's own first or last character. */
+  const textRect = (node, atStart) => {
+    try {
+      const probe = document.createRange();
+      probe.selectNodeContents(node);
+      probe.collapse(Boolean(atStart));
+      const rect = probe.getBoundingClientRect();
+      return rect && rect.height ? rect : null;
+    } catch (error) { return null; }
+  };
+  /** A collapsed range whose container is an element measures that element's box (or
+   * nothing), not the caret. Lexical leaves a soft line break as an element-level point
+   * just past the paragraph's trailing <br>, and the paragraph box still begins on the
+   * line above, so Shift+Enter parked the bar at the paragraph's first line. Rebuild the
+   * insertion point from the DOM position: content after a break starts the line the
+   * caret is on, and a trailing break opens the line below the break. */
+  const pointRect = (container, offset) => {
+    const nodes = container.childNodes || [];
+    const index = Math.max(0, Math.min(offset ?? 0, nodes.length));
+    const prev = nodes[index - 1];
+    const next = nodes[index];
+    /** A line inside the editor: the text column's left edge and that line's top. */
+    const lineStart = (top, height) => ({ left: textOrigin().left, top, height: height || textOrigin().height });
+    /** The caret at the start of the node that follows the current point. */
+    const nodeStart = (node) => {
+      if (isText(node)) {
+        const start = textRect(node, true);
+        if (start) return start;
+      }
+      const box = rectOf(node);
+      return box ? lineStart(box.top, textOrigin().height) : null;
+    };
+    if (isBreak(prev)) {
+      // Whatever follows the break begins the line the caret moved to.
+      if (next) return nodeStart(next);
+      const br = rectOf(prev);
+      // A break can report no box at all; the line it opens starts where the content
+      // before it ends, which is the previous inline's own last caret rect.
+      if (!br) {
+        const before = prev.previousSibling;
+        const end = before && (isText(before) ? textRect(before, false) : rectOf(before));
+        return end ? lineStart(end.top + end.height, end.height) : null;
+      }
+      // A trailing break opens a new line only when the block already held content; the
+      // single <br> of an empty block is the line itself.
+      return lineStart(prev.previousSibling ? br.top + br.height : br.top, br.height);
+    }
+    if (index === 0) {
+      if (!next) return startRect();
+      // A first <br> without geometry still marks this block's own first line.
+      return nodeStart(next) || lineStart(rectOf(container)?.top ?? textOrigin().top, textOrigin().height);
+    }
+    if (isText(prev)) {
+      const end = textRect(prev, false);
+      if (end) return end;
+    }
+    if (next) return nodeStart(next);
+    // A point after an inline node sits at its right edge. A point after a block has no
+    // line of its own to measure, so the native caret keeps it instead of a guess.
+    if (container === input) return null;
+    const end = rectOf(prev);
+    return end ? { left: end.right, top: end.top, height: end.height } : null;
+  };
   const update = () => {
     frame = 0;
     if (document.activeElement !== input) { hide(); nativeCaret(true); return; }
@@ -151,8 +223,13 @@ function installSmoothCaret(input) {
     // A mount that has not been laid out yet reports an empty grow box; placing the bar
     // against it would pin the caret to the card's corner until the next keystroke.
     if (!host.width && !host.height) { hide(); nativeCaret(true); return; }
-    let rect = range.getBoundingClientRect();
-    if (!rect || !rect.height) rect = startRect();
+    let rect;
+    if (isElement(range.startContainer)) {
+      rect = pointRect(range.startContainer, range.startOffset);
+    } else {
+      rect = range.getBoundingClientRect();
+      if (!rect || !rect.height) rect = null;
+    }
     // A container-level selection may still report the editor's own box; never park the
     // bar on the border when the caret itself has to start inside the text area.
     const origin = textOrigin();

@@ -126,23 +126,82 @@ function apply(ctx) {
     return a?.width === b?.width && a?.height === b?.height;
   }
 
-  function writeState(next) {
-    const previousSize = state.windowSize;
-    state = normalize(next);
-    failure = '';
-    emit();
-    sync();
-    // Only an edited width or height moves the window. At launch the injected opening has
-    // already sized it while the window was still hidden; repeating that on a theme or
-    // animation toggle used to call resizeTo on every switch (outerWidth carries the
-    // window frame, so it rarely equals the configured width) and nudged the window.
-    if (!sameWindowDimensions(previousSize, state.windowSize)) applyWindowSize();
+  /** Replace the palette under a View Transition snapshot: the old colours stay on screen
+   * while a circle cut out of the new ones grows out of the caption's top-left corner.
+   * The token write (and the host tone change beside it) is synchronous inside the
+   * callback; one frame is spent on React painting the selected swatch before the new
+   * snapshot is taken, and a timeout keeps that wait from starving in a hidden window. */
+  let themeSwitchSeq = 0;
+  function startThemeTransition(commit) {
+    const reduced = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (typeof document.startViewTransition !== 'function' || reduced || disposed) { commit(); return; }
+    const root = document.documentElement;
+    const seq = ++themeSwitchSeq;
+    const clear = () => { if (seq === themeSwitchSeq) root.removeAttribute(THEME_SWITCH_ATTRIBUTE); };
+    root.setAttribute(THEME_SWITCH_ATTRIBUTE, '');
+    let transition;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      transition = document.startViewTransition(async () => {
+        // A newer click (or a rebuilt transition) owns the palette now; this captured
+        // snapshot must not write its superseded preset over the newer one.
+        if (seq !== themeSwitchSeq) return;
+        commit();
+        await new Promise((resolve) => {
+          let settled = false;
+          const done = () => { if (settled) return; settled = true; resolve(); };
+          if (typeof window.requestAnimationFrame !== 'function') { done(); return; }
+          window.requestAnimationFrame(done);
+          window.setTimeout(done, 60);
+        });
+      });
     } catch (error) {
-      failure = String(error && error.message ? error.message : error);
-      emit();
+      clear();
+      commit();
+      return;
     }
+    transition.finished.then(clear, clear);
+  }
+
+  function writeState(next) {
+    const previous = state;
+    const previousSize = previous.windowSize;
+    const committed = normalize(next);
+    /** Land one write on the current state. The animated path merges only its preset, so a
+     * setting changed while the snapshot is being taken is not rolled back by the theme
+     * click that started the transition. */
+    const commit = (apply) => {
+      state = apply();
+      failure = '';
+      emit();
+      sync();
+      // Only an edited width or height moves the window. At launch the injected opening has
+      // already sized it while the window was still hidden; repeating that on a theme or
+      // animation toggle used to call resizeTo on every switch (outerWidth carries the
+      // window frame, so it rarely equals the configured width) and nudged the window.
+      if (!sameWindowDimensions(previousSize, state.windowSize)) applyWindowSize();
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (error) {
+        failure = String(error && error.message ? error.message : error);
+        emit();
+      }
+    };
+    // Only a switch that actually repaints the palette animates. The host renders the
+    // slice of each token pair that matches its tone, so "following the theme" and pinning
+    // the preset it already resolves to paint the same page: no circle opens over an
+    // identical screen. Every non-theme setting writes directly too.
+    let repainted = false;
+    if (committed.theme !== previous.theme && previous.enabled && committed.enabled) {
+      const scheme = theme?.getTheme?.()?.active?.colorScheme;
+      const currentTone = scheme === 'dark' ? 'dark' : 'light';
+      const nextTone = themeTone(committed.theme) || currentTone;
+      const currentTokens = buildTokens(previous);
+      const nextTokens = buildTokens(committed);
+      repainted = Object.keys(nextTokens).some((name) => nextTokens[name][nextTone] !== currentTokens[name][currentTone]);
+    }
+    if (repainted) startThemeTransition(() => commit(() => normalize({ ...state, theme: committed.theme })));
+    else commit(() => committed);
     return Promise.resolve();
   }
 
@@ -579,6 +638,8 @@ function apply(ctx) {
     // skin must not leave it behind (it is gated on the skin attribute anyway, but the
     // host body should come back exactly as it was).
     document.body.removeAttribute(HOME_ATTRIBUTE);
+    // A palette switch in flight would otherwise leave the circle-reveal gate on the root.
+    document.documentElement.removeAttribute(THEME_SWITCH_ATTRIBUTE);
   }, 'smooth-skin');
 
   referenceShell = installReferenceShell({ slots, layout, uiWorkspace, sessions, modelDirectories, theme, remote, useSmoothState, text });

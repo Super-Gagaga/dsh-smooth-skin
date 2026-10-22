@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 const built = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8');
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
-function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66], framed = false } = {}) {
+function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66], framed = false, viewTransition = false, reducedMotion = false } = {}) {
   let registration;
   let settings;
   let dictionaries;
@@ -22,6 +22,15 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
   let screenY = origin[1];
   const attributes = new Set();
   const timers = new Map();
+  // The View Transition API is driven by hand: a test reads the captured attribute state,
+  // runs the update callback, then finishes the animation and checks the gate came off.
+  const transitions = [];
+  const documentElement = {
+    attributes: new Map(),
+    setAttribute(name, value) { this.attributes.set(name, value); },
+    removeAttribute(name) { this.attributes.delete(name); },
+    getAttribute(name) { return this.attributes.get(name) ?? null; },
+  };
   // Each component function gets one hook frame, reused across its renders, so a
   // click's state survives until the component renders again.
   const frames = new Map();
@@ -50,7 +59,9 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
   const modules = { react, 'react-dom': { createPortal: (node) => ({ portal: node, props: node.props }) } };
   const services = {
     theme: {
-      getTheme: () => ({ preference }),
+      // The real snapshot resolves the active tone for `system`; the harness has no OS
+      // scheme, so `system` reads light here exactly like the theme's own tests assume.
+      getTheme: () => ({ preference, active: { colorScheme: preference === 'dark' ? 'dark' : 'light' } }),
       setTheme: (next) => { preference = next; },
       overrideTokens: () => { tokenLayers++; return () => { tokenLayers--; }; },
     },
@@ -73,7 +84,7 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
   const frameWindow = {
     __ModuleLoader__: { load: (value) => { registration = value; } },
     localStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) },
-    matchMedia: () => ({ matches: false }),
+    matchMedia: () => ({ matches: reducedMotion }),
     setTimeout: (fn, delay) => { const id = ++nextTimer; timers.set(id, { fn, at: delay || 0 }); return id; },
     clearTimeout: (id) => timers.delete(id),
     // The desktop window the half sizes at launch; the test observes the requests.
@@ -92,10 +103,20 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
   runInNewContext(built, {
     window: frameWindow,
     document: {
+      documentElement,
       addEventListener() {}, removeEventListener() {},
       createElement: () => { const style = { dataset: {}, remove: () => styles.delete(style) }; return style; },
       head: { append: (style) => styles.add(style) },
       styleSheets: [],
+      // Chrome invokes the update callback after capturing the old snapshot; the stub
+      // leaves that call to the test so it can inspect the captured state first.
+      startViewTransition: viewTransition ? (update) => {
+        let finish;
+        const finished = new Promise((resolve) => { finish = resolve; });
+        const record = { update, finished, finish: () => finish() };
+        transitions.push(record);
+        return { finished, skipTransition() {} };
+      } : undefined,
       // The skin watches host surfaces through one body observer; nothing here matches
       // during startup, which is the state the first frame is in.
       querySelector: () => null,
@@ -123,7 +144,7 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
     },
   });
   return {
-    plugin, ctx, styles, attributes, storage, timers, swim, resizes, moves,
+    plugin, ctx, styles, attributes, storage, timers, swim, resizes, moves, documentElement, transitions,
     get outer() { return [outerWidth, outerHeight]; },
     get origin() { return [screenX, screenY]; },
     get settings() { return settings; },
@@ -464,6 +485,90 @@ test('the settings page replaces the day/night choice with the six theme presets
   await row().props.onChange('auto');
   assert.equal(value(), 'auto');
   assert.equal(runtime.preference, 'system', 'following the theme restores the host preference');
+  runtime.dispose();
+});
+
+test('a palette switch is captured first, then revealed by a circle from the top-left corner', async () => {
+  const runtime = loadClient({ stored: { theme: 'iron' }, viewTransition: true });
+  runtime.plugin.apply(runtime.ctx);
+  const row = () => settingRows(runtime)[1];
+  const pending = row().props.onChange('snow');
+  // The old palette is captured before the write: until the transition callback runs the
+  // persisted state, the host tone and the tokens are all still the previous preset.
+  assert.equal(runtime.transitions.length, 1, 'one view transition owns the switch');
+  assert.equal(runtime.documentElement.getAttribute('data-smooth-theme-switch'), '', 'the reveal gate is on while the old snapshot is captured');
+  assert.equal(runtime.preference, 'dark', 'the host tone still belongs to the captured palette');
+  assert.equal(row().props.value, 'iron', 'the settings row still reads the captured preset');
+  // The callback writes the palette and the host tone; the new snapshot is taken after
+  // it, so the circle can only expose the finished new theme.
+  await runtime.transitions[0].update();
+  assert.equal(runtime.preference, 'light');
+  assert.equal(row().props.value, 'snow');
+  assert.equal(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')).theme, 'snow');
+  assert.equal(runtime.documentElement.getAttribute('data-smooth-theme-switch'), '', 'the gate stays on for the whole animation');
+  runtime.transitions[0].finish();
+  await pending;
+  await Promise.resolve();
+  assert.equal(runtime.documentElement.getAttribute('data-smooth-theme-switch'), null, 'the gate comes off when the transition finishes');
+  runtime.dispose();
+});
+
+test('a palette switch without the View Transition API or with reduced motion stays instant', async () => {
+  const instant = loadClient({ stored: { theme: 'iron' } });
+  instant.plugin.apply(instant.ctx);
+  await settingRows(instant)[1].props.onChange('snow');
+  assert.equal(instant.preference, 'light', 'no API: the write lands immediately');
+  assert.equal(JSON.parse(instant.storage.get('dsh-smooth-skin:state')).theme, 'snow');
+  instant.dispose();
+
+  const reduced = loadClient({ stored: { theme: 'iron' }, viewTransition: true, reducedMotion: true });
+  reduced.plugin.apply(reduced.ctx);
+  await settingRows(reduced)[1].props.onChange('moss');
+  assert.equal(reduced.transitions.length, 0, 'reduced motion never opens a circle');
+  assert.equal(reduced.preference, 'light');
+  assert.equal(JSON.parse(reduced.storage.get('dsh-smooth-skin:state')).theme, 'moss');
+  reduced.dispose();
+});
+
+test('only a repainted palette animates; other settings write directly', async () => {
+  const runtime = loadClient({ viewTransition: true });
+  runtime.plugin.apply(runtime.ctx);
+  const rows = () => settingRows(runtime);
+  await rows()[2].props.onChange('violet');
+  assert.equal(runtime.transitions.length, 0, 'the mark colour is not a palette switch');
+  // Following the host theme and then pinning the preset it already resolves to paints
+  // exactly the same page: no circle should open over an identical screen.
+  await rows()[1].props.onChange('snow');
+  assert.equal(runtime.transitions.length, 0, 'the preset the host theme already paints does not animate');
+  assert.equal(runtime.preference, 'light');
+  // A palette that really changes is captured and revealed.
+  await rows()[1].props.onChange('iron');
+  assert.equal(runtime.transitions.length, 1, 'a different palette opens a circle');
+  await runtime.transitions[0].update();
+  runtime.transitions[0].finish();
+  await Promise.resolve();
+  runtime.dispose();
+});
+
+test('rapid preset clicks hand the palette to the newest transition', async () => {
+  const runtime = loadClient({ stored: { theme: 'iron' }, viewTransition: true });
+  runtime.plugin.apply(runtime.ctx);
+  const row = () => settingRows(runtime)[1];
+  const first = row().props.onChange('snow');
+  const second = row().props.onChange('moss');
+  assert.equal(runtime.transitions.length, 2, 'each click captures its own snapshot');
+  // The first transition was superseded before its callback ran; it must not write its
+  // palette over the newer one when the browser gets around to calling it.
+  await runtime.transitions[0].update();
+  assert.equal(row().props.value, 'iron', 'a superseded snapshot writes nothing');
+  await runtime.transitions[1].update();
+  assert.equal(row().props.value, 'moss', 'the newest snapshot owns the switch');
+  assert.equal(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')).theme, 'moss');
+  runtime.transitions[0].finish();
+  runtime.transitions[1].finish();
+  await Promise.all([first, second]);
+  await Promise.resolve();
+  assert.equal(runtime.documentElement.getAttribute('data-smooth-theme-switch'), null, 'the newest transition removes the gate');
   runtime.dispose();
 });
 

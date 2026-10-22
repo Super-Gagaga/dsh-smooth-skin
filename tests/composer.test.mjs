@@ -124,21 +124,24 @@ test('the smooth caret degrades when the platform cannot report a selection', ()
 
 /** A composer whose editor reports the selection shapes that broke the first placement:
  * a container-level caret with no rect at all, and one that measures the border box. */
-function caretHarness({ liveRect, probeRect }) {
+function caretHarness({ liveRect, probeRect, liveNode, liveOffset = 0, nodes = [], text = 'hello world' }) {
   const frames = [];
   const caret = { style: {}, hidden: true, className: '', setAttribute() {}, remove() { this.removed = true; } };
   const grow = { appended: [], append(node) { this.appended.push(node); }, getBoundingClientRect: () => ({ left: 100, top: 50, width: 320, height: 22 }) };
   const card = { attributes: new Set(), setAttribute(name) { this.attributes.add(name); }, removeAttribute(name) { this.attributes.delete(name); } };
   const input = {
+    nodeType: 1,
+    nodeName: 'DIV',
     parentElement: grow,
-    textContent: 'hello world',
+    textContent: text,
+    childNodes: nodes,
     closest: (selector) => selector === '[data-composer-card]' ? card : null,
     contains: () => true,
     querySelector: () => null,
     addEventListener() {}, removeEventListener() {},
     getBoundingClientRect: () => ({ left: 100, top: 50, width: 290, height: 22 }),
   };
-  const live = { startContainer: input, rect: liveRect, getBoundingClientRect() { return this.rect; }, cloneRange() { return this; }, collapse() {} };
+  const live = { startContainer: liveNode || input, startOffset: liveOffset, rect: liveRect, getBoundingClientRect() { return this.rect; }, cloneRange() { return this; }, collapse() {} };
   const probe = { selectNodeContents() {}, collapse() {}, getBoundingClientRect: () => probeRect };
   const document = {
     activeElement: input,
@@ -169,7 +172,7 @@ function caretHarness({ liveRect, probeRect }) {
   const result = {
     caret, card, grow, input, live, flush, dispose, document, window, observers,
     /** Move the live DOM selection (and its measured rect) somewhere else. */
-    select(rect, node = input) { live.rect = rect; live.startContainer = node; },
+    select(rect, node = input, offset = 0) { live.rect = rect; live.startContainer = node; live.startOffset = offset; },
     /** Deliver the editor's content mutation, the way a programmatic clear does. */
     mutate() { for (const observer of observers) observer.callback(); },
   };
@@ -213,6 +216,72 @@ test('the smooth caret measures twice before it animates, so a late layout does 
   }
 });
 
+/** The DOM shape Lexical leaves after Shift+Enter: the line break becomes a <br>, and the
+ * collapsed selection stays on the paragraph, one point past that trailing break. */
+function softBreakNodes(breakRect) {
+  const text = { nodeType: 3, nodeName: '#text' };
+  const br = { nodeType: 1, nodeName: 'BR', previousSibling: text, getBoundingClientRect: () => breakRect };
+  const paragraph = { nodeType: 1, nodeName: 'P', childNodes: [text, br], getBoundingClientRect: () => ({ left: 114, top: 54, width: 290, height: 44 }) };
+  return { text, br, paragraph };
+}
+
+test('a soft line break keeps the caret on the line it opened, not the paragraph start', () => {
+  // Shift+Enter leaves the DOM selection on the paragraph element, past the trailing
+  // <br>; the paragraph's border box begins on the line above, which used to snap the bar
+  // back to the paragraph's first line. The caret belongs on the line below the break —
+  // whether the break reports its own box or nothing at all.
+  for (const breakRect of [
+    { left: 260, top: 54, width: 0, height: 22 },
+    { left: 0, top: 0, width: 0, height: 0 },
+  ]) {
+    const { paragraph } = softBreakNodes(breakRect);
+    const harness = caretHarness({
+      liveRect: paragraph.getBoundingClientRect(),
+      liveNode: paragraph,
+      liveOffset: 2,
+      probeRect: { left: 114, top: 54, width: 0, height: 22 },
+    });
+    try {
+      assert.equal(harness.caret.style.transform, 'translate(14px,26px)', 'the bar sits on the new line');
+      assert.equal(harness.caret.style.height, '22px');
+      assert.equal(harness.caret.hidden, false);
+    } finally {
+      harness.dispose();
+      harness.reset();
+    }
+  }
+});
+
+test('a new empty paragraph parks the caret on its own line', () => {
+  // Enter puts the selection at the start of a fresh paragraph holding one <br>. Its box
+  // is the only line there is, so the bar must sit on that box, not at the editor start.
+  const br = { nodeType: 1, nodeName: 'BR', previousSibling: null, getBoundingClientRect: () => ({ left: 114, top: 76, width: 0, height: 22 }) };
+  const paragraph = { nodeType: 1, nodeName: 'P', childNodes: [br], getBoundingClientRect: () => ({ left: 114, top: 76, width: 290, height: 22 }) };
+  const harness = caretHarness({ liveRect: paragraph.getBoundingClientRect(), liveNode: paragraph, liveOffset: 0 });
+  try {
+    assert.equal(harness.caret.style.transform, 'translate(14px,26px)', 'the bar sits on the new paragraph line');
+  } finally {
+    harness.dispose();
+    harness.reset();
+  }
+});
+
+test('an unmeasurable element-level caret hands the native caret back', () => {
+  // If the break and the block behind the point report no geometry at all, guessing the
+  // editor start is worse than letting the browser draw its own caret in the right place.
+  const text = { nodeType: 3, nodeName: '#text' };
+  const br = { nodeType: 1, nodeName: 'BR', previousSibling: text, getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }) };
+  const paragraph = { nodeType: 1, nodeName: 'P', childNodes: [text, br], getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }) };
+  const harness = caretHarness({ liveRect: { left: 0, top: 0, width: 0, height: 0 }, liveNode: paragraph, liveOffset: 2 });
+  try {
+    assert.equal(harness.caret.hidden, true, 'the bar stays out of the way');
+    assert.equal(harness.card.attributes.has('data-smooth-caret'), false, 'the native caret shows the real position');
+  } finally {
+    harness.dispose();
+    harness.reset();
+  }
+});
+
 test('the caret snaps back to the start when the host clears the draft after a send', () => {
   // Sending clears the committed draft inside a Lexical update. The browser re-anchors
   // the DOM selection to the empty root without firing `selectionchange`, so the bar kept
@@ -220,6 +289,7 @@ test('the caret snaps back to the start when the host clears the draft after a s
   // it to the editor's initial position instead.
   const harness = caretHarness({
     liveRect: { left: 414, top: 68, width: 0, height: 20 },
+    liveNode: { nodeType: 3, nodeName: '#text' },
     probeRect: { left: 114, top: 54, width: 0, height: 22 },
   });
   try {

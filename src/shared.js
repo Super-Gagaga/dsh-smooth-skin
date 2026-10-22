@@ -9,6 +9,10 @@ const PLUGIN_ID = 'dsh-smooth-skin';
 const SKIN_ATTRIBUTE = 'data-smooth-skin';
 /** Set while the launch animation owns the screen, and removed with its layer. */
 const BOOT_ATTRIBUTE = 'data-smooth-boot';
+/** Set on the document root only for the lifetime of a palette switch's View Transition.
+ * The stylesheet keys the circle reveal on it, so an unrelated view transition elsewhere
+ * in the host page cannot inherit the skin's animation. */
+const THEME_SWITCH_ATTRIBUTE = 'data-smooth-theme-switch';
 /** Set while the main surface is the welcome page — no session, panel or settings is
  * showing — so the hero draws the usage panel and drops the input card: there is nothing
  * to type into yet. Published by the chrome (src/layout.js) from the host's current view,
