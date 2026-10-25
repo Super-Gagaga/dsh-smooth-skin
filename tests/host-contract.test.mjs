@@ -12,7 +12,7 @@ import {
 
 const contract = await describeContract();
 const packages = new Set(contract.packages);
-const empty = () => ({ packages: [], classes: [], attributes: [], slots: [], methods: [], events: [], tokens: [], values: [] });
+const empty = () => ({ packages: [], classes: [], attributes: [], slots: [], methods: [], events: [], tokens: [], values: [], bridge: [] });
 
 const sourceDir = new URL('../src/', import.meta.url);
 const sources = new Map();
@@ -43,6 +43,11 @@ test('the host contract covers the selectors and hooks the skin actually reaches
   for (const name of ['dsh-client-ui-sidebar', 'dsh-client-ui-theme', 'dsh-client-ui-primitives', 'dsh-web-frontend']) {
     assert.ok(contract.packages.includes(name), `contract.packages is missing ${name}`);
   }
+  // The Host half's private bridge reads these services/events at request time; a
+  // client-only audit would not notice their rename.
+  for (const name of ['detachEntered', 'session/disposed', 'workspace/session-activity', 'workspace/session-stop', 'api-session/removed', 'async stat']) {
+    assert.ok(contract.bridge.includes(name), `contract.bridge is missing ${name}`);
+  }
   // Data attributes created by the plugin itself must not be demanded from the host.
   for (const own of ['data-smooth-skin', 'data-smooth-home', 'data-selected', 'data-preview', 'data-error', 'data-default']) {
     assert.ok(!contract.attributes.includes(own), `the host must not be required to carry ${own}`);
@@ -70,6 +75,7 @@ test('the contract checker accepts a complete corpus and reports each broken hoo
     ['event', "'theme/change'", (result) => result.missing.events.includes('theme/change')],
     ['token', '--dsw-alias-label-primary:#000', (result) => result.missing.tokens.includes('--dsw-alias-label-primary')],
     ['value', "'assistant-step'", (result) => result.missing.values.includes('assistant-step')],
+    ['bridge', "'workspace/session-activity'", (result) => result.missing.bridge.includes('workspace/session-activity')],
   ];
   for (const [label, needle, hit] of cases) {
     assert.ok(corpus.includes(needle), `the fixture is missing its ${label} probe: ${needle}`);
@@ -84,7 +90,7 @@ test('the contract checker accepts a complete corpus and reports each broken hoo
   assert.ok(result.missing.packages.includes('dsh-client-ui-sidebar'), 'checkContract did not report the removed package');
 
   // Core client packages may live in the web front end's module table instead of a
-  // package directory (DSH 0.3 does this for slots/primitives).
+  // package directory (DSH 0.2.1 does this for slots/primitives).
   const bundled = new Set(packages);
   bundled.delete('dsh-client-ui-primitives');
   const moduleMap = `${corpus}\n"@deepseek-ai/dsh-client-ui-primitives":hash,`;

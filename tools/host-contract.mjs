@@ -23,6 +23,34 @@ const CLIENT_PREFIX = '/dsh/node_modules/@deepseek-ai/';
 const FRONTEND_CSS = /\/dsh-web-frontend\/dist\/assets\/index-[^/]+\.css$/;
 const FRONTEND_JS = /\/dsh-web-frontend\/dist\/assets\/index-[^/]+\.js$/;
 
+/** Host-side sources the private bridge reads at request time. They are not client
+ * bundles, so without them the audit cannot see a Session/Workspace service rename
+ * that leaves every client hook intact but breaks `session-delete`. */
+const HOST_SOURCE_FILES = new Set([
+  '/dsh/node_modules/@deepseek-ai/dsh-session/lib/index.js',
+  '/dsh/node_modules/@deepseek-ai/dsh-workspace/lib/index.js',
+  '/dsh/node_modules/@deepseek-ai/dsh-session-persistence/lib/index.js',
+  '/dsh/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js',
+  '/dsh/node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js',
+]);
+
+/** Symbols the Host half's bridge actually depends on. A rename here breaks the
+ * archived-session delete and the usage/delete services even when every slot and CSS
+ * hook still exists. */
+export const HOST_BRIDGE_SYMBOLS = [
+  'detachEntered',
+  'session/disposed',
+  'api-session/removed',
+  'workspace/session-activity',
+  'workspace/session-stop',
+  'archivedSessionIds',
+  'unarchiveSession',
+  'detachSession',
+  'sessionPersistence',
+  'async stat',
+  'this.root',
+];
+
 /** Packages whose CSS/JS the skin styles or decorates. A rename here is a hard break. */
 export const REQUIRED_PACKAGES = [
   'dsh-client-ui-sidebar',
@@ -119,7 +147,7 @@ const DATASET_ATTRIBUTES = new Map([
 ]);
 
 const EMPTY_MISSING = () => ({
-  packages: [], classes: [], attributes: [], slots: [], methods: [], events: [], tokens: [], values: [],
+  packages: [], classes: [], attributes: [], slots: [], methods: [], events: [], tokens: [], values: [], bridge: [],
 });
 
 /** Locate the installed Electron archive without assuming one platform. */
@@ -195,6 +223,8 @@ export async function readHost(asarPath) {
       // The preload owns the Windows caption menubar; it mounts the native 应用 / 编辑 menu
       // through `dataset.windowsMenu`, which is the hook a collapsed caption is measured by.
       if (file.path === '/lib/preload-app.cjs') return true;
+      // Host-side services the private bridge reads at request time.
+      if (HOST_SOURCE_FILES.has(file.path)) return true;
       // The front-end bundle also lives under CLIENT_PREFIX, so match it first.
       if (FRONTEND_CSS.test(file.path) || FRONTEND_JS.test(file.path)) return true;
       if (file.path.startsWith(CLIENT_PREFIX)) {
@@ -268,6 +298,7 @@ export async function describeContract(root = ROOT) {
     tokens: [...used].sort(),
     optionalTokens: [...overridden].filter((token) => !used.has(token)).sort(),
     packages: [...packages].sort(),
+    bridge: [...HOST_BRIDGE_SYMBOLS].sort(),
   };
 }
 
@@ -286,6 +317,7 @@ export function checkContract(corpus, contract, packages = new Set()) {
   for (const name of contract.methods) if (!corpus.includes(name)) missing.methods.push(name);
   for (const name of contract.events) if (!corpus.includes(name)) missing.events.push(name);
   for (const value of contract.values) if (!corpus.includes(value)) missing.values.push(value);
+  for (const name of contract.bridge) if (!corpus.includes(name)) missing.bridge.push(name);
   for (const token of contract.tokens) {
     // --dsw-* aliases are declared in the theme stylesheet; --dsh-* values may be set
     // inline by the composer, so only their name needs to exist.
@@ -296,7 +328,7 @@ export function checkContract(corpus, contract, packages = new Set()) {
     if (!corpus.includes(`${token}:`)) warnings.tokens.push(token);
   }
   for (const name of contract.packages) {
-    // DSH 0.3 folds core client packages such as `dsh-client-ui-slots` and
+    // DSH 0.2.1 folds core client packages such as `dsh-client-ui-slots` and
     // `dsh-client-ui-primitives` into the web front end's module table instead of
     // shipping their directories. Either form counts as present.
     if (!packages.has(name) && !corpus.includes(`"@deepseek-ai/${name}":`)) missing.packages.push(name);
@@ -324,6 +356,7 @@ export function contractCorpus(contract) {
     ...contract.methods.map((name) => `${name}(){}`),
     ...contract.events.map((name) => `'${name}'`),
     ...contract.values.map((value) => `'${value}'`),
+    ...contract.bridge.map((name) => `'${name}'`),
     ...contract.tokens.map((token) => `${token}:#000`),
     ...contract.optionalTokens.map((token) => `${token}:#000`),
     ...contract.packages.map((name) => `/dsh/node_modules/@deepseek-ai/${name}/`),
@@ -349,13 +382,14 @@ async function main() {
     console.log(JSON.stringify({ asarPath, version: host.version, contract, ...result }, null, 2));
   } else {
     console.log(`host      ${asarPath}${host.version ? ` (DSH ${host.version})` : ''}`);
-    console.log(`files     ${host.files.length} bundles/stylesheets, ${(host.corpus.length / 1048576).toFixed(1)} MB`);
+    console.log(`files     ${host.files.length} bundles/stylesheets/sources, ${(host.corpus.length / 1048576).toFixed(1)} MB`);
     console.log(`classes   ${contract.classes.length}`);
     console.log(`attrs     ${contract.attributes.length}`);
     console.log(`slots     ${contract.slots.length}`);
     console.log(`methods   ${contract.methods.length}`);
     console.log(`events    ${contract.events.length}`);
     console.log(`tokens    ${contract.tokens.length} required, ${contract.optionalTokens.length} optional`);
+    console.log(`bridge    ${contract.bridge.length} host symbols`);
     if (result.warnings.tokens.length) {
       console.log(`warn      overrides the host does not define: ${result.warnings.tokens.join(', ')}`);
     }

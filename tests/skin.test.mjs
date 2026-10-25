@@ -557,7 +557,7 @@ test('every CSS custom property the skin reads exists as a plugin token or a lit
   const used = new Set([...skin.matchAll(/var\((--[a-z0-9-]+)/g)].map((match) => match[1]));
   // The native composer exposes the user's font preference, its side clearance and the
   // card width ceiling; keep their literal fallbacks.
-  const hostProperties = new Set(['--dsh-content-font-size', '--dsh-composer-side-clearance', '--dsh-composer-card-max-width']);
+  const hostProperties = new Set(['--dsh-content-font-size', '--dsh-composer-side-clearance', '--dsh-composer-card-max-width', '--dsw-font-family']);
   const localProperties = new Set([...skin.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1]));
   for (const [, name] of skin.matchAll(/@property\s+(--smooth-[a-z0-9-]+)/g)) localProperties.add(name);
   // The active workspace title is supplied as a CSS string by the native tabs.
@@ -570,6 +570,14 @@ test('every CSS custom property the skin reads exists as a plugin token or a lit
   assert.match(skin, /var\(--dsh-content-font-size,14px\)/);
   const missing = [...used].filter((name) => !tokens.has(name) && !hostProperties.has(name) && !localProperties.has(name) && !name.startsWith('--dsw-alias-') && name !== '--dsh-windows-titlebar-height');
   assert.deepEqual(missing, [], `unresolved custom properties: ${missing.join(', ')}`);
+});
+
+test('the skin follows the host font-family preference', () => {
+  // DSH 0.2.1 adds user-selectable text/code/terminal fonts and exposes the text stack
+  // through --dsw-font-family. A hard-coded body stack would shadow it for every
+  // inherited surface, so the body rule must read the host token with its old stack as
+  // the fallback (which also keeps DSH 0.2.0, where the token is a fixed default, intact).
+  assert.match(skin, /body\[data-smooth-skin\]\{[\s\S]*?font-family:var\(--dsw-font-family,"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,sans-serif\)/);
 });
 
 test('the skin stylesheet is scoped to the gating body attribute and never hides host content', async () => {
