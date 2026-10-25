@@ -63,7 +63,7 @@ test('the host half injects the launch animation and the Git bridge', async () =
   await new Promise((resolve) => setTimeout(resolve, 80));
   disposed?.();
   const body = host.slice(host.indexOf('export function apply'));
-  assert.ok(!/\bctx\s*\.(?!on\b|get\b|effect\b)/.test(body), 'the Host only subscribes and keeps its private listener');
+  assert.ok(!/\bctx\s*\.(?!on\b|get\b|effect\b|waterfall\b|parallel\b)/.test(body), 'the Host only dispatches events and reads runtime services through get');
   assert.ok(!/\bhost\s*\.\s*call\b/.test(host), 'the Host half must not reference the browser bridge');
 });
 

@@ -54,11 +54,12 @@ if (!callback) {
 }
 
 // The Host half injects the opening's rows and the Git bridge's token row. It may use
-// context members that are not services — `ctx.on` for the bus, `ctx.effect` to scope a
-// side effect — because those need no `inject` entry. Any *other* `ctx.<name>`, anywhere
-// in the file, would throw "cannot get property ... without inject".
+// context members that are not services — `ctx.on`, `ctx.waterfall` and `ctx.parallel`
+// for the bus, `ctx.effect` to scope a side effect, `ctx.get` for a request-time service
+// read — because those need no `inject` entry. Any *other* `ctx.<name>`, anywhere in the
+// file, would throw "cannot get property ... without inject".
 const hostSource = await read('../src/host.js');
-if (/\bctx\s*\.(?!on\b|effect\b)/.test(hostSource)) note('the Host half reads a ctx member that is not on/effect; an undeclared service would throw "cannot get property ... without inject"');
+if (/\bctx\s*\.(?!on\b|effect\b|get\b|waterfall\b|parallel\b)/.test(hostSource)) note('the Host half reads a ctx member that is not an event/effect/get; an undeclared service would throw "cannot get property ... without inject"');
 if (/\bhost\s*\.\s*call\b/.test(hostSource)) note('the Host half references the browser-only `host.call` bridge');
 
 // `apply` must register the index-injection rows and survive them being rendered.

@@ -127,37 +127,88 @@ test('the bridge permanently deletes an archived Session log and refuses unsafe 
   const root = join(home, 'sessions');
   const id = 'session-01234567-89ab-cdef-0123-456789abcdef';
   const sessionDir = join(root, '--tmp-project--', id);
-  mkdirSync(sessionDir, { recursive: true });
-  writeFileSync(join(sessionDir, 'session.v4.jsonl.zstd'), 'stored-session');
   const cacheDir = join(home, 'storages', 'session_projcache', 'sessions');
-  mkdirSync(cacheDir, { recursive: true });
   const cacheFile = join(cacheDir, `${id}.json`);
-  writeFileSync(cacheFile, '{}');
+  const materialize = () => {
+    mkdirSync(sessionDir, { recursive: true });
+    writeFileSync(join(sessionDir, 'session.v4.jsonl.zstd'), 'stored-session');
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(cacheFile, '{}');
+  };
   let unarchived = 0;
-  const context = ({ archived = [id], live } = {}) => ({
-    get(name) {
-      if (name === 'sessions') return { get: () => live };
-      if (name === 'workspaceRegistry') {
-        return {
-          archivedSessionIds: archived,
-          unarchiveSession: async (value) => { assert.equal(value, id); unarchived += 1; },
-        };
-      }
-      if (name === 'sessionPersistence') {
-        return { root, stat: async (value) => (value === id ? { header: { id: value } } : undefined) };
-      }
-      return undefined;
-    },
-  });
+  let detached = 0;
+  let stopped = 0;
+  let detachedSession = 0;
+  const context = ({ archived = [id], live, activity = [], waterfall = true } = {}) => {
+    const store = new Map(live === void 0 ? [] : [[id, 'live-entry']]);
+    return {
+      get(name) {
+        if (name === 'sessions') {
+          return {
+            get: () => live,
+            store,
+            detachEntered: (entry) => {
+              assert.equal(entry, 'live-entry');
+              detachedSession += 1;
+              store.delete(id);
+            },
+          };
+        }
+        if (name === 'workspaceRegistry') {
+          return {
+            archivedSessionIds: archived,
+            unarchiveSession: async (value) => { assert.equal(value, id); unarchived += 1; },
+            list: () => [{
+              record: { sessionIds: [id] },
+              detachSession: async (value) => { assert.equal(value, id); detached += 1; },
+            }],
+          };
+        }
+        if (name === 'sessionPersistence') {
+          return { root, stat: async (value) => (value === id ? { header: { id: value } } : undefined) };
+        }
+        return undefined;
+      },
+      ...waterfall ? {
+        waterfall: async (_event, _payload, fallback) => activity,
+        parallel: async () => { stopped += 1; },
+      } : {},
+    };
+  };
   try {
-    const result = await deleteArchivedSessionForTest(context(), id);
-    assert.equal(result.deleted, true);
+    materialize();
+    const cold = await deleteArchivedSessionForTest(context(), id);
+    assert.equal(cold.deleted, true);
     assert.equal(existsSync(sessionDir), false, 'the stored Session directory is removed');
     assert.equal(existsSync(cacheFile), false, 'its projection cache goes with it');
     assert.equal(unarchived, 1, 'the stale archive marker is dropped');
+    assert.equal(detached, 1, 'its workspace accounting slot goes too');
+    assert.equal(detachedSession, 0, 'a cold Session has no in-memory entry to drop');
+    assert.equal(stopped, 0, 'a cold Session needs no stop');
 
-    await assert.rejects(() => deleteArchivedSessionForTest(context({ live: {} }), id), /正在使用/);
+    // DSH keeps an archived Session's Agent in memory after archiving. An idle live
+    // Session is still deletable; the bridge asks the same activity providers archive
+    // admission asks, issues a stop, and detaches the store entry so the client list
+    // cannot bring the deleted row back.
+    materialize();
+    const live = await deleteArchivedSessionForTest(context({ live: {} }), id);
+    assert.equal(live.deleted, true);
+    assert.equal(existsSync(sessionDir), false);
+    assert.equal(unarchived, 2);
+    assert.equal(detached, 2);
+    assert.equal(detachedSession, 1, 'the live store entry is detached');
+    assert.equal(stopped, 1);
+
+    // Anything still running refuses, and the stored log stays.
+    materialize();
+    await assert.rejects(() => deleteArchivedSessionForTest(context({ live: {}, activity: [{ kind: 'turn' }] }), id), /仍在运行/);
+    assert.equal(existsSync(join(sessionDir, 'session.v4.jsonl.zstd')), true, 'the log survives a refused delete');
+
+    // No activity provider means the bridge cannot prove idleness: fail closed.
+    await assert.rejects(() => deleteArchivedSessionForTest(context({ live: {}, waterfall: false }), id), /正在使用/);
+
     await assert.rejects(() => deleteArchivedSessionForTest(context({ archived: [] }), id), /已归档/);
+    await assert.rejects(() => deleteArchivedSessionForTest(context({ archived: [], live: {} }), id), /已归档/);
     await assert.rejects(() => deleteArchivedSessionForTest(context(), '../outside'), /ID 无效/);
     await assert.rejects(() => deleteArchivedSessionForTest(context({ archived: ['session-unknown-0000'] }), 'session-unknown-0000'), /不存在/);
   } finally {
