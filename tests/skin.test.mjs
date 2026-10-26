@@ -313,6 +313,13 @@ test('the tab scroll arrows float over the strip instead of squeezing its width'
   assert.ok(!/\.smooth-tab-scroll:disabled\{/.test(skin), 'an arrow that cannot scroll is not drawn at all');
 });
 
+test('the native caption buttons have a fully transparent backdrop', () => {
+  // The preload measures this probe's background as the Window Controls Overlay fill.
+  // Making it rgba(0,0,0,0) removes the button strip's ground; the glyph colour is
+  // measured from the unchanged label-primary token.
+  assert.match(skin, /body\[data-smooth-skin\]>span\[style\*="--dsw-specific-sidebar-fill"\]\[style\*="--dsw-alias-label-primary"\]\{--dsw-specific-sidebar-fill:rgba\(0,0,0,0\)\}/);
+});
+
 test('a collapsed sidebar keeps its caption buttons clear of the tab strip', () => {
   // The expand toggle (12px) and the new-conversation button (48px) are fixed in the
   // caption's left corner when the sidebar collapses. The strip starts after both, so

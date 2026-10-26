@@ -53,10 +53,13 @@ html[data-smooth-theme-switch]::view-transition-new(root){clip-path:circle(0% at
 body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')}){height:100%;min-height:0;max-height:100%;background:var(--smooth-sidebar);--dsh-windows-content-radius:var(--smooth-radius-xl)}
 body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})>:is(${hostPart('sidebarCol')},${hostPart('centerCol')}){min-height:0}
 /* The desktop preload measures this body-level probe to synchronize the native
-   caption buttons. Change its token locally, without recoloring the sidebar. */
-body[data-smooth-skin]>span[style*="--dsw-specific-sidebar-fill"][style*="--dsw-alias-label-primary"]{--dsw-specific-sidebar-fill:var(--smooth-surface)}
-/* Leave sidebar color behind the curved tab-bar corner; the rest of the native
-   caption remains the workspace color, including the window-button area. */
+   caption buttons. Change its token locally, without recoloring the sidebar.
+   The measured colour is the Window Controls Overlay fill: leaving it fully
+   transparent removes the button strip's own ground and lets the page show through;
+   the button glyphs still come from the unchanged label-primary token. */
+body[data-smooth-skin]>span[style*="--dsw-specific-sidebar-fill"][style*="--dsw-alias-label-primary"]{--dsw-specific-sidebar-fill:rgba(0,0,0,0)}
+/* Leave sidebar color behind the curved tab-bar corner; the native caption's
+   window-button area is transparent and only its glyphs remain. */
 body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})::before{background:linear-gradient(to right,var(--smooth-sidebar) 0 calc(var(--smooth-left-width) + 18px),var(--smooth-surface) calc(var(--smooth-left-width) + 18px) 100%)}
 /* The centre surface is flat: no ambient shadow lifts it off the sidebar, so the page
    reads as one continuous ground instead of a lit panel floating above it. */
