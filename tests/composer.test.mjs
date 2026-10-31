@@ -7,7 +7,7 @@ const read = (name) => readFile(new URL(`../src/${name}`, import.meta.url), 'utf
 // The bundle order: composer.js watches surfaces through watch.js.
 const source = `${await read('watch.js')}\n${await read('composer.js')}`;
 const sandbox = { PLUGIN_ID: 'smooth', hostPart: name => `.${name}` };
-runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.installFallback = installComposerFallbackHint; globalThis.installCaret = installSmoothCaret; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker; globalThis.occupancyOf = contextOccupancyOf; globalThis.tokensText = contextTokens; globalThis.exactText = contextExactTokens; globalThis.durationText = contextDuration; globalThis.cacheHit = contextCacheHit; globalThis.fill = contextFill; globalThis.offersDefault = offersDefaultEffort;', sandbox);
+runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.installFallback = installComposerFallbackHint; globalThis.installCaret = installSmoothCaret; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker; globalThis.occupancyOf = contextOccupancyOf; globalThis.tokensText = contextTokens; globalThis.exactText = contextExactTokens; globalThis.durationText = contextDuration; globalThis.cacheHit = contextCacheHit; globalThis.fill = contextFill; globalThis.offersDefault = offersDefaultEffort; globalThis.filterWorkspaces = filterWorkspaces; globalThis.workspaceName = workspaceName;', sandbox);
 
 function files(entries) {
   const calls = [];
@@ -423,6 +423,51 @@ test('the metadata workspace chip toggles the native picker and anchors it to th
   assert.equal(clicked, 2, 'a second click still toggles the native picker');
 });
 
+test('the workspace menu filters by name, case-insensitively, and never by path', () => {
+  const items = [
+    { workspaceId: 'a', title: 'dsh-smooth', path: 'C:/work/dsh-smooth' },
+    { workspaceId: 'b', title: 'Design', path: 'C:/work/design' },
+    { workspaceId: 'c', title: 'default-workspace', path: 'C:/work/plain' },
+  ];
+  const ids = (query, name = '默认工作区') => sandbox.filterWorkspaces(items, query, name).map((workspace) => workspace.workspaceId);
+  assert.deepEqual(ids(''), ['a', 'b', 'c'], 'an empty query keeps every workspace in catalogue order');
+  assert.deepEqual(ids('  SMOO '), ['a'], 'the query trims and ignores case');
+  assert.deepEqual(ids('ign'), ['b']);
+  assert.deepEqual(ids('默认'), ['c'], 'the automatic title reads as the active language default name');
+  assert.deepEqual(ids('work'), [], 'paths are context, not search text');
+  assert.equal(sandbox.workspaceName(items[2], '默认工作区'), '默认工作区');
+  assert.equal(sandbox.workspaceName(items[0], '默认工作区'), 'dsh-smooth', 'user titles read verbatim');
+  assert.equal(sandbox.workspaceName(undefined, '默认工作区'), '');
+});
+
+test('the new-session workspace menu replaces the native list with a filtered, scrollable panel', () => {
+  // The Host keeps the chip, the open state and the switch; only the menu surface and
+  // its list rendering are the skin's, so turning the skin off restores the native menu.
+  assert.match(source, /decorate\('conversation\.hero\.workspace', \(Native\) => function SmoothWorkspacePicker/);
+  assert.match(source, /return skin\.state\.enabled \? h\(WorkspacePicker, props\) : h\(Native, props\)/);
+  assert.match(source, /className: 'smooth-git-menu smooth-workspace-menu'/);
+  assert.match(source, /className: 'smooth-git-search smooth-workspace-search'/);
+  assert.match(source, /className: 'smooth-git-list', role: 'listbox'/);
+  assert.match(source, /'aria-activedescendant': current/, 'the highlighted row is announced from the search field');
+  assert.match(source, /if \(event\.key !== 'Tab'\) return;/, 'Tab stays inside the popover while its picker is open');
+  assert.match(source, /trigger\?\.isConnected\) trigger\.focus\?\.\(\)/, 'closing the picker hands focus back to the visible trigger');
+  assert.match(source, /'data-current': selected \? 'true' : undefined/, 'the selected workspace keeps its highlight hook');
+  // Every selected row wears the Host menu's own check glyph (IconCheckOutlineRegular,
+  // 1px stroke) instead of a font character, so it matches the native check.
+  assert.match(source, /selected \? h\(ui\.IconCheckOutlineRegular, \{ className: 'smooth-git-check' \}\) : null\)/);
+  assert.match(source, /branchName === current && h\(ui\.IconCheckOutlineRegular, \{ className: 'smooth-git-check' \}\)/);
+  assert.match(source, /selected && h\(ui\.IconCheckOutlineRegular, \{ className: 'smooth-git-check' \}\)/);
+  assert.doesNotMatch(source, /'✓'/, 'no font check character survives anywhere');
+  assert.match(source, /filterWorkspaces\(items, query, defaultName\)/);
+  assert.doesNotMatch(source, /smooth-workspace-path|\bworkspace\.path\b/, 'a row shows the workspace name only, never its address');
+  assert.match(source, /onPick\?\.\(workspace\.workspaceId\)/, 'the pick runs the Host selection flow');
+  assert.match(source, /composer\.workspaceNoMatch/, 'an unmatched query has its own empty state');
+  assert.match(source, /composer\.workspaceEmpty/, 'a workspace-less account has its own empty state');
+  assert.match(source, /composer\.clearSearch/);
+  assert.match(source, /const flowAvailable = typeof useDirectoryFlow === 'function'/, 'the add row only appears when the Host directory flow is mounted');
+  assert.match(source, /renderSlot\('conversation\.hero\.workspace\.directoryFlow', flowOwner\)/, 'adding a folder still runs the Host flow');
+});
+
 test('relocated native controls retain injection, locale, store, child slots and clean up', () => {
   const entries = new Map();
   const listeners = new Map();
@@ -498,4 +543,82 @@ test('every composer locale key the panel asks for exists in both tables', () =>
     assert.match(zh, /'composer\.back': '返回'/);
     assert.match(en, /'composer\.back': 'Back'/);
   });
+});
+
+test('the workspace slot swap keeps the native picker as the fallback and picks through the host', () => {
+  // Drive the real component with one hook frame, the way the client harness does, so the
+  // slot wiring itself is exercised instead of only its source shape.
+  const saved = { React: sandbox.React, h: sandbox.h, document: sandbox.document, window: sandbox.window, require: sandbox.require };
+  const picked = [];
+  sandbox.h = (type, props, ...children) => ({ type, props, children });
+  sandbox.React = {
+    createElement: sandbox.h, Fragment: 'fragment',
+    useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+    useRef: () => ({ current: null }),
+    useEffect: () => {},
+  };
+  sandbox.require = (name) => name === 'react-dom' ? { createPortal: (node) => node } : {};
+  sandbox.window = { innerWidth: 1024, innerHeight: 768 };
+  sandbox.document = { querySelector: () => null };
+  try {
+    const descendants = { 'conversation.hero.workspace.directoryFlow': { kind: 'single', scope: 'root' } };
+    const native = { component: function NativePicker() { return null; }, options: { children: descendants } };
+    const entries = new Map([['conversation.hero.workspace', [native]]]);
+    const registered = [];
+    const slots = {
+      inject: (_name, setup) => setup(),
+      entries: (name) => entries.get(name) || [],
+      subscribe: () => () => {},
+      register: (options, component) => { registered.push({ options, component }); return () => {}; },
+    };
+    let enabled = true;
+    sandbox.install({ slots, useSmoothState: () => ({ state: { enabled } }), text: (_key, fallback) => fallback });
+    const wrapper = registered.find((entry) => entry.options.name === 'conversation.hero.workspace');
+    assert.ok(wrapper, 'the workspace menu is decorated onto the host slot');
+    assert.equal(wrapper.options.priority, -10, 'the skin entry wins the slot cell');
+    assert.equal(wrapper.options.children, descendants, 'the directory-flow declaration carries over for the add row');
+    enabled = false;
+    assert.equal(wrapper.component({}).type, native.component, 'turning the skin off hands the slot back to the native picker');
+    enabled = true;
+    const element = wrapper.component({});
+    assert.equal(typeof element.type, 'function', 'the enabled slot renders the skin panel');
+    const props = {
+      open: true,
+      anchorRef: { current: null },
+      useWorkspaces: () => ({
+        phase: 'ready',
+        items: [
+          { workspaceId: 'a', title: 'dsh-smooth', path: 'C:/dsh-smooth' },
+          { workspaceId: 'b', title: 'archived', path: 'C:/archived' },
+        ],
+      }),
+      selectedId: 'a',
+      onPick: (id) => picked.push(id),
+      onClose: () => {},
+    };
+    const tree = element.type(props);
+    const all = [];
+    const walk = (node) => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) { for (const child of node) walk(child); return; }
+      all.push(node);
+      for (const child of node.children || []) walk(child);
+    };
+    walk(tree);
+    const menu = all.find((node) => node.type === 'div' && /smooth-workspace-menu/.test(node.props?.className || ''));
+    assert.ok(menu, 'the panel is portalled as the skin popover');
+    assert.equal(menu.props.role, 'dialog');
+    const search = all.find((node) => node.type === 'input');
+    assert.equal(search.props.placeholder, '搜索工作区名');
+    assert.equal(search.props.role, 'combobox');
+    const rows = all.filter((node) => node.type === 'button' && node.props?.role === 'option');
+    assert.equal(rows.length, 2, 'every workspace gets a row');
+    assert.equal(rows[0].props['data-current'], 'true', 'the current workspace keeps its highlight hook');
+    assert.equal(rows[0].props['aria-selected'], true);
+    assert.equal(rows[1].props['aria-selected'], false);
+    rows[1].props.onClick();
+    assert.deepEqual(picked, ['b'], 'a row runs the Host selection callback');
+  } finally {
+    Object.assign(sandbox, saved);
+  }
 });

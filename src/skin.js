@@ -177,31 +177,54 @@ body[data-smooth-skin] [data-conversation-scroll]{background:var(--smooth-app)}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')}{background:var(--smooth-app);border-bottom:1px solid var(--smooth-line)}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')}${hostPart('headerBlank')}{border-top:1px solid var(--smooth-line);border-bottom:0}
 /* The view switch is the reference's segmented pill: one track with a thumb that slides
-   between 对话 and 轨迹, and the whole control fades in only while the pointer is in the
-   conversation column (keyboard focus shows it as well). The host renders the two views
-   as plain buttons under data-conversation-tabs, so the thumb is the container's own
-   ::before, moved by the selected button's index; two equal halves make that exact. */
-body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]{position:absolute;left:50%;top:6px;transform:translateX(-50%);display:inline-flex;box-sizing:border-box;gap:0;margin:0;padding:0;border:1px solid var(--smooth-line);border-radius:999px;background:transparent;overflow:hidden;z-index:3;opacity:0;transition:opacity .18s ease}
+   between 对话 and 轨迹, centred on the title line. The host renders the switch and the
+   launcher for the views that do not fit — the 更多 (…) menu — as the two children of one
+   tab row; the skin lifts that row onto the title line and centres it, so the launcher
+   rides beside the switch instead of standing alone at the row's left edge, and fades the
+   row as one control: the same hover or keyboard focus reveals the switch and the
+   launcher together, and they leave together. The two views stay plain buttons under
+   data-conversation-tabs, so the thumb is the track's own ::before, moved by the selected
+   button's index; two equal halves make that exact. */
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')}{position:absolute;left:0;right:0;top:6px;display:flex;flex-wrap:nowrap;justify-content:center;align-items:center;gap:6px;width:auto;margin:0;padding:0;z-index:3;opacity:0;pointer-events:none;transition:opacity .18s ease}
+/* The lifted row spans the whole header, but only the switch and its 更多 launcher own
+   clicks. Without this pass-through the invisible row swallowed the title row's right
+   side — the 智能体团队 / 打开方式 split button and the utilities beside it could not be
+   clicked while sitting under it (the row is transparent, so the buttons stayed visible). */
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')} :is([data-conversation-tabs],${hostPart('viewsMoreAnchor')}){pointer-events:auto}
+/* The launcher follows the switch, so the group would lean right if the switch stayed
+   centred. A same-size spacer leads the row only while the launcher is mounted: the
+   switch keeps the exact centre it had, and 更多 fills the other side. */
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')}:has(${hostPart('viewsMoreAnchor')})::before{content:"";flex:none;width:26px;height:1px}
 /* Reveal on the column hover or on *keyboard* focus. Keying this on :focus-within
-   pinned the switch open after a click: the clicked 对话/轨迹 tab keeps :focus when the
-   pointer leaves, while a mouse click never matches :focus-visible. */
-body[data-smooth-skin] ${hostPart('centerCol')}:hover ${hostPart('header')} [data-conversation-tabs],
-body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]:has(:focus-visible){opacity:1}
+   pinned the row open after a click: the clicked 对话/轨迹 tab keeps :focus when the
+   pointer leaves, while a mouse click never matches :focus-visible. An open 更多 menu
+   keeps the row visible too, so its trigger never fades from under the menu. */
+body[data-smooth-skin] ${hostPart('centerCol')}:hover ${hostPart('header')} ${hostPart('tabs')},
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')}:has(:focus-visible),
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')}:has([aria-expanded="true"]){opacity:1}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]{position:relative;display:inline-flex;box-sizing:border-box;gap:0;margin:0;padding:0;border:1px solid var(--smooth-line);border-radius:999px;background:transparent;overflow:hidden}
+/* The launcher is a quiet 26px circle on the track's line, lit like the switch's own
+   hover state; it opens the host's own view menu, so the skin only resizes it. */
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')} ${hostPart('viewsMoreAnchor')}{flex:none;display:inline-flex;align-items:center;margin:0}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')} ${hostPart('viewsMore')}{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:26px;height:26px;margin:0;padding:0;border:0;border-radius:999px;background:transparent;color:var(--smooth-muted);transition:background-color .16s ease,color .16s ease}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')} ${hostPart('viewsMore')}:hover{background:var(--smooth-surface-3);color:var(--smooth-text)}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')} ${hostPart('viewsMore')}[aria-expanded="true"]{background:var(--smooth-surface-3);color:var(--smooth-text)}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')} ${hostPart('viewsMore')}:focus-visible{outline:2px solid var(--smooth-line-strong);outline-offset:2px}
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')} ${hostPart('viewsMore')} svg{display:block}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;border-radius:999px;background:var(--smooth-surface-3);transition:transform .26s cubic-bezier(.22,1,.36,1)}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]:has(>[role="tab"]:nth-child(2)[aria-selected="true"])::before{transform:translateX(100%)}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"]{position:relative;z-index:1;flex:1 1 0;padding:6px 18px;border:0;border-radius:0;background:transparent;color:var(--smooth-muted);font-size:13px;font-weight:500;line-height:16px}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"][aria-selected="true"]{color:var(--smooth-text);font-weight:600}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"]::after{content:none}
-@media(prefers-reduced-motion:reduce){body[data-smooth-skin] [data-conversation-tabs],body[data-smooth-skin] [data-conversation-tabs]::before{transition:none}}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] ${hostPart('tabs')},body[data-smooth-skin] [data-conversation-tabs]::before,body[data-smooth-skin] ${hostPart('viewsMore')}{transition:none}}
 /* The conversation header follows the supplied reference: the session title owns the
-   first line, the header's chips — the agent team, the creation mode, whatever the
-   utilities slot adds — sit on a second line under it, and the 对话 / 轨迹 buttons are
-   centred over the header on that first line. Only the ground stays this skin's own; the
-   type, the pill shapes and the spacing are the reference's. The host stacks the tabs in
-   a grid row of their own that spans the header, so they take that same span in row one
-   instead, centred over it; the title cluster turns into two stacked rows — crumbs first,
-   action chips second — while the title row keeps its utilities and corner at the right
-   end, centred against the two-line block. */
+   first line and the header's chips — the agent team, the creation mode, whatever the
+   utilities slot adds — sit on a second line under it. The 对话 / 轨迹 switch floats
+   centred on that title line, with the 更多 launcher beside it. Only the ground stays
+   this skin's own; the type, the pill shapes and the spacing are the reference's. The
+   title cluster turns into two stacked rows — crumbs first, action chips second — while
+   the title row keeps its utilities and corner at the right end, centred against the
+   two-line block; the host's own tab row is lifted out of the grid so it adds no line. */
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')}:has([data-conversation-tabs]){position:relative;padding:4px 18px 6px 14px;min-height:0}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('titleRow')}{grid-column:2;grid-row:1;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:start;column-gap:6px;min-height:0}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('titleCluster')}{display:grid;grid-template-columns:minmax(0,1fr);align-content:center;gap:1px}
@@ -787,6 +810,11 @@ body[data-smooth-skin]:has([data-sidebar-collapsed]) ${hostPart('sidebarCol')} $
   border-radius:var(--smooth-radius-sm);background:transparent;color:var(--smooth-muted);
 }
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('panelList')}{position:fixed;top:var(--smooth-rail-panels-top);bottom:calc(24px + var(--smooth-rail-button-size));left:0;box-sizing:border-box;width:var(--smooth-rail-width);display:flex;flex-direction:column;align-items:center;gap:var(--smooth-rail-gap);margin:0;padding:0;overflow-x:hidden;overflow-y:auto;z-index:29}
+/* The panel list's "more" launcher is the icon column's lowest entry by definition. A
+   third-party panel row (the memory library does this) appends itself to the host's
+   panelList after the host's own children, so DOM order alone would leave 更多 above it
+   — the flex order property keeps it last however many entries later plugins insert. */
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('panelList')}>:is(${hostPart('moreAnchor')},*:has(${hostPart('moreAnchor')})){order:1}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')}{width:var(--smooth-rail-button-size);height:var(--smooth-rail-button-size);min-height:0}
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="tree"]{font-size:calc(19 * var(--smooth-l))}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('regionArea')}{border-top:1px solid var(--smooth-line);padding-top:10px;margin-inline:0;padding-inline:0}
@@ -921,7 +949,7 @@ body[data-smooth-skin] .smooth-git-row:disabled{opacity:.5;cursor:default}
 body[data-smooth-skin] .smooth-git-row-main{display:flex;flex-direction:column;min-width:0;flex:1}
 body[data-smooth-skin] .smooth-git-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-smooth-skin] .smooth-git-note{padding:0 8px;color:var(--smooth-muted);font-size:11.5px;line-height:17px}
-body[data-smooth-skin] .smooth-git-check{margin-left:auto;color:var(--smooth-text);font-weight:600}
+body[data-smooth-skin] .smooth-git-check{margin-left:auto;flex:none;width:14px;height:14px;color:var(--smooth-text)}
 body[data-smooth-skin] .smooth-git-footer{display:flex;align-items:center;gap:7px;margin-top:4px;padding:8px;border:0;border-top:1px solid var(--smooth-line);border-radius:0 0 var(--smooth-radius-sm) var(--smooth-radius-sm);background:transparent;color:var(--smooth-text);font:inherit;text-align:left;cursor:pointer}
 body[data-smooth-skin] .smooth-git-footer:hover{background:var(--smooth-surface-3)}
 body[data-smooth-skin] .smooth-git-footer:disabled{opacity:.5;cursor:default}
@@ -931,6 +959,23 @@ body[data-smooth-skin] .smooth-git-create-action{height:32px;padding:0 9px;borde
 body[data-smooth-skin] .smooth-git-create-action:disabled{opacity:.5;cursor:default}
 body[data-smooth-skin] .smooth-git-error{padding:6px 8px;border-radius:var(--smooth-radius-sm);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,var(--smooth-surface-2));color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 82%,var(--smooth-text));font-size:12px;line-height:17px;white-space:pre-wrap}
 body[data-smooth-skin] .smooth-git-empty{padding:10px 8px;color:var(--smooth-muted)}
+/* The new-session workspace menu reuses the branch popover. Its list gets a bounded
+   scrollport of its own: the stock menu grew with the workspace count and either ran
+   past the viewport or clipped at the window edge. The search row and the add row stay
+   put; only the workspace rows scroll, so the filter is always reachable. */
+body[data-smooth-skin] .smooth-workspace-menu{overflow:hidden}
+body[data-smooth-skin] .smooth-workspace-menu .smooth-git-list{flex:1 1 auto;max-height:min(38vh,300px);padding-bottom:2px;overscroll-behavior:contain}
+body[data-smooth-skin] .smooth-workspace-menu .smooth-git-footer{flex:none}
+body[data-smooth-skin] .smooth-workspace-menu .smooth-git-row:hover:not(:disabled):not([data-current="true"]){background:color-mix(in srgb,var(--smooth-surface-3) 82%,var(--smooth-text))}
+/* Keyboard position. The menu surface is a mix of surface-3 and the input fill, so the
+   stock hover fill is one RGB step away from it and invisible here. The row carries a
+   stronger lift plus the accent ring the skin already uses for focus, which clears the
+   3:1 non-text contrast requirement for a state indicator in both tones. */
+body[data-smooth-skin] .smooth-workspace-menu .smooth-git-row[data-active="true"]{background:color-mix(in srgb,var(--smooth-surface-3) 72%,var(--smooth-text));box-shadow:inset 0 0 0 1px var(--smooth-accent)}
+body[data-smooth-skin] .smooth-workspace-menu .smooth-git-row:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:-2px}
+body[data-smooth-skin] .smooth-workspace-clear{display:block;margin-top:6px;padding:0;border:0;background:transparent;color:var(--smooth-accent);font:inherit;font-size:12px;line-height:18px;cursor:pointer}
+body[data-smooth-skin] .smooth-workspace-clear:hover{text-decoration:underline}
+body[data-smooth-skin] .smooth-workspace-clear:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:2px}
 body[data-smooth-skin] .smooth-hero-branch{display:inline-flex;align-items:center;gap:calc(16 * var(--smooth-u));min-width:0}
 body[data-smooth-skin] .smooth-hero-branch .smooth-meta-branch{max-width:240px;color:var(--smooth-text);font-weight:600}
 body[data-smooth-skin] .smooth-composer-preset{display:inline-flex;align-items:center;min-width:0}
@@ -988,9 +1033,16 @@ body[data-smooth-skin] .smooth-usage-models-empty{padding:6px 2px;color:var(--sm
 /* Full-workspace settings retain the native store, rows, focus and controls, but
    take the app's own scale. The reference mock-up sized this panel for a 1950px
    canvas (51px nav cells, 20px labels); Harness chrome runs at 13-14px, so the
-   panel follows the rest of the window instead. */
-body[data-smooth-skin] [data-shortcut-modal="settings"]{position:fixed;inset:var(--smooth-caption) 0 0 var(--smooth-rail-width);width:auto;height:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none}
-body[data-smooth-skin] [role="presentation"]:has(>[data-shortcut-modal="settings"])>[aria-hidden="true"]{background:transparent;backdrop-filter:none}
+   panel follows the rest of the window instead. The panel is pinned to the
+   workspace (right of the rail, under the caption), so the modal shell around it
+   must stop blocking the shell behind it: the fixed overlay and its transparent
+   mask pass clicks through, and only the panel itself takes them. The rail, the
+   tab strip and the home button stay usable while settings is open — clicking the
+   rail switches pages instead of closing settings, and Escape / a tab / Home
+   remain the exits. */
+body[data-smooth-skin] [data-shortcut-modal="settings"]{position:fixed;inset:var(--smooth-caption) 0 0 var(--smooth-rail-width);width:auto;height:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;pointer-events:auto}
+body[data-smooth-skin] [role="presentation"]:has(>[data-shortcut-modal="settings"]){pointer-events:none}
+body[data-smooth-skin] [role="presentation"]:has(>[data-shortcut-modal="settings"])>[aria-hidden="true"]{background:transparent;backdrop-filter:none;pointer-events:none}
 body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{box-sizing:border-box;width:calc(var(--smooth-left-width) - var(--smooth-rail-width));min-width:0;min-height:0;padding:16px 10px 10px;gap:8px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navTitle')}{padding:0 10px;font-size:20px;line-height:28px;font-weight:700;letter-spacing:-.01em}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}{flex:1;min-height:0;gap:2px;padding-top:34px;overflow-x:hidden;overflow-y:auto}
@@ -1005,11 +1057,15 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>b
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button>${hostPart('navLabel')}{grid-column:2;grid-row:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button[aria-current="true"]{background:var(--smooth-selected);color:var(--smooth-text);font-weight:600}
 /* The host builds one flat list out of the settings.section entries and puts no id
-   or grouping attribute on a cell, so the four groups are anchored on position:
-   account | application | extensions | appearance. Adding or removing a settings
-   section moves the boundary with it. The label floats in the gap above the first
-   cell of its group, inside navList's padding-top so the scroller cannot clip it.
-   It runs at the size of the cells (15px/500) and sits in a 34px gap: 4px under the
+   or grouping attribute on a cell, so the groups are anchored on position:
+   account | application | extensions. 应用 owns the app-level entries plus the two
+   extension surfaces users treat as part of the app — built-in plugins and agent
+   presets. 扩展 then gathers prompt optimisation, the plugin market, the Smooth skin
+   and the sidebar-cards entry (the old 外观 heading folded in here, because the market,
+   the skin and the cards are all plugin-provided). Adding or removing a settings
+   section moves the boundaries with it. The label floats in the gap above the first
+   cell of its group, inside navList's padding-top so the scroller cannot clip it. It
+   runs at the size of the cells (15px/500) and sits in a 34px gap: 4px under the
    previous group, the label's own 20px line box, then 10px of air before its first
    cell — the rhythm the reference settings panel uses, where a group is separated by
    its heading rather than by empty rows.
@@ -1017,11 +1073,9 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>b
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button::after{position:absolute;left:10px;top:-30px;font-size:15px;line-height:20px;font-weight:500;color:var(--smooth-muted);pointer-events:none}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(1)::after{content:"账户"}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(2)::after{content:"应用"}
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(4)::after{content:"扩展"}
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(7)::after{content:"外观"}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(6)::after{content:"扩展"}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(2),
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(4),
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(7){margin-top:34px}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(6){margin-top:34px}
 body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{position:relative;z-index:1;border-left:0;border-radius:0 0 0 var(--smooth-radius-xl);corner-shape:round;background:var(--smooth-app);overflow:clip}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('header')}{height:52px;padding:14px 16px 8px}
 /* The native close button would sit immediately right of whatever action the page itself

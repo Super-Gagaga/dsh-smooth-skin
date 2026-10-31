@@ -60,6 +60,8 @@ test('the host contract covers the selectors and hooks the skin actually reaches
   for (const match of allSource.matchAll(/slots\.register\(\{\s*name:\s*['"]([^'"]+)['"]/g)) slots.add(match[1]);
   for (const match of allSource.matchAll(/sharedSurfaceStore\(slots,\s*['"]([^'"]+)['"]/g)) slots.add(match[1]);
   for (const match of allSource.matchAll(/(?:relocate|decorate)\(\s*['"]([^'"]+)['"]/g)) slots.add(match[1]);
+  // Child slots a registration renders through its props face are dependencies too.
+  for (const match of allSource.matchAll(/renderSlot(?:Chain)?\(\s*['"]([^'"]+)['"]/g)) slots.add(match[1]);
   for (const slot of slots) assert.ok(contract.slots.includes(slot), `HOST_SLOTS is missing ${slot}`);
 });
 

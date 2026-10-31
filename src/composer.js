@@ -402,6 +402,22 @@ function offersDefaultEffort(reasoning) {
   return Boolean(reasoning && reasoning.efforts?.length > 0 && reasoning.defaultEffort === undefined);
 }
 
+/** One workspace's menu label. The Host titles its first-use workspace
+ * `default-workspace`; that one reads as the active language's default name, every
+ * other title reads verbatim (the Host's own rule). */
+function workspaceName(workspace, defaultName) {
+  const title = workspace?.title || '';
+  return title === 'default-workspace' ? (defaultName || '') : title;
+}
+
+/** The rows a live name filter leaves. Matching trims the query and ignores case; an
+ * empty query keeps the catalogue order. */
+function filterWorkspaces(workspaces, query, defaultName) {
+  const needle = String(query || '').trim().toLowerCase();
+  if (!needle) return workspaces;
+  return workspaces.filter((workspace) => workspaceName(workspace, defaultName).toLowerCase().includes(needle));
+}
+
 /** Render native controls into reference positions without moving React-owned DOM.
  * The native component keeps its locale, injected actions, hooks and confirmations. */
 function installComposerLayout({ slots, modelDirectories, remote, useSmoothState, text }) {
@@ -554,7 +570,7 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
                 branchName === current && h('span', { className: 'smooth-git-note' }, status.dirty > 0
                   ? `${text('composer.uncommitted', '未提交')}: ${status.dirty} ${text('composer.files', '个文件')}`
                   : text('composer.clean', '工作区干净'))),
-              branchName === current && h('span', { className: 'smooth-git-check', 'aria-hidden': true }, '✓'))))
+              branchName === current && h(ui.IconCheckOutlineRegular, { className: 'smooth-git-check' }))))
           : h('div', { className: 'smooth-git-note', role: 'status' }, text('composer.noBranches', '没有分支'))
         : error ? null : h('div', { className: 'smooth-git-note', role: 'status' }, text('composer.loading', '正在读取…')),
       creating
@@ -631,7 +647,7 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
               onClick: () => { if (busy) return; pick(group, model); },
             },
               h('span', { className: 'smooth-git-row-main' }, h('span', { className: 'smooth-git-name' }, model.name)),
-              selected && h('span', { className: 'smooth-git-check', 'aria-hidden': true }, '✓'));
+              selected && h(ui.IconCheckOutlineRegular, { className: 'smooth-git-check' }));
           })))),
       !filtered.length && h('div', { className: 'smooth-git-note' }, text('composer.noModels', '没有模型')));
   }
@@ -1253,6 +1269,204 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
       }), document.body));
   }
   disposers.push(slots.inject('conversation.input.overlay', () => slots.register({ name: 'conversation.input.overlay', id: `${PLUGIN_ID}.metadata`, order: -100 }, Metadata)));
+  /** The new-session hero's workspace menu. The Host keeps the chip, the open state and
+   * the switch itself — `onPick` carries the draft transfer to the chosen blank — so this
+   * only replaces the menu surface. The stock menu lists every workspace in one growing
+   * column; this one filters by name live, keeps the focused row visible, and scrolls
+   * inside a bounded height instead of reaching past the window edge. The add-workspace
+   * row keeps the Host's directory flow, so adding a folder still flows through the
+   * native picker and its error handling. */
+  function WorkspacePicker(props) {
+    const { open, anchorRef, useWorkspaces, selectedId, onPick, onClose, createWorkspace, useDirectoryFlow, renderSlot, t } = props;
+    const snapshot = useWorkspaces((state) => state);
+    const items = snapshot?.items || [];
+    const loading = snapshot?.phase !== 'ready';
+    const [query, setQuery] = React.useState('');
+    const [active, setActive] = React.useState(-1);
+    const [flowOpen, setFlowOpen] = React.useState(false);
+    const [picking, setPicking] = React.useState(false);
+    const [flowError, setFlowError] = React.useState('');
+    const menuRef = React.useRef(null);
+    const searchRef = React.useRef(null);
+    const listRef = React.useRef(null);
+    // `occupied` is the Host's directory flow mounted in this slot; only then can the
+    // menu offer the add row (and hand it the owner props it expects).
+    const flowAvailable = typeof useDirectoryFlow === 'function' ? useDirectoryFlow((occupied) => occupied) : false;
+    const translated = typeof t === 'function' ? t('workspace.defaultName') : '';
+    const defaultName = translated && translated !== 'workspace.defaultName' ? translated : text('composer.defaultWorkspace', '默认工作区');
+    const filtered = filterWorkspaces(items, query, defaultName);
+    const current = active >= 0 && active < filtered.length ? filtered[active] : undefined;
+    React.useEffect(() => {
+      if (!open) return undefined;
+      setQuery('');
+      setActive(-1);
+      searchRef.current?.focus?.();
+      // Closing removes the focused field, so focus would fall to the body. Hand it back
+      // to the visible trigger unless the user is already focused somewhere else.
+      return () => {
+        if (document.activeElement && document.activeElement !== document.body) return;
+        const trigger = document.querySelector('.smooth-meta-workspace');
+        if (trigger?.isConnected) trigger.focus?.();
+      };
+    }, [open]);
+    React.useEffect(() => {
+      if (!open) return undefined;
+      const outside = (event) => {
+        if (menuRef.current?.contains?.(event.target)) return;
+        // The chip's own click toggles the Host picker; closing here would race it.
+        if (event.target?.closest?.('.smooth-meta-workspace')) return;
+        onClose?.();
+      };
+      const escape = (event) => { if (event.key === 'Escape') onClose?.(); };
+      // Keep Tab inside the popover while it is open: the rows are not tab stops (the
+      // search field owns the listbox focus), so only the search and the add row cycle.
+      const tab = (event) => {
+        if (event.key !== 'Tab') return;
+        const stops = [...(menuRef.current?.querySelectorAll?.('input,button') || [])].filter((node) => node.tabIndex >= 0);
+        if (stops.length === 0) return;
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus?.(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus?.(); }
+      };
+      document.addEventListener('pointerdown', outside, true);
+      document.addEventListener('keydown', escape);
+      document.addEventListener('keydown', tab);
+      return () => {
+        document.removeEventListener('pointerdown', outside, true);
+        document.removeEventListener('keydown', escape);
+        document.removeEventListener('keydown', tab);
+      };
+    }, [open, onClose]);
+    React.useEffect(() => {
+      if (!open || active < 0) return;
+      listRef.current?.querySelector?.(`[data-active="true"]`)?.scrollIntoView?.({ block: 'nearest' });
+    }, [open, active]);
+    const choose = (workspace) => {
+      if (!workspace || picking) return;
+      onPick?.(workspace.workspaceId);
+    };
+    const move = (delta) => {
+      if (filtered.length === 0) return;
+      setActive((value) => {
+        const base = value < 0 ? (delta > 0 ? -1 : 0) : value;
+        return (base + delta + filtered.length) % filtered.length;
+      });
+    };
+    const keys = (event) => {
+      if (event.key === 'ArrowDown') { event.preventDefault(); move(1); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); move(-1); }
+      else if (event.key === 'Home') { event.preventDefault(); setActive(0); }
+      else if (event.key === 'End') { event.preventDefault(); setActive(filtered.length - 1); }
+      else if (event.key === 'Enter') { event.preventDefault(); choose(current || filtered[0]); }
+      else if (event.key === 'Escape') { event.preventDefault(); onClose?.(); }
+    };
+    // The directory flow owns its own modal; a failed adoption comes back here so the
+    // menu can name the problem and offer the same folder picker again.
+    const adopt = (path) => {
+      setPicking(true);
+      Promise.resolve()
+        .then(() => createWorkspace?.({ path }))
+        .then((workspace) => {
+          if (!workspace?.workspaceId) throw new Error(text('composer.workspaceMissing', '没有可用的工作区'));
+          setFlowOpen(false);
+          onPick?.(workspace.workspaceId);
+        })
+        .catch((reason) => {
+          setFlowOpen(false);
+          setFlowError(reason instanceof Error && reason.message ? reason.message : String(reason));
+        })
+        .finally(() => setPicking(false));
+    };
+    const openFlow = () => {
+      onClose?.();
+      setFlowError('');
+      setFlowOpen(true);
+    };
+    const flowOwner = {
+      open: flowOpen,
+      busy: picking,
+      onPicked: adopt,
+      onCancel: () => setFlowOpen(false),
+      onError: (message) => { setFlowOpen(false); setFlowError(String(message || '')); },
+    };
+    const flow = typeof renderSlot === 'function' ? renderSlot('conversation.hero.workspace.directoryFlow', flowOwner) : null;
+    const dialog = flowError ? h(ui.Modal, {
+      open: true,
+      onClose: () => setFlowError(''),
+      closeLabel: text('composer.cancel', '取消'),
+      title: text('composer.workspaceErrorTitle', '无法添加工作区'),
+      footer: h(React.Fragment, null,
+        h(ui.Button, { variant: 'outline', onClick: () => setFlowError('') }, text('composer.cancel', '取消')),
+        h(ui.Button, { variant: 'outline', onClick: () => { setFlowError(''); setFlowOpen(true); } }, text('composer.workspaceRetry', '重新选择'))),
+    }, h('div', { role: 'alert', className: 'smooth-session-delete-error' }, flowError)) : null;
+    if (!open) return h(React.Fragment, null, flow, dialog);
+    // Anchor to the visible metadata chip: the Host's chip lives in the hidden hero row,
+    // and the metadata bar re-points its rect while opening the picker.
+    const rect = anchorRef?.current?.getBoundingClientRect?.()
+      || document.querySelector('.smooth-meta-workspace')?.getBoundingClientRect?.();
+    const width = Math.min(300, window.innerWidth - 16);
+    const flip = rect ? window.innerHeight - rect.bottom < 230 && rect.top > window.innerHeight - rect.bottom : false;
+    const room = rect ? (flip ? rect.top - 18 : window.innerHeight - rect.bottom - 18) : window.innerHeight - 32;
+    const maxHeight = Math.max(180, Math.min(room, Math.round(window.innerHeight * 0.64), 420));
+    const style = {
+      left: `${rect ? Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) : 8}px`,
+      width: `${width}px`,
+      maxHeight: `${maxHeight}px`,
+    };
+    if (flip) style.bottom = `${Math.max(8, window.innerHeight - rect.top + 6)}px`;
+    else style.top = `${rect ? rect.bottom + 6 : 8}px`;
+    const rows = filtered.length
+      ? h('div', {
+        ref: listRef, id: 'smooth-workspace-list', className: 'smooth-git-list', role: 'listbox',
+        'aria-label': text('composer.workspaceList', '工作区列表'),
+      }, filtered.map((workspace, index) => {
+        const selected = workspace.workspaceId === selectedId;
+        const highlighted = index === active && !selected;
+        return h('button', {
+          key: workspace.workspaceId, type: 'button', role: 'option', tabIndex: -1,
+          className: 'smooth-git-row smooth-workspace-row',
+          'aria-selected': selected,
+          'data-current': selected ? 'true' : undefined,
+          'data-active': highlighted ? 'true' : undefined,
+          onClick: () => choose(workspace),
+        },
+          h(selected ? ui.IconFolderOpenRegular : ui.IconFolderCloseRegular, { size: 16, 'aria-hidden': true }),
+          h('span', { className: 'smooth-git-row-main' },
+            h('span', { className: 'smooth-git-name' }, workspaceName(workspace, defaultName))),
+          selected ? h(ui.IconCheckOutlineRegular, { className: 'smooth-git-check' }) : null);
+      }))
+      : h('div', { className: 'smooth-git-empty', role: 'status' },
+        loading ? text('composer.workspaceLoading', '正在加载工作区…')
+          : items.length ? text('composer.workspaceNoMatch', '没有匹配的工作区')
+            : text('composer.workspaceEmpty', '还没有工作区'),
+        items.length && query.trim() ? h('button', {
+          type: 'button', className: 'smooth-workspace-clear',
+          onClick: () => { setQuery(''); searchRef.current?.focus?.(); },
+        }, text('composer.clearSearch', '清除搜索')) : null);
+    const panel = createPortal(h('div', {
+      ref: menuRef, className: 'smooth-git-menu smooth-workspace-menu',
+      role: 'dialog', 'aria-label': text('composer.switchWorkspace', '切换工作区'),
+      'data-smooth-workspace-menu': '', style,
+    },
+      h('input', {
+        ref: searchRef, className: 'smooth-git-search smooth-workspace-search', type: 'search',
+        value: query, placeholder: text('composer.searchWorkspace', '搜索工作区名'),
+        'aria-label': text('composer.searchWorkspace', '搜索工作区名'),
+        role: 'combobox', 'aria-expanded': 'true', 'aria-autocomplete': 'list',
+        'aria-controls': filtered.length ? 'smooth-workspace-list' : undefined,
+        'aria-activedescendant': current ? `smooth-workspace-${current.workspaceId}` : undefined,
+        autoComplete: 'off', spellCheck: false,
+        onKeyDown: keys,
+        onChange: (event) => { setQuery(event.target.value); setActive(-1); },
+      }),
+      rows,
+      flowAvailable ? h('button', {
+        type: 'button', className: 'smooth-git-footer', disabled: picking || flowOpen, onClick: openFlow,
+      }, h(ui.IconPlusOutlineRegular, { size: 16, 'aria-hidden': true }), text('composer.addWorkspace', '添加工作区…')) : null,
+    ), document.body);
+    return h(React.Fragment, null, panel, flow, dialog);
+  }
   function ComposerHint(props) {
     const skin = useSmoothState();
     const target = useTarget('[data-composer-card] [data-composer-placeholder]');
@@ -1455,5 +1669,12 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
   // slot when it does. Both are pointed at the same seat in the metadata line.
   disposers.push(relocate('conversation.hero.agentPreset', `${hero} [data-smooth-preset-seat]`, 'smooth-composer-preset'));
   disposers.push(relocate('conversation.input.left', `${hero} [data-smooth-preset-seat]`, 'smooth-composer-preset'));
+  // The new-session workspace menu. The Host owns the chip, the open state and the
+  // switch; this wrapper swaps in the filtered list only while the skin is on, so
+  // turning the skin off hands the slot straight back to the native picker.
+  disposers.push(decorate('conversation.hero.workspace', (Native) => function SmoothWorkspacePicker(props) {
+    const skin = useSmoothState();
+    return skin.state.enabled ? h(WorkspacePicker, props) : h(Native, props);
+  }));
   return () => { for (const dispose of disposers.reverse()) dispose?.(); };
 }

@@ -237,6 +237,21 @@ test('the effort thumb is a glider that slides between stops and follows a drag'
   assert.equal(paneBody.match(/padding:([^;}]+)/)?.[1], paneList.match(/padding:([^;}]+)/)?.[1], 'the two pages share one inset rhythm');
 });
 
+test('the workspace menu scrolls its rows inside a bounded popover', () => {
+  // The stock picker listed every workspace in one column. The skin's list owns a
+  // scrollport so a long account cannot push the menu past the window edge, while the
+  // search row and the add row stay put.
+  assert.match(skin, /\.smooth-workspace-menu\{overflow:hidden\}/, 'the popover itself never grows a second scrollbar');
+  assert.match(skin, /\.smooth-workspace-menu \.smooth-git-list\{[^}]*max-height:min\(38vh,300px\)[^}]*overscroll-behavior:contain/, 'the rows scroll inside a capped height');
+  assert.match(skin, /\.smooth-workspace-menu \.smooth-git-footer\{flex:none\}/, 'the add row never shrinks away behind the list');
+  assert.match(skin, /\.smooth-workspace-menu \.smooth-git-list\{[^}]*flex:1 1 auto/, 'the list takes the remaining height');
+  assert.match(skin, /\.smooth-workspace-menu \.smooth-git-row\[data-active="true"\]\{background:color-mix\(in srgb,var\(--smooth-surface-3\) 72%,var\(--smooth-text\)\);box-shadow:inset 0 0 0 1px var\(--smooth-accent\)\}/, 'the keyboard row lifts off the menu surface and takes the accent focus ring');
+  assert.match(skin, /\.smooth-workspace-menu \.smooth-git-row:hover:not\(:disabled\):not\(\[data-current="true"\]\)\{background:color-mix/, 'hover is visible on the mixed menu surface without overriding the selected row');
+  assert.doesNotMatch(skin, /\.smooth-workspace-path\{/, 'the row carries the workspace name only, no path line');
+  assert.match(skin, /\.smooth-git-check\{[^}]*width:14px;height:14px/, "the row check keeps the host menu's own 14px glyph size");
+  assert.match(skin, /\.smooth-workspace-clear\{[^}]*color:var\(--smooth-accent\)/, 'the empty state offers the search reset in the link colour');
+});
+
 test('the top-stop wash stays on the blue fill and its core lands on the strip', () => {
   // The wash used to sit on the whole track with blobs hundreds of px tall whose centre
   // fell far below the 24px strip: only their almost transparent edge showed, so the
@@ -431,24 +446,34 @@ test('the answer field keeps its quiet border while focused', () => {
     'the inner answer block never paints an accent focus border');
 });
 
-test('the conversation header follows the reference: chips under the title, tabs centred', () => {
-  // The host stacks the view tabs in a second grid row spanning the header. The skin
-  // moves them onto the title line, centred over the header, and splits the title
-  // cluster so its action chips sit under the title instead of beside it. Only the
-  // ground stays the skin's own; the type, pills and spacing are the reference's.
+test('the conversation header follows the reference: chips under the title, switch beside its 更多 menu', () => {
+  // The host stacks the view tabs in a second grid row spanning the header and renders the
+  // 更多 launcher for the collapsed views as that row's other child. The skin centres the
+  // row's contents — the launcher rides beside the switch and fades with it — and splits
+  // the title cluster so its action chips sit under the title instead of beside it. Only
+  // the ground stays the skin's own; the type, pills and spacing are the reference's.
   assert.match(skin, /:has\(\[data-content-phase\]\) \$\{hostPart\('header'\)\}:has\(\[data-conversation-tabs\]\)\{position:relative;padding:4px 18px 6px 14px;min-height:0\}/);
   assert.match(skin, /\$\{hostPart\('titleRow'\)\}\{grid-column:2;grid-row:1;display:grid;grid-template-columns:minmax\(0,1fr\) auto auto;align-items:start;column-gap:6px;min-height:0\}/);
   assert.match(skin, /\$\{hostPart\('titleCluster'\)\}\{display:grid;grid-template-columns:minmax\(0,1fr\);align-content:center;gap:1px\}/);
   // The view switch is a segmented pill: one track, a thumb that slides between the two
-  // views, and the whole control faded out until the pointer is in the conversation.
-  assert.match(skin, /\[data-conversation-tabs\]\{position:absolute;left:50%;top:6px;transform:translateX\(-50%\)[^}]*opacity:0;transition:opacity \.18s ease\}/);
+  // views. The row holding it and the 更多 launcher is centred and faded as one control;
+  // a same-size leading spacer keeps the switch itself on the header's centre line.
+  assert.match(skin, /\$\{hostPart\('tabs'\)\}\{position:absolute;left:0;right:0;top:6px;display:flex;flex-wrap:nowrap;justify-content:center;align-items:center;gap:6px;width:auto;margin:0;padding:0;z-index:3;opacity:0;pointer-events:none;transition:opacity \.18s ease\}/);
+  // The lifted row is full-width and transparent: only the switch and its 更多 launcher
+  // may take clicks, or the title row's actions under it become visible-but-dead.
+  assert.match(skin, /\$\{hostPart\('tabs'\)\} :is\(\[data-conversation-tabs\],\$\{hostPart\('viewsMoreAnchor'\)\}\)\{pointer-events:auto\}/, 'the rest of the lifted row passes clicks through to the header actions');
+  assert.match(skin, /\$\{hostPart\('tabs'\)\}:has\(\$\{hostPart\('viewsMoreAnchor'\)\}\)::before\{content:"";flex:none;width:26px;height:1px\}/);
+  assert.match(skin, /\$\{hostPart\('tabs'\)\} \$\{hostPart\('viewsMore'\)\}\{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:26px;height:26px;margin:0;padding:0;border:0;border-radius:999px/);
+  assert.match(skin, /\[data-conversation-tabs\]\{position:relative;display:inline-flex;box-sizing:border-box;gap:0;margin:0;padding:0;border:1px solid var\(--smooth-line\);border-radius:999px;background:transparent;overflow:hidden\}/);
   assert.match(skin, /\[data-conversation-tabs\]::before\{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;[^}]*transition:transform \.26s cubic-bezier\(\.22,1,\.36,1\)\}/);
   assert.match(skin, /\[data-conversation-tabs\]:has\(>\[role="tab"\]:nth-child\(2\)\[aria-selected="true"\]\)::before\{transform:translateX\(100%\)\}/);
-  assert.match(skin, /\$\{hostPart\('centerCol'\)\}:hover \$\{hostPart\('header'\)\} \[data-conversation-tabs\]/);
-  // Clicking a view leaves :focus on the tab; only keyboard focus may pin the switch
-  // open, so the reveal keys on :focus-visible rather than :focus-within.
-  assert.match(skin, /\[data-conversation-tabs\]:has\(:focus-visible\)\{opacity:1\}/);
-  assert.ok(!/\[data-conversation-tabs\]:focus-within/.test(skin), 'a clicked view must not pin the switch open');
+  assert.match(skin, /\$\{hostPart\('centerCol'\)\}:hover \$\{hostPart\('header'\)\} \$\{hostPart\('tabs'\)\}/);
+  // Clicking a view leaves :focus on the tab; only keyboard focus may pin the row open,
+  // so the reveal keys on :focus-visible rather than :focus-within. An open 更多 menu
+  // keeps the row visible as well, so its trigger never fades from under it.
+  assert.match(skin, /\$\{hostPart\('tabs'\)\}:has\(:focus-visible\)/);
+  assert.match(skin, /\$\{hostPart\('tabs'\)\}:has\(\[aria-expanded="true"\]\)\{opacity:1\}/);
+  assert.ok(!/\$\{hostPart\('tabs'\)\}:focus-within/.test(skin), 'a clicked view must not pin the switch open');
 });
 
 test('the attach button leads the access-mode chip in the composer footer', () => {
@@ -701,4 +726,37 @@ test('the skin leaves plugin switches alone and only sizes the host general-sett
   assert.ok(!/\[role="switch"\]:not\(\[data-plugin-panel\] \*\)/.test(skin), 'the old plugin-panel exemption is gone with the rule');
   assert.ok(!/\[role="switch"\][^{]*\{[^}]*width:44px/.test(skin), 'the skin no longer resizes switches globally');
   assert.match(skin, /body\[data-smooth-skin\] \[data-shortcut-modal="settings"\] \[data-slot="settings.general.item"\] button\[role="switch"\]\{width:36px;height:20px;padding:2px\}/);
+});
+
+test('the settings nav groups are three: account, application, extensions', () => {
+  // The host renders settings.section as one flat list, so the headings are anchored by
+  // position. 应用 also owns the built-in plugins and agent presets; 扩展 then gathers
+  // prompt optimisation, the plugin market, the Smooth skin and the sidebar cards (the
+  // old 外观 heading folded into it instead of opening a fourth group).
+  assert.match(skin, /button:nth-child\(1\)::after\{content:"账户"\}/);
+  assert.match(skin, /button:nth-child\(2\)::after\{content:"应用"\}/);
+  assert.match(skin, /button:nth-child\(6\)::after\{content:"扩展"\}/);
+  assert.doesNotMatch(skin, /content:"外观"/, 'the fourth heading is gone');
+  assert.doesNotMatch(skin, /button:nth-child\(7\)/, 'the seventh cell no longer starts a group');
+  const labels = skin.match(/::after\{content:"(?:账户|应用|扩展|外观)"/g) || [];
+  assert.equal(labels.length, 3, 'exactly three group headings');
+  // Only the two group starts carry the 34px label gap; extensions start at the sixth.
+  assert.match(skin, />button:nth-child\(2\),[\s\S]{0,400}?>button:nth-child\(6\)\{margin-top:34px\}/);
+});
+
+test('the full-workspace settings page lets the shell behind it receive clicks', () => {
+  // The host frames settings in a fixed modal overlay above the whole app. The skin
+  // pins the panel into the workspace (right of the rail), so the overlay and its
+  // transparent mask must stop hit-testing and only the panel may take clicks —
+  // otherwise the rail, tab strip and home button are visible but dead.
+  assert.match(skin, /\[role="presentation"\]:has\(>\[data-shortcut-modal="settings"\]\)\{pointer-events:none\}/);
+  assert.match(skin, /\[role="presentation"\]:has\(>\[data-shortcut-modal="settings"\]\)>\[aria-hidden="true"\]\{background:transparent;backdrop-filter:none;pointer-events:none\}/);
+  assert.match(skin, /\[data-shortcut-modal="settings"\]\{position:fixed;inset:var\(--smooth-caption\) 0 0 var\(--smooth-rail-width\);[^}]*pointer-events:auto\}/);
+});
+
+test('the rail more launcher stays the lowest icon whatever later entries append', () => {
+  // A third-party panel row (the memory library) appends itself to the host's panelList
+  // after the host's own children, which left 更多 above it. The launcher is ordered last
+  // so every later plugin entry still sits above it.
+  assert.match(skin, /\$\{hostPart\('panelList'\)\}>:is\(\$\{hostPart\('moreAnchor'\)\},\*:has\(\$\{hostPart\('moreAnchor'\)\}\)\)\{order:1\}/);
 });

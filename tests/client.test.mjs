@@ -204,7 +204,7 @@ test('built client exports an activatable plugin with every service declared', (
 test('the metadata button labels exist in both locales', () => {
   const runtime = loadClient();
   runtime.plugin.apply(runtime.ctx);
-  for (const key of ['composer.copied', 'composer.switchWorkspace', 'composer.chooseWorkspace', 'composer.copyBranch', 'composer.branchMenu', 'composer.modelMenu', 'composer.searchModel', 'composer.modelLoading', 'composer.noModels', 'composer.reasoningEffort', 'composer.modelFailed', 'composer.searchBranch', 'composer.createBranch', 'composer.newBranch', 'composer.create', 'composer.cancel', 'composer.uncommitted', 'composer.files', 'composer.clean', 'composer.noBranches', 'composer.loading', 'composer.gitUnavailable', 'composer.gitConnectionFailed', 'composer.gitFailed']) {
+  for (const key of ['composer.copied', 'composer.switchWorkspace', 'composer.chooseWorkspace', 'composer.workspaceList', 'composer.searchWorkspace', 'composer.workspaceLoading', 'composer.workspaceNoMatch', 'composer.workspaceEmpty', 'composer.clearSearch', 'composer.defaultWorkspace', 'composer.addWorkspace', 'composer.workspaceErrorTitle', 'composer.workspaceRetry', 'composer.workspaceMissing', 'composer.copyBranch', 'composer.branchMenu', 'composer.modelMenu', 'composer.searchModel', 'composer.modelLoading', 'composer.noModels', 'composer.reasoningEffort', 'composer.modelFailed', 'composer.searchBranch', 'composer.createBranch', 'composer.newBranch', 'composer.create', 'composer.cancel', 'composer.uncommitted', 'composer.files', 'composer.clean', 'composer.noBranches', 'composer.loading', 'composer.gitUnavailable', 'composer.gitConnectionFailed', 'composer.gitFailed']) {
     assert.equal(typeof runtime.dictionaries.zh[key], 'string', `missing zh ${key}`);
     assert.equal(typeof runtime.dictionaries.en[key], 'string', `missing en ${key}`);
   }
@@ -230,9 +230,11 @@ test('hover-revealed controls cannot be pinned open by a clicked control', () =>
   assert.match(sheet, /\.smooth-workspace-filter:has\(:focus-visible\)\{opacity:1;pointer-events:auto\}/);
   assert.ok(!/\.smooth-workspace-filter:focus-within\b/.test(sheet), 'a clicked option must not hold the overlay open');
   assert.match(sheet, /body\[data-smooth-skin\] \.smooth-workspace-filter\{[^}]*opacity:0/, 'the idle state is hidden');
-  // The conversation 对话 / 轨迹 switch and a tab's close button follow the same rule.
-  assert.match(sheet, /\[data-conversation-tabs\]:has\(:focus-visible\)\{opacity:1\}/);
-  assert.ok(!/\[data-conversation-tabs\]:focus-within/.test(sheet), 'a clicked view must not pin the switch open');
+  // The conversation 对话 / 轨迹 switch — with the 更多 launcher sharing its row — and a
+  // tab's close button follow the same rule.
+  assert.match(sheet, /:is\(\[class\$="_tabs"\],\[class\*="_tabs "\]\):has\(:focus-visible\)/);
+  assert.match(sheet, /:is\(\[class\$="_tabs"\],\[class\*="_tabs "\]\)\{[^}]*opacity:0/, 'the idle switch row is hidden');
+  assert.ok(!/:is\(\[class\$="_tabs"\],\[class\*="_tabs "\]\):focus-within/.test(sheet), 'a clicked view must not pin the switch open');
   assert.ok(!/\.smooth-workspace-tab:is\(:hover,:focus-within\)/.test(sheet), 'a clicked tab must not pin its close button');
   runtime.dispose();
 });

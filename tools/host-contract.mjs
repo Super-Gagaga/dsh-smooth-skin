@@ -84,6 +84,8 @@ export const HOST_SLOTS = [
   'conversation.input.permission',
   'conversation.input.left',
   'conversation.hero.agentPreset',
+  'conversation.hero.workspace',
+  'conversation.hero.workspace.directoryFlow',
   'settings.launcher',
   'settings.section',
   'settings.general.item',

@@ -92,7 +92,13 @@ test('the model page shares the panel surface instead of the host menu card', as
   assert.match(composer, /className: 'smooth-git-list', role: 'group'/);
   assert.match(composer, /'data-current': selected \? 'true' : undefined/);
   assert.match(composer, /'aria-current': selected \? 'true' : undefined/);
-  assert.doesNotMatch(composer, /role: 'listbox'/, 'a listbox must implement focus management or not claim to be one');
+  // The model page list keeps plain buttons: it implements no listbox focus contract.
+  const modelList = composer.slice(composer.indexOf('function ModelList'), composer.indexOf('/** The level artwork'));
+  assert.doesNotMatch(modelList, /role: 'listbox'/, 'the model page list must not claim to be a listbox');
+  // The workspace picker is the one list that does implement the combobox contract:
+  // focus stays in its search field and aria-activedescendant names the highlighted row.
+  assert.match(composer, /role: 'listbox'[\s\S]*'aria-activedescendant'/, 'a listbox must name its active row');
+  assert.match(composer, /'aria-selected': selected/, 'the chosen workspace keeps an ARIA statement of being selected');
   // One pick locks its own row, not the whole catalogue: a blanket `disabled: busy` froze
   // every provider's rows for the length of a round trip, so the key is the provider and
   // model together and the handler still guards a second click.
