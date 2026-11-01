@@ -140,9 +140,13 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hos
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')} svg g>circle:first-child{opacity:.4}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')}{height:29px;border-radius:var(--smooth-radius-sm)}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')} :is(${hostPart('folder')},${hostPart('chevron')}){display:none}
-/* Workspace group titles are the sidebar's section headers: they keep the host's own
-   title colour so the tree reads as one list; only their size/weight is tightened. */
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')} ${hostPart('title')}{font-size:13.5px;line-height:19px;font-weight:500}
+/* Workspace group titles are the sidebar's section headers: they keep one host token —
+   label-primary — so the tree reads as one list; only their size is tightened. The weight
+   stays at the host's regular 400. It used to be 500, but the CJK fallback has no medium
+   face: the Latin workspace names (free, …) picked up Segoe UI's medium over 500 while a
+   Chinese group title (默认工作区 / 未分组) fell back to YaHei's regular, so the two read
+   as different colours. 400 exists in both faces and renders every group title alike. */
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('projectRow')} ${hostPart('title')}{font-size:13.5px;line-height:19px;font-weight:400;color:var(--dsw-alias-label-primary)}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sectionLabel')}{font-size:12px;line-height:18px}
 /* Selection in the workspace list is named by the row's fill plus the title's own colour
    and weight. The inset bar that used to run down the selected row's leading edge read as

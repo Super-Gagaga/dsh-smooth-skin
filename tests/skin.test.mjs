@@ -446,10 +446,13 @@ test('the workspace list keeps the reference list rhythm and its leading dot', (
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\} svg \*\{stroke-width:2\.71\}/);
   assert.match(skin, /\$\{hostPart\('sessionRow'\)\}>\$\{hostPart\('slot'\)\} svg g>circle:first-child\{opacity:\.4\}/);
   assert.match(skin, /\$\{hostPart\('projectRow'\)\}\{height:29px;border-radius:var\(--smooth-radius-sm\)\}/);
-  // Workspace group titles keep the host's title colour (the workspace-name colouring is
-  // gone); only their size and weight are tightened.
-  assert.match(skin, /\$\{hostPart\('projectRow'\)\} \$\{hostPart\('title'\)\}\{font-size:13\.5px;line-height:19px;font-weight:500\}/);
-  assert.ok(!/\$\{hostPart\('projectRow'\)\} \$\{hostPart\('title'\)\}\{[^}]*color:/.test(skin), 'workspace names must not be recoloured');
+  // Every workspace group title — a named workspace, the default workspace and the
+  // ungrouped bucket — renders from the same row/title hook, so it must resolve to one
+  // host token and one weight. 400 is deliberate: the CJK fallback has no 500 face, so at
+  // 500 the Latin titles took Segoe UI Medium while 默认工作区 / 未分组 fell back to YaHei
+  // Regular and read as a lighter colour.
+  assert.match(skin, /\$\{hostPart\('projectRow'\)\} \$\{hostPart\('title'\)\}\{font-size:13\.5px;line-height:19px;font-weight:400;color:var\(--dsw-alias-label-primary\)\}/);
+  assert.ok(!/\$\{hostPart\('projectRow'\)\} \$\{hostPart\('title'\)\}\{[^}]*color:(?!var\(--dsw-alias-label-primary\))/.test(skin), 'group titles keep the host label token, never a skin tint');
   assert.match(skin, /\$\{hostPart\('sectionLabel'\)\}\{font-size:12px;line-height:18px\}/);
 });
 
