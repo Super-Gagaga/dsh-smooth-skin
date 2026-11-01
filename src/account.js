@@ -75,6 +75,9 @@ function createAccountExtras(ui, text) {
     const helpId = React.useId();
     React.useLayoutEffect(() => {
       const menu = root.current?.closest('[data-smooth-account-menu]');
+      // Arm the popup's entrance only now that this portal is laid out: the visible scale
+      // then starts on finished content instead of racing the rows this component mounts.
+      menu?.setAttribute('data-smooth-account-open', '');
       const nativeRows = [...(menu?.querySelectorAll(`${accountPart('viewport')}>${accountPart('itemWrap')}`) || [])];
       menu?.toggleAttribute('data-smooth-help-open', help);
       for (const row of nativeRows) {
@@ -86,6 +89,7 @@ function createAccountExtras(ui, text) {
       else if (previousHelp.current) helpButton.current?.focus();
       previousHelp.current = help;
       return () => {
+        menu?.removeAttribute('data-smooth-account-open');
         menu?.removeAttribute('data-smooth-help-open');
         for (const row of nativeRows) { row.removeAttribute('inert'); row.removeAttribute('aria-hidden'); }
       };
@@ -144,6 +148,23 @@ function createAccountExtras(ui, text) {
   };
 }
 
+/** The host unmounts the menu in the same commit that closes it, so a closing animation
+ * needs its own copy: strip the entrance state from a clone and let the closing keyframes
+ * run on that copy while the real menu is removed underneath it. The clone must not carry
+ * the marker the observer looks for, so it is tagged `data-smooth-account-leave` instead
+ * and the menu query skips it. A menu that is already a leaving copy returns undefined. */
+function cloneClosingAccountMenu(menu) {
+  if (!menu || menu.hasAttribute('data-smooth-account-leave')) return undefined;
+  const clone = menu.cloneNode(true);
+  clone.removeAttribute('data-smooth-account-open');
+  clone.setAttribute('data-smooth-account-leave', '');
+  clone.setAttribute('aria-hidden', 'true');
+  clone.setAttribute('inert', '');
+  clone.style.pointerEvents = 'none';
+  for (const node of clone.querySelectorAll('[id]')) node.removeAttribute('id');
+  return clone;
+}
+
 /** Extend the native launcher with portals; retain its authentication dialogs,
  * sign-out confirmation, menu keyboard handling and action closures unchanged. */
 function installAccountMenu({ slots, text }) {
@@ -164,26 +185,67 @@ function installAccountMenu({ slots, text }) {
         const [target, setTarget] = React.useState(null);
         React.useEffect(() => {
           let marked;
+          let leaving;
           const onKey = (event) => { if (marked) navigateAccountMenu(event, marked); };
+          const clearLeaving = () => { if (leaving) { leaving.remove(); leaving = undefined; } };
           const observe = () => {
             const open = root.current?.querySelector('button[data-signed-out][aria-expanded="true"]');
-            const menu = open ? document.querySelector('body > [role="menu"]') : null;
+            const menu = open ? document.querySelector('body > [role="menu"]:not([data-smooth-account-leave])') : null;
             if (marked !== menu) {
               marked?.removeAttribute('data-smooth-account-menu');
               marked?.removeEventListener('keydown', onKey, true);
               marked = menu;
               marked?.addEventListener('keydown', onKey, true);
+              // A fresh menu replaces any copy still playing the closing animation.
+              if (menu) clearLeaving();
             }
             menu?.setAttribute('data-smooth-account-menu', '');
             setTarget(menu?.querySelector(accountPart('viewport')) || null);
           };
+          // Close the menu with the same bottom-left motion it opens with. The host removes
+          // the real menu immediately, so a clone takes over the closing keyframes; it is
+          // appended in the capture phase of the very event that closes the menu, before
+          // the host's commit removes the original.
+          const leave = () => {
+            if (!marked?.isConnected || leaving) return;
+            if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            const clone = cloneClosingAccountMenu(marked);
+            if (!clone) return;
+            document.body.append(clone);
+            leaving = clone;
+            const done = () => { if (leaving === clone) clearLeaving(); };
+            clone.addEventListener('animationend', done, { once: true });
+            setTimeout(done, 260);
+          };
+          const onPointerDown = (event) => {
+            if (marked && !marked.contains(event.target)) leave();
+          };
+          const onClick = (event) => {
+            const item = event.target instanceof Element ? event.target.closest('button[role="menuitem"]') : null;
+            if (item && marked?.contains(item) && !item.closest('.smooth-account-extras')) leave();
+          };
+          const onKeyDown = (event) => { if (event.key === 'Escape') leave(); };
+          const onBlur = () => leave();
           observe();
           // This one needs `aria-expanded` as well, so it keeps its own observer; the
           // callback is coalesced to one pass per frame, which is what keeps the mount
           // storm from turning into one document lookup per commit.
           const observer = new MutationObserver(coalesceFrame(observe));
           observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-expanded'] });
-          return () => { observer.disconnect(); marked?.removeEventListener('keydown', onKey, true); marked?.removeAttribute('data-smooth-account-menu'); };
+          document.addEventListener('pointerdown', onPointerDown, true);
+          document.addEventListener('click', onClick, true);
+          document.addEventListener('keydown', onKeyDown, true);
+          window.addEventListener('blur', onBlur);
+          return () => {
+            observer.disconnect();
+            document.removeEventListener('pointerdown', onPointerDown, true);
+            document.removeEventListener('click', onClick, true);
+            document.removeEventListener('keydown', onKeyDown, true);
+            window.removeEventListener('blur', onBlur);
+            marked?.removeEventListener('keydown', onKey, true);
+            marked?.removeAttribute('data-smooth-account-menu');
+            clearLeaving();
+          };
         }, []);
         return h('div', { className: 'smooth-account-launcher', ref: root },
           h(native.component, props), target && createPortal(h(Extras, props), target));

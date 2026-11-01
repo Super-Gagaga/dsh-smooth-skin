@@ -12,7 +12,7 @@ function runtime() {
     Fragment: 'fragment', useId: () => `id-${index++}`, useRef: value => ({ current: value }), useEffect: () => {}, useLayoutEffect: () => {},
     useState: initial => { const i = index++; if (!(i in state)) state[i] = initial; return [state[i], value => { state[i] = typeof value === 'function' ? value(state[i]) : value; }]; },
   } };
-  runInNewContext(source + '\nglobalThis.api = { formatAccountAmount, accountWallets, createAccountExtras, installAccountMenu, navigateAccountMenu };', sandbox);
+  runInNewContext(source + '\nglobalThis.api = { formatAccountAmount, accountWallets, createAccountExtras, installAccountMenu, navigateAccountMenu, cloneClosingAccountMenu };', sandbox);
   return { ...sandbox.api, sandbox, render: (Component, props) => { index = 0; return Component(props); }, reset: () => { state = []; } };
 }
 const flatten = node => node && typeof node === 'object' ? [node, ...(node.children || []).flatMap(flatten)] : [];
@@ -178,4 +178,67 @@ test('launcher retains native account operations and restores its registration o
   dispose();
   assert.deepEqual(entries, [native]);
   assert.equal(subscription, undefined);
+});
+
+test('the popup entrance is armed only after the portal has laid out', () => {
+  // The menu's scale animation used to start the moment it mounted, so the profile card
+  // this portal renders landed in the middle of the animation and stalled it. The layout
+  // effect arms the entrance (and the cleanup disarms it) instead.
+  const layoutEffects = [];
+  let index = 0;
+  const h = (type, props, ...children) => ({ type, props: props || {}, children: children.flat(Infinity).filter(child => child !== undefined && child !== null && child !== false) });
+  const sandbox = {
+    h, PLUGIN_ID: 'smooth', hostPart: name => `.${name}`, accountPart: name => `.account-${name}`,
+    React: {
+      Fragment: 'fragment', useId: () => `id-${index++}`, useRef: value => ({ current: value }),
+      useState: initial => [initial, () => {}], useEffect: () => {},
+      useLayoutEffect: effect => { layoutEffects.push(effect); },
+    },
+  };
+  runInNewContext(`${source}\nglobalThis.api = { createAccountExtras };`, sandbox);
+  const ui = new Proxy({}, { get: () => () => 'icon' });
+  const Extras = sandbox.api.createAccountExtras(ui, (key, fallback) => fallback ?? key);
+  const tree = Extras({ useAccount: selector => selector({}), refreshAccount: undefined, t: key => key });
+  const find = node => node && typeof node === 'object'
+    ? (node.props?.className === 'smooth-account-extras' ? node : (node.children || []).map(find).find(Boolean))
+    : undefined;
+  const root = find(tree);
+  assert.ok(root, 'the extras root renders');
+  const attributes = {};
+  const menu = {
+    setAttribute: (key, value) => { attributes[key] = value; },
+    removeAttribute: key => { delete attributes[key]; },
+    toggleAttribute: () => {}, querySelectorAll: () => [],
+  };
+  root.props.ref.current = { closest: () => menu };
+  const cleanups = layoutEffects.map(effect => effect()).filter(Boolean);
+  assert.equal(attributes['data-smooth-account-open'], '');
+  for (const cleanup of cleanups) cleanup();
+  assert.equal(attributes['data-smooth-account-open'], undefined);
+});
+
+test('the closing animation runs on a detached copy of the open menu', () => {
+  // The host removes the real menu in the same commit that closes it, so account.js
+  // clones it just before and tags the copy for the reverse keyframes.
+  const r = runtime();
+  const original = { 'data-smooth-account-menu': '', 'data-smooth-account-open': '' };
+  const cloned = {};
+  const ids = [{ name: 'viewport' }, { name: 'balance' }];
+  const clone = {
+    style: {},
+    setAttribute: (key, value) => { cloned[key] = value; },
+    removeAttribute: key => { delete cloned[key]; },
+    querySelectorAll: () => ids.map(node => ({ removeAttribute: () => { node.removed = true; } })),
+  };
+  const menu = { hasAttribute: key => key in original, cloneNode: () => clone };
+  const copy = r.cloneClosingAccountMenu(menu);
+  assert.equal(copy, clone);
+  assert.equal(original['data-smooth-account-open'], '', 'the original keeps its entrance state');
+  assert.equal('data-smooth-account-open' in cloned, false, 'the copy drops the entrance state');
+  assert.equal(cloned['data-smooth-account-leave'], '', 'the copy is tagged for the closing keyframes');
+  assert.equal(cloned['aria-hidden'], 'true');
+  assert.equal(cloned.inert, '');
+  assert.equal(clone.style.pointerEvents, 'none');
+  assert.deepEqual(ids.map(node => node.removed), [true, true], 'duplicate ids are stripped from the copy');
+  assert.equal(r.cloneClosingAccountMenu({ hasAttribute: () => true }), undefined, 'a leaving copy is never cloned again');
 });

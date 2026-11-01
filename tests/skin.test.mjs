@@ -314,6 +314,27 @@ test('the desktop update pill folds into the icon rail without catching the conn
   assert.ok(!/\$\{hostPart\('indicator'\)\}\{/.test(skin), 'a bare indicator rule would also restyle the connection status');
 });
 
+test('the account popup grows out of its bottom-left corner without stalling', () => {
+  // The avatar sits under the popup's bottom-left corner. Scaling the native menu from
+  // that corner (instead of fading it in place) makes the panel read as coming out of the
+  // avatar; the host still owns the menu contents, focus and dismissal.
+  //
+  // Two details keep the entrance smooth: the popup drops the host's backdrop blur (its
+  // 96%-opaque surface hides it anyway, and a blurred backdrop forces every scale step to
+  // re-filter), and the portal arms the entrance only after it has laid out. The delayed
+  // animation is the fallback for a client half that never arms it.
+  assert.match(skin, /\$\{accountMenu\}\{[\s\S]*?--dsw-menu-backdrop-filter:none/);
+  assert.match(skin, /\$\{accountMenu\}\{[\s\S]*?transform-origin:left bottom;\s*will-change:transform,opacity;\s*animation:smooth-account-pop \.2s cubic-bezier\(\.2,0,0,1\) \.12s both/);
+  assert.match(skin, /@keyframes smooth-account-pop\{from\{opacity:0;transform:scale\(\.82\) translateY\(4px\)\}to\{opacity:1;transform:none\}\}/);
+  assert.match(skin, /\$\{accountMenu\}\[data-smooth-account-open\]\{animation:smooth-account-pop-armed \.2s cubic-bezier\(\.2,0,0,1\) both\}/);
+  assert.match(skin, /@keyframes smooth-account-pop-armed\{from\{opacity:0;transform:scale\(\.82\) translateY\(4px\)\}to\{opacity:1;transform:none\}\}/);
+  // The host unmounts the closed menu at once, so account.js runs the reverse keyframes
+  // on a clone tagged data-smooth-account-leave instead of losing the exit motion.
+  assert.match(skin, /@keyframes smooth-account-leave\{from\{opacity:1;transform:none\}to\{opacity:0;transform:scale\(\.82\) translateY\(4px\)\}\}/);
+  assert.match(skin, /\$\{accountMenu\}\[data-smooth-account-leave\]\{animation:smooth-account-leave \.16s cubic-bezier\(\.4,0,1,1\) both;pointer-events:none\}/);
+  assert.match(skin, /@media\(prefers-reduced-motion:reduce\)\{\$\{accountMenu\},\$\{accountMenu\}\[data-smooth-account-open\],\$\{accountMenu\}\[data-smooth-account-leave\]\{animation:none\}\}/);
+});
+
 test('the tab scroll arrows float over the strip instead of squeezing its width', () => {
   // As flex items, the arrows took 22px + gap out of the nav whenever an edge began
   // to overflow, reflowing every tab and feeding the overflow observer. They are
@@ -364,6 +385,36 @@ test('the selected workspace tab keeps the shared fill and only a whisper of a r
   assert.match(skin, /body\[data-smooth-skin\] \.smooth-workspace-tab\[data-selected="true"\]:hover\{background-color:color-mix\(in srgb,var\(--smooth-selected\) 94%,var\(--smooth-text\)\)\}/);
   assert.ok(!/smooth-workspace-tab\[data-selected="true"\]\{background-color:color-mix/.test(skin), 'the muted-grey mix is gone');
   assert.ok(!/workspace-tab\[data-selected="true"\]\{[^}]*inset 0 0 0 1px var\(--smooth-indicator\)/.test(skin), 'the full-strength ring is gone');
+});
+
+test('the light tones keep the selected caption chip at the sidebar weight', async () => {
+  // The caption ground is near-white while the sidebar's is grey, so the shared selection
+  // token landed on the bar as a 1.31:1 chip — a dark block at the top of a light window —
+  // while the very same token is a 1.12:1 whisper in the sidebar. The light tones therefore
+  // mix the fill back toward the caption surface, and both hover steps are scaled to that
+  // lighter chip: the selected hover deepens one step, and the unselected hover is a whisper
+  // of ink instead of a grey layer that sat closer to the chip than to the bar. Dark tones
+  // keep the plain token, because there the bar ground already matches the token's tone.
+  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]\{background:color-mix\(in srgb,var\(--smooth-selected\) 46%,var\(--smooth-surface\)\)\}/);
+  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab:not\(\[data-selected="true"\]\):hover\{background-color:color-mix\(in srgb,var\(--smooth-text\) 4%,var\(--smooth-surface\)\)\}/);
+  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]:hover\{background-color:color-mix\(in srgb,var\(--smooth-selected\) 64%,var\(--smooth-surface\)\)\}/);
+  assert.ok(!/body\[data-smooth-skin\]\[data-ds-dark-theme\][^\n]*\.smooth-workspace-tab\[data-selected="true"\]\{background:color-mix/.test(skin), 'dark tones keep the plain token');
+
+  // The chip should weigh what the same token weighs on the sidebar's own ground.
+  const mix = (from, into, weight) => '#' + [1, 3, 5].map((index) => Math.round(
+    Number.parseInt(from.slice(index, index + 2), 16) * weight
+      + Number.parseInt(into.slice(index, index + 2), 16) * (1 - weight),
+  ).toString(16).padStart(2, '0')).join('');
+  const { buildTokens, themeTone, THEME_PRESETS } = await loadHostHalf();
+  for (const id of THEME_PRESETS.filter((name) => themeTone(name) === 'light')) {
+    const tokens = buildTokens({ enabled: true, theme: id });
+    const bar = tokens['--smooth-surface'].light;
+    const chip = mix(tokens['--smooth-selected'].light, bar, .46);
+    const chipOnBar = contrastRatio(chip, bar);
+    const sidebarWeight = contrastRatio(tokens['--smooth-selected'].light, tokens['--smooth-sidebar'].light);
+    assert.ok(Math.abs(chipOnBar - sidebarWeight) < .05, `${id}: chip ${chipOnBar.toFixed(2)}:1 against the bar, sidebar ${sidebarWeight.toFixed(2)}:1`);
+    assert.ok(chipOnBar < contrastRatio(tokens['--smooth-selected'].light, bar), `${id}: the chip stays lighter than the raw token`);
+  }
 });
 
 test('the selected workspace tab keeps the same weight as the others', () => {

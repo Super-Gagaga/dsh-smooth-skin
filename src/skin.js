@@ -575,7 +575,11 @@ body[data-smooth-skin] [role="menuitem"]{border-radius:var(--smooth-radius-sm)}
 ${accountMenu}{
   --smooth-account-unit:.75px;
   --dsw-menu-surface-fill:color-mix(in srgb,var(--dsw-alias-bg-overlay) 96%,transparent);
-  --dsw-menu-backdrop-filter:blur(16px);
+  /* The surface above is 96% opaque, so the host's backdrop blur adds almost nothing
+     visible. It does force every scale step of the entrance to re-filter the backdrop
+     (and keeps the transform off the compositor), which is what made the popup stall
+     mid-open; this one popup drops the blur and keeps the same look. */
+  --dsw-menu-backdrop-filter:none;
   /* Nudge the popup a few pixels clear of the rail's silhouette: the avatar stays the
      anchor, the menu just stops crowding the column edge. */
   inset:auto auto calc(8 * var(--smooth-account-unit)) max(12px,calc(var(--smooth-rail-width) - 10 * var(--smooth-account-unit) + 6px))!important;
@@ -584,7 +588,26 @@ ${accountMenu}{
   padding:calc(8 * var(--smooth-account-unit)) calc(6 * var(--smooth-account-unit));
   border:1px solid var(--smooth-line);border-radius:var(--smooth-radius-lg);corner-shape:round;
   background:transparent;box-shadow:var(--smooth-shadow-2);font-family:inherit;font-size:var(--dsh-content-font-size,14px);
+  /* The avatar sits under the popup's bottom-left corner, so the entrance grows out of
+     that corner instead of fading in place: the menu reads as opening from the avatar.
+     The host mounts its rows, and the skin's own profile portal, in the frames right after
+     the menu appears; mounting that content in the middle of the scale is what made the
+     popup hitch. The portal arms the entrance (data-smooth-account-open) once it has laid
+     out, so the visible scale starts on finished content; the delayed animation below is
+     only the fallback for a client half that never arms it. will-change keeps the
+     transform composited. */
+  transform-origin:left bottom;
+  will-change:transform,opacity;
+  animation:smooth-account-pop .2s cubic-bezier(.2,0,0,1) .12s both;
 }
+@keyframes smooth-account-pop{from{opacity:0;transform:scale(.82) translateY(4px)}to{opacity:1;transform:none}}
+@keyframes smooth-account-pop-armed{from{opacity:0;transform:scale(.82) translateY(4px)}to{opacity:1;transform:none}}
+${accountMenu}[data-smooth-account-open]{animation:smooth-account-pop-armed .2s cubic-bezier(.2,0,0,1) both}
+/* The host drops the real menu as soon as it closes, so account.js keeps a clone and runs
+   the closing keyframes on it: the same bottom-left corner, played in reverse. */
+@keyframes smooth-account-leave{from{opacity:1;transform:none}to{opacity:0;transform:scale(.82) translateY(4px)}}
+${accountMenu}[data-smooth-account-leave]{animation:smooth-account-leave .16s cubic-bezier(.4,0,1,1) both;pointer-events:none}
+@media(prefers-reduced-motion:reduce){${accountMenu},${accountMenu}[data-smooth-account-open],${accountMenu}[data-smooth-account-leave]{animation:none}}
 ${accountMenu} ${accountPart('viewport')}{display:grid;grid-template-columns:minmax(0,1fr);min-width:0;overflow-x:hidden}
 ${accountMenu} [role="menuitem"]{
   display:flex;align-items:center;width:100%;border:0;background:transparent;text-align:left;cursor:pointer;
@@ -748,6 +771,18 @@ body[data-smooth-skin] .smooth-workspace-tab[data-preview="true"] .smooth-tab-la
    shift every tab when the active one changes. */
 body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]{background:var(--smooth-selected);border-color:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--smooth-indicator) 22%,transparent)}
 body[data-smooth-skin] .smooth-workspace-tab:hover{background:var(--smooth-surface-3)}
+/* The caption ground is near-white in the light tones, so the shared selection fill lands
+   on it as a heavy chip: 1.31:1 against the bar, while the very same token on the sidebar's
+   own grey ground is a 1.12:1 whisper. At the top of a light window that read as a dark
+   block, not as the same selection the sidebar shows. The light tones mix the fill back
+   toward the caption surface until the chip carries the sidebar's weight, scale the hover
+   step to the same curve (so the chip never jumps dark under the pointer), and give the
+   unselected hover a whisper of ink instead of a grey layer, which otherwise sat closer to
+   the chip than to the bar. Dark tones keep the plain token: there the bar ground already
+   matches the token's tone. */
+body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab[data-selected="true"]{background:color-mix(in srgb,var(--smooth-selected) 46%,var(--smooth-surface))}
+body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab:not([data-selected="true"]):hover{background-color:color-mix(in srgb,var(--smooth-text) 4%,var(--smooth-surface))}
+body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-selected) 64%,var(--smooth-surface))}
 body[data-smooth-skin] .smooth-tab-close{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--smooth-muted);cursor:pointer}
 /* Pointer reorder: a short | floats in the gap, not on a tab border. Tabs clip
    their own overflow for the ellipsis, so the indicator is a nav child instead. */
