@@ -59,6 +59,15 @@ const CSS = `/* injected through the package stylesheet; kept beside the skin ru
 .smooth-size input:disabled{opacity:.5}
 .smooth-size-times{color:var(--dsw-alias-label-secondary);font-size:12.5px}
 .smooth-size-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;margin-top:7px;font-size:12px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.smooth-range{display:flex;align-items:center;gap:12px;flex:none;width:min(280px,46vw)}
+.smooth-range input[type="range"]{flex:1;min-width:0;height:20px;margin:0;appearance:none;-webkit-appearance:none;background:transparent;cursor:pointer;accent-color:var(--dsw-alias-brand-primary,#3f6fd8)}
+.smooth-range input[type="range"]::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-primary) 18%,transparent)}
+.smooth-range input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:16px;height:16px;margin-top:-6px;border:0;border-radius:50%;background:var(--dsw-alias-brand-primary,#3f6fd8);box-shadow:0 1px 2px rgba(0,0,0,.18)}
+.smooth-range input[type="range"]::-moz-range-track{height:4px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-primary) 18%,transparent)}
+.smooth-range input[type="range"]::-moz-range-thumb{box-sizing:border-box;width:16px;height:16px;border:0;border-radius:50%;background:var(--dsw-alias-brand-primary,#3f6fd8)}
+.smooth-range input[type="range"]:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:4px;border-radius:999px}
+.smooth-range input[type="range"]:disabled{opacity:.5;cursor:default}
+.smooth-range-value{flex:none;min-width:42px;text-align:right;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary)}
 .smooth-link{font:inherit;font-size:12px;padding:0;border:0;background:none;color:var(--dsw-alias-label-secondary);cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-decoration-color:color-mix(in srgb,currentColor 35%,transparent)}
 .smooth-link:hover:not(:disabled){color:var(--dsw-alias-label-primary)}
 .smooth-link:disabled{opacity:.45;cursor:default;text-decoration:none}
@@ -69,7 +78,7 @@ const CSS = `/* injected through the package stylesheet; kept beside the skin ru
 .smooth-button:disabled{opacity:.5;cursor:default}
 .smooth-status{font-size:12.5px;color:var(--dsw-alias-label-secondary)}
 .smooth-status[data-error="true"]{color:var(--dsw-alias-state-error-primary)}
-@media(max-width:600px){.smooth-themes{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.smooth-theme{padding:10px 4px;font-size:12px}.smooth-row{gap:14px}.smooth-row--size{flex-direction:column;align-items:stretch;gap:12px}.smooth-size{justify-content:flex-start}.smooth-size input{width:64px}}
+@media(max-width:600px){.smooth-themes{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.smooth-theme{padding:10px 4px;font-size:12px}.smooth-row{gap:14px}.smooth-row--size{flex-direction:column;align-items:stretch;gap:12px}.smooth-size{justify-content:flex-start}.smooth-size input{width:64px}.smooth-range{width:100%}}
 @media(prefers-reduced-motion:reduce){.smooth-switch,.smooth-switch::after,.smooth-theme{transition:none}}
 `;
 
@@ -304,9 +313,41 @@ function apply(ctx) {
     styleDispose = () => { style.remove(); styleDispose = undefined; };
   }
 
+  /** The translucency is one CSS variable on the body: the stylesheet derives every
+   * translucent surface colour from it, so changing the slider is a single paint and
+   * reaches no host service. 100% keeps every page surface solid. */
+  function syncGlass() {
+    const style = document.body && document.body.style;
+    if (!style || typeof style.setProperty !== 'function') return;
+    if (!state.enabled) {
+      style.removeProperty('--smooth-glass');
+      style.removeProperty('--smooth-glass-soft');
+      style.removeProperty('--smooth-glass-overlay');
+      style.removeProperty('--smooth-glass-mild');
+      return;
+    }
+    style.setProperty('--smooth-glass', `${100 - state.translucency}%`);
+    // The icon rail sits on the sidebar and the tab strip sits on the caption strip, so
+    // the page weight would stack there and leave a nearly solid band. These two grounds
+    // drop faster (the page weight to the fourth): at 30% they read about as see-through
+    // as the conversation, while 0% still leaves the old solid rail and strip.
+    const soft = Math.round(((100 - state.translucency) / 100) ** 4 * 100);
+    style.setProperty('--smooth-glass-soft', `${soft}%`);
+    // Overlays (settings, menus) keep almost all of their fill: a page-weight panel over
+    // the conversation shows the text behind it, which is what made them hard to read.
+    // They still slide with the setting, but eight times slower and never below 85%.
+    style.setProperty('--smooth-glass-overlay', `${Math.max(85, 100 - Math.round(state.translucency / 8))}%`);
+    // Component fills move a third as fast as the page: at 30% they are 90% opaque, at
+    // 100% 67%. 1/2 read as too much of a change next to the page's own glass; 1/5 was
+    // invisible. This sits between the two.
+    style.setProperty('--smooth-glass-mild', `${100 - Math.round(state.translucency / 3)}%`);
+  }
+
+
   function sync() {
     if (disposed) return;
     document.body.toggleAttribute(SKIN_ATTRIBUTE, !!state.enabled);
+    syncGlass();
     // The welcome block's flag is published by the chrome component while it is mounted,
     // so a skin that is switched off has to take it down itself.
     if (!state.enabled) document.body.removeAttribute(HOME_ATTRIBUTE);
@@ -451,6 +492,28 @@ function apply(ctx) {
         }, h('i', { style: { background: option.color } }), h('span', null, option.label)))));
   }
 
+  /** One percentage slider: the page's glass weight. The number sits beside the track so
+   * the setting is readable without hovering the thumb; the stylesheet reads it from the
+   * CSS variable the page writes on the body. */
+  function RangeRow(props) {
+    return h('div', { className: 'smooth-row smooth-row--range' },
+      h('div', { className: 'smooth-row-copy' },
+        h('h3', null, props.title),
+        props.hint ? h('small', null, props.hint) : null),
+      h('div', { className: 'smooth-range' },
+        h('input', {
+          type: 'range',
+          min: props.min ?? 0,
+          max: props.max ?? 100,
+          step: props.step ?? 1,
+          value: props.value,
+          disabled: props.disabled,
+          'aria-label': props.title,
+          onChange: (event) => props.onChange(Number(event.target.value)),
+        }),
+        h('output', { className: 'smooth-range-value', 'aria-hidden': 'true' }, `${props.value}%`)));
+  }
+
   /** The outer size of the window the settings page is drawn in, or an empty string when
    * the platform does not expose it (a browser tab still exposes it, a frame does not). */
   function windowSizeReadout() {
@@ -518,6 +581,9 @@ function apply(ctx) {
     const view = useSmoothState();
     const current = view.state;
     const disabled = !view.ready;
+    // The patched desktop shell marks the body after each load; the stylesheet keys its
+    // window-glass rules on the same attribute, and the copy follows it here.
+    const windowGlass = document.body.hasAttribute(WINDOW_GLASS_ATTRIBUTE);
     const [playing, setPlaying] = React.useState(false);
     const reducedMotion = !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
     const themeOptions = [
@@ -562,6 +628,15 @@ function apply(ctx) {
           options: themeOptions,
           onChange: (value) => view.update({ ...current, theme: value }),
         }),
+        h(RangeRow, {
+          title: text('settings.translucency', 'Background transparency'),
+          hint: windowGlass
+            ? text('settings.translucencyHintWindow', '0% keeps the page solid; higher values let the window’s system acrylic — a frosted view of the desktop — show through the background.')
+            : text('settings.translucencyHint', '0% keeps the page background solid; higher values let the skin’s own soft gradient show through.'),
+          value: current.translucency,
+          disabled: disabled || !current.enabled,
+          onChange: (value) => view.update({ ...current, translucency: value }),
+        }),
         h(MarkRow, {
           title: text('settings.mark', 'Mark colour'),
           hint: text('settings.markHint', 'Referenced files and key hints in the conversation, and the workspace names in the sidebar.'),
@@ -604,7 +679,7 @@ function apply(ctx) {
               type: 'button',
               className: 'smooth-button',
               disabled,
-              onClick: () => view.update({ enabled: true, theme: 'auto', boot: true, mark: 'blue', windowSize: { enabled: true, ...DEFAULT_WINDOW_SIZE } }),
+              onClick: () => view.update({ enabled: true, theme: 'auto', boot: true, mark: 'blue', translucency: DEFAULTS.translucency, windowSize: { enabled: true, ...DEFAULT_WINDOW_SIZE } }),
             }, text('settings.reset', 'Reset to defaults')),
             h('span', { className: 'smooth-note' }, text('settings.autosave', 'Changes are saved automatically.'))),
           h('span', {
@@ -633,6 +708,8 @@ function apply(ctx) {
     styleDispose?.();
     splashStyle?.remove?.();
     splashStyle = undefined;
+    // The glass weight is inline state on the body; the host body comes back as it was.
+    document.body.style?.removeProperty?.('--smooth-glass');
     document.body.removeAttribute(SKIN_ATTRIBUTE);
     // The welcome block's flag is published while the chrome is mounted; a disabled
     // skin must not leave it behind (it is gated on the skin attribute anyway, but the

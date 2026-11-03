@@ -71,8 +71,18 @@ test('normalize clamps unknown persisted values to the defaults', async () => {
   const { normalize, DEFAULTS } = await loadHostHalf();
   assert.deepEqual(normalize(null), DEFAULTS);
   assert.deepEqual(normalize({ enabled: 'yes', theme: 'neon' }), DEFAULTS);
-  assert.deepEqual(normalize({ enabled: false, theme: 'iron' }), { enabled: false, theme: 'iron', boot: true, mark: DEFAULTS.mark, windowSize: DEFAULTS.windowSize });
-  assert.deepEqual(normalize({ enabled: true, theme: 'auto', boot: false }), { enabled: true, theme: 'auto', boot: false, mark: DEFAULTS.mark, windowSize: DEFAULTS.windowSize });
+  assert.deepEqual(normalize({ enabled: false, theme: 'iron' }), { enabled: false, theme: 'iron', boot: true, mark: DEFAULTS.mark, translucency: DEFAULTS.translucency, windowSize: DEFAULTS.windowSize });
+  assert.deepEqual(normalize({ enabled: true, theme: 'auto', boot: false }), { enabled: true, theme: 'auto', boot: false, mark: DEFAULTS.mark, translucency: DEFAULTS.translucency, windowSize: DEFAULTS.windowSize });
+  // The background translucency is a whole percentage; bad input keeps the default.
+  assert.equal(normalize({}).translucency, DEFAULTS.translucency);
+  assert.equal(normalize({ translucency: 0 }).translucency, 0);
+  assert.equal(normalize({ translucency: 100 }).translucency, 100);
+  assert.equal(normalize({ translucency: 41.6 }).translucency, 42, 'fractions are rounded');
+  assert.equal(normalize({ translucency: 240 }).translucency, 100, 'above the range clamps to 100');
+  assert.equal(normalize({ translucency: -8 }).translucency, 0, 'below the range clamps to 0');
+  for (const bad of ['loud', null, {}, NaN]) {
+    assert.equal(normalize({ translucency: bad }).translucency, DEFAULTS.translucency, `bad input ${String(bad)} keeps the default`);
+  }
   // The mark colour is one of the offered choices; anything else falls back to blue.
   assert.equal(normalize({ mark: 'violet' }).mark, 'violet');
   assert.equal(normalize({ mark: 'chartreuse' }).mark, DEFAULTS.mark);
@@ -221,14 +231,14 @@ test('the effort thumb is a glider that slides between stops and follows a drag'
   assert.doesNotMatch(skin, /\.smooth-model-level::before\{[^}]*box-shadow/, 'the sub-threshold halo on the dot is gone');
   // The model list marks the current row with the skin's own selection fill, like every
   // other selected state, rather than a raw host token with a grey fallback.
-  assert.match(skin, /\.smooth-git-row\[data-current="true"\]\{background:var\(--smooth-selected\)\}/, 'the current model row uses the skin selection token');
+  assert.match(skin, /\.smooth-git-row\[data-current="true"\]\{background:var\(--smooth-selected-mild\)\}/, 'the current model row uses the skin selection token');
   assert.doesNotMatch(skin, /\.smooth-git-row\[data-current="true"\]\{background:var\(--dsw-alias-interactive-bg-active/, 'no raw host token for a selected row');
   // A failed effort commit is the same class of event as a failed Git action, so it takes
   // the same alert chip instead of a bare 10.5px red line. The chip tints over the surface
   // rather than staying transparent: a red wash behind red text closes the contrast gap it
   // needs, so the ink is pulled toward the label colour to hold AA on the dark base.
   const chip = skin.match(/\.smooth-model-error\{[^}]*\}/)?.[0] || '';
-  assert.match(chip, /background:color-mix\(in srgb,var\(--dsw-alias-state-error-primary\) 10%,var\(--smooth-surface-2\)\)/, 'the effort error reads as an alert chip');
+  assert.match(chip, /background:color-mix\(in srgb,var\(--dsw-alias-state-error-primary\) 10%,var\(--smooth-surface-2-mild\)\)/, 'the effort error reads as an alert chip');
   assert.match(chip, /color:color-mix\(in srgb,var\(--dsw-alias-state-error-primary\) 82%,var\(--smooth-text\)\)/, 'the error ink keeps its contrast over its own tint');
   // Both pages of the panel share one viewport and cross-fade, so their insets must agree
   // or the content jumps sideways on every switch.
@@ -245,7 +255,7 @@ test('the workspace menu scrolls its rows inside a bounded popover', () => {
   assert.match(skin, /\.smooth-workspace-menu \.smooth-git-list\{[^}]*max-height:min\(38vh,300px\)[^}]*overscroll-behavior:contain/, 'the rows scroll inside a capped height');
   assert.match(skin, /\.smooth-workspace-menu \.smooth-git-footer\{flex:none\}/, 'the add row never shrinks away behind the list');
   assert.match(skin, /\.smooth-workspace-menu \.smooth-git-list\{[^}]*flex:1 1 auto/, 'the list takes the remaining height');
-  assert.match(skin, /\.smooth-workspace-menu \.smooth-git-row\[data-active="true"\]\{background:color-mix\(in srgb,var\(--smooth-surface-3\) 72%,var\(--smooth-text\)\);box-shadow:inset 0 0 0 1px var\(--smooth-accent\)\}/, 'the keyboard row lifts off the menu surface and takes the accent focus ring');
+  assert.match(skin, /\.smooth-workspace-menu \.smooth-git-row\[data-active="true"\]\{background:color-mix\(in srgb,var\(--smooth-surface-3-mild\) 72%,var\(--smooth-text\)\);box-shadow:inset 0 0 0 1px var\(--smooth-accent\)\}/, 'the keyboard row lifts off the menu surface and takes the accent focus ring');
   assert.match(skin, /\.smooth-workspace-menu \.smooth-git-row:hover:not\(:disabled\):not\(\[data-current="true"\]\)\{background:color-mix/, 'hover is visible on the mixed menu surface without overriding the selected row');
   assert.doesNotMatch(skin, /\.smooth-workspace-path\{/, 'the row carries the workspace name only, no path line');
   assert.match(skin, /\.smooth-git-check\{[^}]*width:14px;height:14px/, "the row check keeps the host menu's own 14px glyph size");
@@ -306,7 +316,7 @@ test('the desktop update pill folds into the icon rail without catching the conn
   // The rail buttons are transparent; the host's update pill is a brand-tinted call to
   // action, so its box goes and only the blue status icon keeps the brand colour.
   assert.match(skin, /\$\{hostPart\('indicator'\)\}\[aria-disabled\]\{[^}]*border:0;background:transparent;color:var\(--dsw-alias-brand-primary-new-colorprimary-new-color\)/);
-  assert.match(skin, /\$\{hostPart\('indicator'\)\}\[aria-disabled\]:hover:not\(\[aria-disabled="true"\]\)\{background:var\(--smooth-surface-3\);color:var\(--dsw-alias-brand-primary-new-colorprimary-new-color\)\}/);
+  assert.match(skin, /\$\{hostPart\('indicator'\)\}\[aria-disabled\]:hover:not\(\[aria-disabled="true"\]\)\{background:var\(--smooth-surface-3-mild\);color:var\(--dsw-alias-brand-primary-new-colorprimary-new-color\)\}/);
   // An error is status, not chrome: it keeps the native red dot on the neutral button.
   assert.match(skin, /\$\{hostPart\('indicator'\)\}\[aria-disabled\] \$\{hostPart\('errorDot'\)\}\{background:var\(--dsw-alias-state-error-primary\)\}/);
   // aria-disabled is the discriminator: the connection status beside it carries data-phase
@@ -339,7 +349,7 @@ test('the tab scroll arrows float over the strip instead of squeezing its width'
   // As flex items, the arrows took 22px + gap out of the nav whenever an edge began
   // to overflow, reflowing every tab and feeding the overflow observer. They are
   // absolute overlays now, so showing/hiding one cannot change the strip width.
-  assert.match(skin, /\.smooth-tab-scroll\{[^}]*position:absolute[^}]*background:var\(--smooth-surface\)/);
+  assert.match(skin, /\.smooth-tab-scroll\{[^}]*position:absolute[^}]*background:var\(--smooth-surface-mild\)/);
   assert.match(skin, /\.smooth-tab-scroll\[data-side="left"\]\{left:calc\(10 \* var\(--smooth-u\)\)\}/);
   assert.match(skin, /\.smooth-tab-scroll\[data-side="right"\]\{right:calc\(10 \* var\(--smooth-u\)\)\}/);
   assert.ok(!/\.smooth-tab-scroll\{[^}]*flex:none/.test(skin), 'the arrows no longer participate in the flex line');
@@ -381,8 +391,8 @@ test('the selected workspace tab keeps the shared fill and only a whisper of a r
   // rest of the light selection states already use. The rim is no longer a full-strength
   // indicator outline: it is mixed mostly into that fill, so it softens the chip's edge
   // instead of drawing a second border around the active tab.
-  assert.match(skin, /body\[data-smooth-skin\] \.smooth-workspace-tab\[data-selected="true"\]\{background:var\(--smooth-selected\);border-color:transparent;box-shadow:inset 0 0 0 1px color-mix\(in srgb,var\(--smooth-indicator\) 22%,transparent\)\}/);
-  assert.match(skin, /body\[data-smooth-skin\] \.smooth-workspace-tab\[data-selected="true"\]:hover\{background-color:color-mix\(in srgb,var\(--smooth-selected\) 94%,var\(--smooth-text\)\)\}/);
+  assert.match(skin, /body\[data-smooth-skin\] \.smooth-workspace-tab\[data-selected="true"\]\{background:var\(--smooth-selected-mild\);border-color:transparent;box-shadow:inset 0 0 0 1px color-mix\(in srgb,var\(--smooth-indicator\) 22%,transparent\)\}/);
+  assert.match(skin, /body\[data-smooth-skin\] \.smooth-workspace-tab\[data-selected="true"\]:hover\{background-color:color-mix\(in srgb,var\(--smooth-selected-mild\) 94%,var\(--smooth-text\)\)\}/);
   assert.ok(!/smooth-workspace-tab\[data-selected="true"\]\{background-color:color-mix/.test(skin), 'the muted-grey mix is gone');
   assert.ok(!/workspace-tab\[data-selected="true"\]\{[^}]*inset 0 0 0 1px var\(--smooth-indicator\)/.test(skin), 'the full-strength ring is gone');
 });
@@ -395,9 +405,9 @@ test('the light tones keep the selected caption chip at the sidebar weight', asy
   // lighter chip: the selected hover deepens one step, and the unselected hover is a whisper
   // of ink instead of a grey layer that sat closer to the chip than to the bar. Dark tones
   // keep the plain token, because there the bar ground already matches the token's tone.
-  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]\{background:color-mix\(in srgb,var\(--smooth-selected\) 46%,var\(--smooth-surface\)\)\}/);
-  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab:not\(\[data-selected="true"\]\):hover\{background-color:color-mix\(in srgb,var\(--smooth-text\) 4%,var\(--smooth-surface\)\)\}/);
-  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]:hover\{background-color:color-mix\(in srgb,var\(--smooth-selected\) 64%,var\(--smooth-surface\)\)\}/);
+  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]\{background:color-mix\(in srgb,var\(--smooth-selected-mild\) 46%,var\(--smooth-surface-mild\)\)\}/);
+  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab:not\(\[data-selected="true"\]\):hover\{background-color:color-mix\(in srgb,var\(--smooth-text\) 4%,var\(--smooth-surface-mild\)\)\}/);
+  assert.match(skin, /body\[data-smooth-skin\]:not\(\[data-ds-dark-theme\]\) \.smooth-workspace-tab\[data-selected="true"\]:hover\{background-color:color-mix\(in srgb,var\(--smooth-selected-mild\) 64%,var\(--smooth-surface-mild\)\)\}/);
   assert.ok(!/body\[data-smooth-skin\]\[data-ds-dark-theme\][^\n]*\.smooth-workspace-tab\[data-selected="true"\]\{background:color-mix/.test(skin), 'dark tones keep the plain token');
 
   // The chip should weigh what the same token weighs on the sidebar's own ground.
@@ -632,7 +642,7 @@ test('the selected sidebar row is named by its fill and title, with no leading b
   // The inset leading bar that marked the selected row is gone: it read as a stripe
   // pinned to one side of the row rather than as the row's own selection. The fill and
   // the title's ink and weight carry the state.
-  assert.match(skin, /\[role="treeitem"\]\[aria-selected="true"\]\{background:var\(--smooth-selected\);border-color:transparent;box-shadow:none\}/);
+  assert.match(skin, /\[role="treeitem"\]\[aria-selected="true"\]\{background:var\(--smooth-selected-mild\);border-color:transparent;box-shadow:none\}/);
   assert.match(skin, /\[aria-selected="true"\] \$\{hostPart\('title'\)\}\{color:var\(--smooth-text\);font-weight:600\}/);
   assert.ok(!/inset 2px 0 0/.test(skin), 'no leading selection bar survives in the sidebar');
 });
@@ -813,4 +823,78 @@ test('the rail more launcher stays the lowest icon whatever later entries append
   // after the host's own children, which left 更多 above it. The launcher is ordered last
   // so every later plugin entry still sits above it.
   assert.match(skin, /\$\{hostPart\('panelList'\)\}>:is\(\$\{hostPart\('moreAnchor'\)\},\*:has\(\$\{hostPart\('moreAnchor'\)\}\)\)\{order:1\}/);
+});
+
+test('the page glass is one backdrop plus a single translucent page fill', () => {
+  // The body owns the glass weight and the palette-derived backdrop; every page surface
+  // derives its translucent colour from that one weight, and the page fill is painted
+  // once on the centre column so no surface stacks a second layer under it.
+  assert.match(skin, /body\[data-smooth-skin\]\{[^}]*--smooth-glass:100%/);
+  assert.match(skin, /--smooth-app-glass:color-mix\(in srgb,var\(--smooth-app\) var\(--smooth-glass\),transparent\)/);
+  assert.match(skin, /--smooth-sidebar-glass:color-mix\(in srgb,var\(--smooth-sidebar\) var\(--smooth-glass\),transparent\)/);
+  assert.match(skin, /--smooth-rail-glass:color-mix\(in srgb,var\(--smooth-rail\) var\(--smooth-glass\),transparent\)/);
+  // The backdrop is a fixed, negative-z layer inside the body's own stacking context,
+  // so it sits above the body fill and below every child of the shell.
+  assert.match(skin, /body\[data-smooth-skin\]::before\{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:[^}]*var\(--smooth-app\)\}/);
+  const backdrop = skin.slice(skin.indexOf('body[data-smooth-skin]::before'));
+  assert.ok(!/#[0-9a-f]{3,8}/i.test(backdrop.slice(0, backdrop.indexOf('}'))), 'the backdrop is palette tokens only');
+  // The page fill moved to the centre column; the surfaces inside it stay unpainted.
+  assert.match(skin, /\$\{hostPart\('centerCol'\)\}\{position:relative;z-index:1;[^}]*background:var\(--smooth-app-glass\)/);
+  assert.match(skin, /\$\{hostPart\('sidebarCol'\)\}\{background:var\(--smooth-sidebar-glass\);border-right:0\}/);
+  // The frame drops its own fill but keeps the notch the centre column's bottom-left
+  // radius cuts out of the sidebar: one sidebar-glass tile anchored to that corner.
+  assert.match(skin, /\$\{hostPart\('frame'\)\}:has\(>\$\{hostPart\('sidebarCol'\)\}\)\{[^}]*background-position:var\(--smooth-left-width\) 100%;background-image:radial-gradient\(circle at 100% 0,transparent 0 var\(--smooth-radius-xl\),var\(--smooth-sidebar-glass\) var\(--smooth-radius-xl\)\)/
+  );
+  assert.match(skin, /\$\{hostPart\('centerCol'\)\}>\$\{hostPart\('root'\)\}\{background:transparent\}/);
+  assert.match(skin, /\[data-content-phase\]\{background:transparent\}/);
+  assert.match(skin, /\[data-conversation-scroll\]\{background:transparent\}/);
+  assert.ok(!/\[data-content-phase\]\{background:var\(--smooth-app\)\}/.test(skin), 'the page fill is not repeated on the conversation surfaces');
+  // The composer seat fades to the same glass colour, not to an opaque page colour.
+  assert.match(skin, /\$\{hostPart\('composerSeat'\)\}\{background:linear-gradient\(180deg,color-mix\(in srgb,var\(--smooth-app\) 0%,transparent\) 0,var\(--smooth-app-glass\) 36px\)/);
+  // A patched desktop window hands the ground to the system acrylic: the page and its
+  // in-app backdrop stop painting, and only the glass surfaces remain over the material.
+  assert.match(skin, /html:has\(>body\[data-smooth-window-glass\]\),\s*body\[data-smooth-window-glass\]\{background:transparent\}/);
+  assert.match(skin, /body\[data-smooth-window-glass\]::before\{content:none\}/);
+});
+
+
+
+test('region grounds follow the slider while components keep a mild fill', () => {
+  // The big grounds (conversation, tab strip, icon rail, sidebar) take the page weight.
+  assert.match(skin, /\$\{hostPart\('centerCol'\)\}\{position:relative;z-index:1;[^}]*background:var\(--smooth-app-glass\)/);
+  assert.match(skin, /\$\{hostPart\('sidebarCol'\)\}\{background:var\(--smooth-sidebar-glass\);border-right:0\}/);
+  assert.match(skin, /\.smooth-workspace-bar\{[^}]*background:var\(--smooth-surface-glass\)/);
+  assert.match(skin, /::after\{[^}]*background:var\(--smooth-rail-soft\)/);
+  // Components keep their own weight but follow the slider mildly: the buttons, rows,
+  // tabs and cards only move a little.
+  assert.match(skin, /\$\{hostPart\('newSession'\)\}\{[^}]*background:var\(--smooth-surface-2-mild\)/);
+  assert.match(skin, /\[role="treeitem"\]\[aria-selected="true"\]\{background:var\(--smooth-selected-mild\)/);
+  assert.match(skin, /\.smooth-workspace-tab\[data-selected="true"\]\{background:var\(--smooth-selected-mild\)/);
+  assert.match(skin, /\$\{hostPart\('composerSeat'\)\}\{background:linear-gradient\(180deg,color-mix\(in srgb,var\(--smooth-app\) 0%,transparent\) 0,var\(--smooth-app-glass\) 36px\)/);
+  // Settings and popover panels are region grounds too; their rows and buttons stay solid.
+  assert.match(skin, /\[data-shortcut-modal="settings"\]\{[^}]*background:var\(--smooth-app-overlay\)/);
+  assert.match(skin, /\[data-shortcut-modal="settings"\]>nav\{[^}]*background:var\(--smooth-sidebar-overlay\)/);
+  assert.match(skin, /\[role="menu"\]\{[^}]*background:color-mix\(in srgb,var\(--dsw-alias-bg-overlay\) var\(--smooth-glass-overlay\),transparent\)/);
+  assert.match(skin, /\.smooth-git-menu\{[^}]*var\(--smooth-glass-overlay\),transparent\)/);
+  // The conversation shell root (data-phase) is cleared so the centre glass shows.
+  assert.match(skin, /\[data-phase="active"\][^}]*\{background:transparent\}/);
+  // The caption strip's sidebar->surface step sits on the sidebar edge, so the tab
+  // strip's own background is one colour from its first pixel to the right edge.
+  assert.match(skin, /linear-gradient\(to right,var\(--smooth-sidebar-glass\) 0 var\(--smooth-left-width\),transparent var\(--smooth-left-width\) 100%\)/);
+  // The rounded corner is carried by a wedge tile instead of a full-height sidebar band.
+  assert.match(skin, /\.smooth-workspace-bar::before\{[^}]*width:18px;height:18px[^}]*radial-gradient\(circle at 100% 100%,transparent 0 17\.5px,var\(--smooth-sidebar-glass\) 18px\)/);
+  // The host's session-list bottom fade paints with the sidebar fill token; inside
+  // #root it has to be the same glass value as the column, or it stays an opaque band.
+  assert.match(skin, /body\[data-smooth-skin\]>#root\{--dsw-specific-sidebar-fill:var\(--smooth-sidebar-glass\)/);
+  // The fade itself takes the steeper stacked weight so it clears faster than the page.
+  assert.match(skin, /--smooth-sidebar-fade:color-mix\(in srgb,var\(--smooth-sidebar\) var\(--smooth-glass-soft\),transparent\)/);
+  assert.match(skin, /\$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('fade'\)\}\{background:linear-gradient\(to bottom,transparent,var\(--smooth-sidebar-fade\)\)\}/);
+
+  // Overlays keep most of their fill; the client drives them a quarter as fast.
+  assert.match(skin, /--smooth-glass-overlay:100%/);
+  assert.match(skin, /--smooth-app-overlay:color-mix\(in srgb,var\(--smooth-app\) var\(--smooth-glass-overlay\),transparent\)/);
+  // The two stacked chrome grounds use the steeper weight so they do not compound.
+  assert.match(skin, /--smooth-glass-soft:100%/);
+  assert.match(skin, /--smooth-rail-soft:color-mix\(in srgb,var\(--smooth-rail\) var\(--smooth-glass-soft\),transparent\)/);
+  assert.match(skin, /--smooth-surface-soft:color-mix\(in srgb,var\(--smooth-surface\) var\(--smooth-glass-soft\),transparent\)/);
 });

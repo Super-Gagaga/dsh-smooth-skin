@@ -31,6 +31,14 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
     removeAttribute(name) { this.attributes.delete(name); },
     getAttribute(name) { return this.attributes.get(name) ?? null; },
   };
+  // The translucency is one inline CSS variable; the stub records the writes so a test
+  // can read the weight the page handed to the stylesheet.
+  const bodyStyle = {
+    values: new Map(),
+    setProperty(name, value) { this.values.set(name, value); },
+    removeProperty(name) { this.values.delete(name); },
+    getPropertyValue(name) { return this.values.get(name) ?? ''; },
+  };
   // Each component function gets one hook frame, reused across its renders, so a
   // click's state survives until the component renders again.
   const frames = new Map();
@@ -124,6 +132,8 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
       body: {
         toggleAttribute: (name, enabled) => enabled ? attributes.add(name) : attributes.delete(name),
         removeAttribute: (name) => attributes.delete(name),
+        hasAttribute: (name) => attributes.has(name),
+        style: bodyStyle,
       },
     },
     MutationObserver: class {
@@ -144,7 +154,7 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
     },
   });
   return {
-    plugin, ctx, styles, attributes, storage, timers, swim, resizes, moves, documentElement, transitions,
+    plugin, ctx, styles, attributes, storage, timers, swim, resizes, moves, documentElement, transitions, bodyStyle,
     get outer() { return [outerWidth, outerHeight]; },
     get origin() { return [screenX, screenY]; },
     get settings() { return settings; },
@@ -301,7 +311,7 @@ test('theme and animation switches never move the window; only a size edit does'
   await rows()[1].props.onChange('snow');
   assert.equal(runtime.preference, 'light');
   assert.deepEqual(runtime.resizes, [], 'switching the theme must not resize or reposition the window');
-  await rows()[3].props.onChange(false);
+  await rows()[4].props.onChange(false);
   assert.deepEqual(runtime.resizes, [], 'the launch-animation toggle must not touch the window either');
 
   const size = runtime.render(rows()[rows().length - 1]);
@@ -536,7 +546,7 @@ test('only a repainted palette animates; other settings write directly', async (
   const runtime = loadClient({ viewTransition: true });
   runtime.plugin.apply(runtime.ctx);
   const rows = () => settingRows(runtime);
-  await rows()[2].props.onChange('violet');
+  await rows()[3].props.onChange('violet');
   assert.equal(runtime.transitions.length, 0, 'the mark colour is not a palette switch');
   // Following the host theme and then pinning the preset it already resolves to paints
   // exactly the same page: no circle should open over an identical screen.
@@ -580,23 +590,79 @@ test('the settings page carries the enable switch, the mode choice and the launc
   const rows = settingRows(runtime);
   assert.equal(rows[0].props.checked, true, 'the enable switch stays the first row');
   assert.equal(rows[1].props.value, 'auto');
-  assert.equal(rows[2].props.value, 'blue', 'the mark colour follows the theme row');
-  assert.equal(rows[3].props.checked, true, 'the launch animation is on by default');
-  assert.equal(rows[3].props.disabled, false);
-  await rows[3].props.onChange(false);
+  assert.equal(rows[2].props.value, 5, 'the background transparency follows the theme row');
+  assert.equal(rows[3].props.value, 'blue', 'the mark colour follows the translucency row');
+  assert.equal(rows[4].props.checked, true, 'the launch animation is on by default');
+  assert.equal(rows[4].props.disabled, false);
+  await rows[4].props.onChange(false);
   assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')),
-    { enabled: true, theme: 'auto', boot: false, mark: 'blue', windowSize: { enabled: true, width: 1440, height: 900 } });
-  assert.equal(settingRows(runtime)[3].props.checked, false);
+    { enabled: true, theme: 'auto', boot: false, mark: 'blue', translucency: 5, windowSize: { enabled: true, width: 1440, height: 900 } });
+  assert.equal(settingRows(runtime)[4].props.checked, false);
   await resetButton(runtime).props.onClick();
   assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')),
-    { enabled: true, theme: 'auto', boot: true, mark: 'blue', windowSize: { enabled: true, width: 1440, height: 900 } });
+    { enabled: true, theme: 'auto', boot: true, mark: 'blue', translucency: 5, windowSize: { enabled: true, width: 1440, height: 900 } });
+  runtime.dispose();
+});
+
+test('the background translucency is one body variable the stylesheet reads', async () => {
+  const runtime = loadClient({ stored: { translucency: 55 } });
+  runtime.plugin.apply(runtime.ctx);
+  // The lever is inverted on purpose: the variable is the weight of the surface colour,
+  // so 55% see-through hands the stylesheet 45%.
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass'), '45%');
+  // The rail and the tab strip get a steeper weight so their stacked grounds read like
+  // the conversation: (0.45) ** 4 = 4.1%, rounded to 4%.
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-soft'), '4%');
+  // Overlays keep almost all of their fill: 55% translucency removes only an eighth.
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-overlay'), '93%');
+  // Component fills move a third as fast as the page: 55% -> 82% opacity.
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-mild'), '82%');
+  const row = () => settingRows(runtime)[2];
+  assert.equal(row().props.value, 55, 'the row reads the stored value');
+  const element = runtime.render(row());
+  const input = element.children[1].children[0];
+  assert.equal(input.props.type, 'range');
+  assert.equal(element.children[1].children[1].children[0], '55%', 'the number sits beside the track');
+  await input.props.onChange({ target: { value: '80' } });
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass'), '20%');
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-soft'), '0%');
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-overlay'), '90%');
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-mild'), '73%');
+  assert.equal(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')).translucency, 80);
+  assert.equal(runtime.render(row()).children[1].children[1].children[0], '80%');
+  // Disabling the skin takes the inline variable back off the host body, and enabling
+  // it again restores the stored weight.
+  await settingRows(runtime)[0].props.onChange(false);
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass'), '');
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-soft'), '');
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-overlay'), '');
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-mild'), '');
+  await settingRows(runtime)[0].props.onChange(true);
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass'), '20%');
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-soft'), '0%');
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-overlay'), '90%');
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass-mild'), '73%');
+  runtime.dispose();
+  assert.equal(runtime.bodyStyle.getPropertyValue('--smooth-glass'), '', 'uninstall leaves the body as it was');
+});
+
+test('the window material the patched shell publishes changes the slider copy', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  assert.ok(!runtime.attributes.has('data-smooth-window-glass'), 'the stock install has no window material');
+  assert.match(settingRows(runtime)[2].props.hint, /柔和渐变/u, 'the slider describes the in-page gradient');
+  // The patched shell marks the body after each load; the copy follows it while the
+  // stylesheet keys its window-glass rules on the same attribute. The skin never sets or
+  // clears the attribute itself: it belongs to the window.
+  runtime.attributes.add('data-smooth-window-glass');
+  assert.match(settingRows(runtime)[2].props.hint, /亚克力/u, 'the slider names the desktop material');
   runtime.dispose();
 });
 
 test('the settings page replays the index opening without touching the stored state', () => {
   const runtime = loadClient();
   runtime.plugin.apply(runtime.ctx);
-  const rowOf = () => settingRows(runtime)[3];
+  const rowOf = () => settingRows(runtime)[4];
   const preview = rowOf().props.action;
   assert.equal(preview.children[0], '预览');
   assert.equal(preview.props.disabled, false, 'the preview is available while the skin is on');
