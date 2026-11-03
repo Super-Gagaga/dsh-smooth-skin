@@ -4,10 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 
 const read = (name) => readFile(new URL(`../src/${name}`, import.meta.url), 'utf8');
-// The bundle order: composer.js watches surfaces through watch.js.
-const source = `${await read('watch.js')}\n${await read('composer.js')}`;
+// The bundle order: pricing.js feeds the usage line, composer.js watches surfaces.
+const source = `${await read('pricing.js')}\n${await read('watch.js')}\n${await read('composer.js')}`;
 const sandbox = { PLUGIN_ID: 'smooth', hostPart: name => `.${name}` };
-runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.installFallback = installComposerFallbackHint; globalThis.installCaret = installSmoothCaret; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker; globalThis.occupancyOf = contextOccupancyOf; globalThis.tokensText = contextTokens; globalThis.exactText = contextExactTokens; globalThis.durationText = contextDuration; globalThis.cacheHit = contextCacheHit; globalThis.fill = contextFill; globalThis.offersDefault = offersDefaultEffort; globalThis.filterWorkspaces = filterWorkspaces; globalThis.workspaceName = workspaceName;', sandbox);
+runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.installFallback = installComposerFallbackHint; globalThis.installCaret = installSmoothCaret; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker; globalThis.occupancyOf = contextOccupancyOf; globalThis.tokensText = contextTokens; globalThis.exactText = contextExactTokens; globalThis.durationText = contextDuration; globalThis.cacheHit = contextCacheHit; globalThis.fill = contextFill; globalThis.priceModel = usagePriceModel; globalThis.inputTokens = usageInputTokens; globalThis.costMicro = usageCostMicro; globalThis.costText = usageCostText; globalThis.peakAt = usagePeakAt; globalThis.offersDefault = offersDefaultEffort; globalThis.filterWorkspaces = filterWorkspaces; globalThis.workspaceName = workspaceName;', sandbox);
 
 function files(entries) {
   const calls = [];
@@ -333,16 +333,169 @@ test('the model panel host mounts for every session, the new-session hero includ
   assert.ok(seat, 'the model/effort panel host lives beside the composer overlays');
   assert.equal(seat.options.id, 'smooth.model');
   assert.equal(seat.options.order, -70);
-  // The ring does belong in input.right: that list renders immediately before the native
-  // model seat in the resident composer's control row, and only once a session has input
-  // state (the hero has no context to measure, so no ring is expected there).
-  const meter = overrides.get('conversation.input.right');
-  assert.ok(meter, 'the context ring sits in the control row before the model seat');
-  assert.equal(meter.options.id, 'smooth.context');
-  assert.equal(meter.options.order, 60);
-  assert.equal(typeof meter.component, 'function');
+  // The context reading is the last right-slot entry, immediately before the model
+  // selector, so other right-slot buttons cannot squeeze between them.
+  const contextSeat = overrides.get('conversation.input.right');
+  assert.ok(contextSeat, 'the context reading registers in the right slot');
+  assert.equal(contextSeat.options.id, 'smooth.usage.context');
+  assert.equal(contextSeat.options.order, 1000);
   assert.equal(overrides.has('conversation.composer.bar'), false, 'the native composer retains its child-slot ownership');
   dispose(); assert.equal(overrides.size, 0);
+});
+
+test('the dock usage line writes the projection figures, not a scan', () => {
+  const overrides = new Map();
+  sandbox.h = (type, props, ...children) => ({ type, props, children });
+  sandbox.require = name => name === 'react-dom' ? { createPortal() {} } : {};
+  sandbox.React = {
+    createElement: sandbox.h, Fragment: 'fragment',
+    useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+    useRef: (initial) => ({ current: initial }),
+    useEffect: (fn) => { fn(); },
+  };
+  const slots = {
+    inject: (_name, setup) => setup(), entries: () => [],
+    register: (options, component) => { overrides.set(options.name, { options, component }); return () => overrides.delete(options.name); },
+  };
+  let usageFields = { cost: true, input: true, output: true, cache: true, counts: true, speed: true, context: true };
+  let usagePlacement = 'row';
+  const dispose = sandbox.install({
+    slots, modelDirectories: {}, text: (_key, fallback) => fallback,
+    useSmoothState: () => ({ state: { enabled: true, usageFields, usagePlacement } }),
+  });
+  const dock = overrides.get('conversation.composer.dock');
+  assert.ok(dock, 'the live usage line lives in the dock below the card');
+  assert.equal(dock.options.id, 'smooth.usage');
+  assert.equal(dock.options.order, 10);
+  const projections = {
+    tokenUsage: { uncachedInputTokens: 606172, cacheReadTokens: 29702428, cacheWriteTokens: 0, outputTokens: 157390 },
+    sessionStats: { turns: 16, steps: 485, decodeMs: 100000, decodeTokens: 18800 },
+    modelSelection: { next: { model: 'deepseek-v4.1-flash' } },
+  };
+  const collect = (values) => {
+    const tree = dock.component({ useProjection: key => values[key], sessionId: 's1' });
+    const texts = [];
+    const nodes = [];
+    (function walk(node) {
+      if (typeof node === 'string') { texts.push(node); return; }
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) { node.forEach(walk); return; }
+      nodes.push(node);
+      (node.children || []).forEach(walk);
+    })(tree);
+    return { tree, text: texts.join(' '), nodes };
+  };
+  const { text: line, nodes } = collect(projections);
+  const button = nodes.find(node => node.type === 'button' && String(node.props?.className || '').includes('smooth-usage-line'));
+  assert.ok(button, 'the whole line is one button');
+  assert.equal(button.props['aria-haspopup'], undefined, 'without a context reading there is no dialog to open');
+  assert.doesNotMatch(line, /已用|输入|输出|缓存命中/, 'the visible labels are gone');
+  assert.doesNotMatch(line, /¥/, 'the currency is the ¥-shaped icon, not a text symbol');
+  assert.match(line, /[\d.]+/);
+  assert.match(line, /30,308,600 tok/);
+  assert.match(line, /157,390 tok/);
+  assert.match(line, /98%/);
+  assert.match(line, /16 轮 485 步/);
+  assert.match(line, /188 tok\/s/);
+  // The ¥ mark, direction arrows, cache-hit mark, staircase and gauge are the glyphs.
+  const icons = nodes.filter(node => String(node.props?.className || '').includes('smooth-usage-icon'));
+  assert.equal(icons.length, 6, 'cost, input, output, cache hit, steps and speed carry their icons');
+  assert.equal(icons.filter(node => String(node.props.className).includes('smooth-usage-icon-hit')).length, 1);
+  assert.equal(icons.filter(node => String(node.props.className).includes('smooth-usage-icon-yen')).length, 1);
+  assert.equal(icons.filter(node => String(node.props.className).includes('smooth-usage-icon-step')).length, 1);
+  assert.equal(icons.filter(node => String(node.props.className).includes('smooth-usage-icon-gauge')).length, 1);
+  const labels = nodes.map(node => node.props?.['aria-label']).filter(Boolean);
+  assert.ok(labels.includes('输入 30,308,600 tok'));
+  assert.ok(labels.includes('输出 157,390 tok'));
+  assert.ok(labels.includes('缓存命中 98%'));
+  assert.ok(labels.some(value => /^已用 [\d.]+ 元$/.test(value)));
+  // With a context reading the whole button becomes the dialog trigger and the pie sits
+  // at its right end.
+  const contextual = collect({
+    ...projections,
+    contextPressure: { pressureTokens: 440, contextWindow: 1000 },
+    contextBreakdown: { systemTokens: 100, toolsTokens: 100, messageTokens: 240 },
+  });
+  const contextButton = contextual.nodes.find(node => node.type === 'button' && String(node.props?.className || '').includes('smooth-usage-line'));
+  assert.ok(contextButton, 'the line stays one button with the pie');
+  assert.equal(contextButton.props['aria-haspopup'], 'dialog');
+  assert.equal(contextButton.props['aria-expanded'], false);
+  assert.equal(typeof contextButton.props.onClick, 'function');
+  assert.match(contextual.text, /44%/);
+  assert.ok(String(contextButton.props['aria-label']).includes('上下文已用 44%'));
+  assert.ok(contextual.nodes.some(node => String(node.props?.className || '').includes('smooth-context-pie-used')), 'the used wedge is inside the button');
+  // Turning a field off removes that segment from the button; an all-off selection
+  // removes the button entirely.
+  usageFields = { ...usageFields, input: false, counts: false, context: false };
+  const trimmed = collect({
+    ...projections,
+    contextPressure: { pressureTokens: 440, contextWindow: 1000 },
+    contextBreakdown: { systemTokens: 100, toolsTokens: 100, messageTokens: 240 },
+  });
+  assert.doesNotMatch(trimmed.text, /54,781,449 tok/);
+  assert.doesNotMatch(trimmed.text, /16 轮 485 步/);
+  assert.doesNotMatch(trimmed.text, /44%/);
+  assert.match(trimmed.text, /157,390 tok/);
+  assert.ok(!trimmed.nodes.some(node => String(node.props?.className || '').includes('smooth-context-pie-used')), 'the pie is not rendered when the context field is off');
+  usageFields = { cost: false, input: false, output: false, cache: false, counts: false, speed: false, context: false };
+  assert.equal(dock.component({
+    useProjection: key => ({
+      ...projections,
+      contextPressure: { pressureTokens: 440, contextWindow: 1000 },
+      contextBreakdown: { systemTokens: 100, toolsTokens: 100, messageTokens: 240 },
+    })[key],
+    sessionId: 's1',
+  }), null, 'no selected field means no button');
+  usageFields = { cost: true, input: true, output: true, cache: true, counts: true, speed: true, context: true };
+  // An unpriced route keeps the segment and says so instead of inventing an amount.
+  const unpriced = collect({ ...projections, modelSelection: { next: { model: 'kimi-k3' } } });
+  assert.match(unpriced.text, /—/);
+  assert.doesNotMatch(unpriced.text, /¥/);
+  // Without any projection there is nothing to say, so the dock row stays empty.
+  assert.equal(dock.component({ useProjection: () => undefined, sessionId: 's1' }), null);
+  // In the context-row placement the dock yields and the input-right seat carries only
+  // the pie and its reading.
+  usagePlacement = 'context';
+  const withContext = {
+    ...projections,
+    contextPressure: { pressureTokens: 440, contextWindow: 1000 },
+    contextBreakdown: { systemTokens: 100, toolsTokens: 100, messageTokens: 240 },
+  };
+  const byKey = key => withContext[key];
+  assert.equal(dock.component({ useProjection: byKey, sessionId: 's1' }), null);
+  const seat = overrides.get('conversation.input.right');
+  assert.ok(seat, 'the context reading registers in the right slot');
+  const seatElement = seat.component({ useProjection: byKey, sessionId: 's1' });
+  const seatTree = seatElement.type(seatElement.props);
+  const seatButton = seatTree.children.find(child => child && child.type === 'button');
+  assert.equal(seatButton.props.className, 'smooth-usage-context');
+  assert.equal(seatButton.props['aria-haspopup'], 'dialog');
+  let seatText = '';
+  (function walk(node) {
+    if (typeof node === 'string') { seatText += ` ${node}`; return; }
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(walk); return; }
+    (node.children || []).forEach(walk);
+  })(seatButton);
+  assert.match(seatText, /44%/);
+  assert.doesNotMatch(seatText, / tok|轮|步/, 'the other figures are not in the context seat');
+  dispose();
+  assert.equal(overrides.has('conversation.composer.dock'), false);
+  // The supplied target-like hit mark, ¥-shaped mark, staircase, gauge and arrows are inline.
+  assert.match(source, /smooth-usage-icon-hit/);
+  assert.match(source, /smooth-usage-icon-yen/);
+  assert.match(source, /smooth-usage-icon-step/);
+  assert.match(source, /IconGaugeOutlineRegular/);
+  assert.match(source, /M3 19 L9 19 L9 13 L15 13 L15 7 L21 7/);
+  assert.match(source, /M3\.1 2\.5 6 5\.6l2\.9-3\.1/);
+  assert.match(source, /M544 876\.8/);
+  assert.match(source, /USAGE_ARROW_DOWN/);
+  // Figures count to a new reading on the frame loop; reduced motion writes it directly.
+  assert.match(source, /useRollingReadings/);
+  assert.match(source, /requestAnimationFrame/);
+  assert.match(source, /\(prefers-reduced-motion: reduce\)/);
+  assert.match(source, /const duration = 5000/);
+  assert.match(source, /rollingCacheText/);
 });
 
 test('the context meter keeps the host reading, its ring style and the moved panel', () => {
@@ -369,14 +522,28 @@ test('the context meter keeps the host reading, its ring style and the moved pan
   assert.equal(sandbox.cacheHit({ cacheReadTokens: 999, uncachedInputTokens: 1 }), '99.9', 'a partial hit never reads as flat 100%');
   assert.equal(sandbox.cacheHit({}), null);
   assert.equal(sandbox.fill('~%s / %s', '681K', '1M'), '~681K / 1M');
-  // The dock row is hidden by the stylesheet; the seat draws the ring and its own panel.
-  assert.match(source, /conversation\.input\.right/);
-  assert.match(source, /smooth-context-ring-fill/);
+  // The context reading is the last entry in the right slot, immediately before the
+  // model selector, so other right-slot buttons cannot squeeze between them.
+  assert.ok(source.includes("slots.inject('conversation.input.right'"), 'the context reading uses the right slot');
+  assert.ok(source.includes('order: 1000'), 'the context reading sorts after other right-slot entries');
+  assert.ok(source.includes("variant: 'context'"));
+  assert.ok(source.includes('conversation.composer.dock'));
+  assert.match(source, /smooth-context-pie-used/);
+  assert.match(source, /smooth-context-value/);
+  assert.doesNotMatch(source, /className: 'smooth-context-pie'/, 'only the used wedge is scaled, so no shared group wrapper');
   assert.match(source, /props\.useProjection\('contextPressure'\)/);
   assert.match(source, /props\.useProjection\('contextBreakdown'\)/);
   assert.match(source, /props\.useProjection\('sessionStats'\)/);
   assert.match(source, /props\.useProjection\('tokenUsage'\)/);
   assert.match(source, /smooth-context-menu/);
+  assert.match(source, /usagePlacement/);
+  assert.match(source, /usageAlign/);
+  assert.match(source, /state\.usageOrder/);
+  assert.match(source, /smooth-usage-context/);
+  assert.match(source, /smooth-usage-line--bottom/);
+  assert.match(source, /smooth-usage-bottom-fixed/);
+  assert.match(source, /slots\.inject\('conversation\.input\.left'/);
+  assert.match(source, /variant: 'bottom'/);
 });
 
 test('the effort panel offers a Default auto chip exactly where the host menu does', () => {

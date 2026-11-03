@@ -431,7 +431,10 @@ function installComposerLayout({ slots, modelDirectories, remote, useSmoothState
   disposers.push(() => surfaces.dispose());
   function useTarget(selector) {
     const [target, setTarget] = React.useState(null);
-    React.useEffect(() => surfaces.watch(selector, setTarget), [selector]);
+    React.useEffect(() => {
+      if (typeof document === 'undefined') return undefined;
+      return surfaces.watch(selector, setTarget);
+    }, [selector]);
     return target;
   }
   function useBranch(sessionId, cwd) {
@@ -931,7 +934,7 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
           // The trigger opens the plugin's own panel, which is role="dialog" — 'menu'
           // would promise the host menu's arrow-key contract that this panel never had.
           // A dialog trigger also has to say whether its pane is showing, the way the
-          // context ring's trigger already does.
+          // context pie's trigger already does.
           'aria-haspopup': 'dialog',
           'aria-expanded': props.modelsOpen === undefined ? undefined : (props.modelsOpen ? 'true' : 'false'),
           onClick: () => props.onOpenModels?.(),
@@ -1494,21 +1497,189 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     return null;
   }
   disposers.push(slots.inject('conversation.input.overlay', () => slots.register({ name: 'conversation.input.overlay', id: `${PLUGIN_ID}.caret`, order: -80 }, ComposerCaret)));
-  /** The context meter, moved out of the host's dock row (the stylesheet hides it) and
-   * into the composer row just before the model seat. The ring shows the same bounded
-   * occupancy the dock meter showed; its panel keeps the composition, session timing and
-   * token totals that the removed stat pills used to own. Every reading is a slot
-   * projection — nothing here rescans the session or reads another component's DOM. */
-  function ContextMeterSeat(props) {
+  /** The token-direction arrows and the cache-hit mark are inline SVG so they take the
+   * line's ink and never depend on a font glyph. The hit mark is the supplied target-like
+   * asset: a ring with a centre dot. */
+  const USAGE_ARROW_DOWN = 'M6 2.2v7.6M2.9 6.9 6 10l3.1-3.1';
+  const USAGE_ARROW_UP = 'M6 9.8V2.2M2.9 5.1 6 2l3.1 3.1';
+  function usageArrow(path) {
+    return h('svg', {
+      viewBox: '0 0 12 12', width: 12, height: 12, className: 'smooth-usage-icon',
+      'aria-hidden': true, focusable: 'false',
+    }, h('path', {
+      d: path, fill: 'none', stroke: 'currentColor', strokeWidth: 1.3,
+      strokeLinecap: 'round', strokeLinejoin: 'round',
+    }));
+  }
+  function usageHitIcon() {
+    return h('svg', {
+      viewBox: '0 0 1024 1024', width: 12, height: 12,
+      className: 'smooth-usage-icon smooth-usage-icon-hit',
+      'aria-hidden': true, focusable: 'false',
+    }, h('path', {
+      d: 'M544 876.8a332.8 332.8 0 1 0 0-665.6 332.8 332.8 0 0 0 0 665.6z m0 83.2a416 416 0 1 1 0-832 416 416 0 0 1 0 832z',
+      fill: 'currentColor', fillOpacity: 0.65,
+    }), h('path', {
+      d: 'M544 627.2a83.2 83.2 0 1 1 0-166.4 83.2 83.2 0 0 1 0 166.4z',
+      fill: 'currentColor',
+    }));
+  }
+  function usageMoneyIcon() {
+    // The same shape as the ¥ character, drawn as a line icon so it takes the line's
+    // muted ink instead of being a text glyph.
+    return h('svg', {
+      viewBox: '0 0 12 12', width: 12, height: 12,
+      className: 'smooth-usage-icon smooth-usage-icon-yen',
+      'aria-hidden': true, focusable: 'false',
+    }, h('g', {
+      fill: 'none', stroke: 'currentColor', strokeWidth: 1.2,
+      strokeLinecap: 'round', strokeLinejoin: 'round',
+    },
+      h('path', { d: 'M3.1 2.5 6 5.6l2.9-3.1' }),
+      h('path', { d: 'M6 5.6v4' }),
+      h('path', { d: 'M3.5 6.7h5' }),
+      h('path', { d: 'M3.5 8.4h5' })));
+  }
+  /** The steps mark is the supplied staircase asset, and the speed mark is the host's own
+   * gauge primitive (the same one its activity pill uses). */
+  function usageStepIcon() {
+    return h('svg', {
+      viewBox: '0 0 24 24', width: 12, height: 12,
+      className: 'smooth-usage-icon smooth-usage-icon-step',
+      'aria-hidden': true, focusable: 'false',
+    }, h('path', {
+      d: 'M3 19 L9 19 L9 13 L15 13 L15 7 L21 7',
+      fill: 'none', stroke: 'currentColor', strokeWidth: 2.2,
+      strokeLinecap: 'round', strokeLinejoin: 'round',
+    }));
+  }
+  function usageSpeedIcon() {
+    return h(ui.IconGaugeOutlineRegular, {
+      size: 14, className: 'smooth-usage-icon smooth-usage-icon-gauge',
+      'aria-hidden': true, focusable: 'false',
+    });
+  }
+  const ROLLING_KEYS = ['cost', 'input', 'output', 'cache', 'turns', 'steps', 'speed', 'context'];
+  function sameRolling(a, b) {
+    for (const key of ROLLING_KEYS) if (a?.[key] !== b?.[key]) return false;
+    return true;
+  }
+  /** Count the button's figures toward the newest reading. One frame loop stays alive
+   * while a number is moving: a projection that lands mid-roll only becomes the new goal,
+   * so frequent settlements keep the figures visibly rolling instead of restarting an
+   * effect per update. A null target (no price, no speed, no context) is written as it is,
+   * and reduced motion writes the new reading directly. */
+  function useRollingReadings(target) {
+    const [shown, setShown] = React.useState(target);
+    const shownRef = React.useRef(target);
+    const targetRef = React.useRef(target);
+    const fromRef = React.useRef(target);
+    const goalRef = React.useRef(target);
+    const startRef = React.useRef(0);
+    const rafRef = React.useRef(0);
+    targetRef.current = target;
+    const signature = JSON.stringify(target);
+    const stop = () => {
+      if (rafRef.current) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
+    };
+    const settle = () => {
+      stop();
+      shownRef.current = targetRef.current;
+      setShown(targetRef.current);
+    };
+    const start = () => {
+      if (rafRef.current) return;
+      if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+        settle();
+        return;
+      }
+      if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        settle();
+        return;
+      }
+      fromRef.current = shownRef.current;
+      goalRef.current = targetRef.current;
+      startRef.current = 0;
+      const duration = 5000;
+      const tick = (now) => {
+        rafRef.current = 0;
+        const goal = targetRef.current;
+        if (!sameRolling(goalRef.current, goal)) {
+          fromRef.current = shownRef.current;
+          goalRef.current = goal;
+          startRef.current = now;
+        }
+        if (startRef.current === 0) startRef.current = now;
+        const progress = Math.min(1, (now - startRef.current) / duration);
+        const eased = progress;
+        const from = fromRef.current;
+        const next = {};
+        for (const key of ROLLING_KEYS) {
+          const before = from[key];
+          const after = goal[key];
+          next[key] = typeof before === 'number' && typeof after === 'number' && Number.isFinite(before) && Number.isFinite(after)
+            ? before + (after - before) * eased
+            : after;
+        }
+        if (progress >= 1) {
+          shownRef.current = goal;
+          setShown(goal);
+          return;
+        }
+        shownRef.current = next;
+        setShown(next);
+        rafRef.current = window.requestAnimationFrame(tick);
+      };
+      rafRef.current = window.requestAnimationFrame(tick);
+    };
+    React.useEffect(() => {
+      const from = shownRef.current;
+      const goal = targetRef.current;
+      const moved = ROLLING_KEYS.some((key) => {
+        const before = from[key];
+        const after = goal[key];
+        return typeof before === 'number' && typeof after === 'number' && before !== after;
+      });
+      if (!moved) {
+        settle();
+        return;
+      }
+      start();
+    }, [signature]);
+    React.useEffect(() => stop, []);
+    return shown;
+  }
+  /** The cache share while it counts: one decimal, never a false 100% before the target. */
+  function rollingCacheText(value) {
+    if (value === null || !Number.isFinite(value)) return null;
+    if (value >= 100) return '100';
+    return String(Math.round(Math.min(99.9, value) * 10) / 10);
+  }
+  /** The whole session meter is one button on the host's dock row under the composer:
+   * the live figures followed by the context pie. Clicking it opens the panel with the
+   * composition, timing and token details; the pie's used wedge pops on hover. Every
+   * reading is a slot projection — nothing here rescans the session or reads another
+   * component's DOM. */
+  function UsageLine(props) {
     const skin = useSmoothState();
+    const placement = skin.state.usagePlacement || 'row';
+    const variant = props.variant || 'dock';
+    const fields = skin.state.usageFields || {};
     const [open, setOpen] = React.useState(false);
     const triggerRef = React.useRef(null);
     const panelRef = React.useRef(null);
+    const usage = props.useProjection('tokenUsage');
+    const stats = props.useProjection('sessionStats');
+    const selection = props.useProjection('modelSelection');
     const pressure = props.useProjection('contextPressure');
     const breakdown = props.useProjection('contextBreakdown');
-    const stats = props.useProjection('sessionStats');
-    const usage = props.useProjection('tokenUsage');
     const context = contextOccupancyOf(pressure);
+    React.useEffect(() => {
+      if (!context && open) setOpen(false);
+    }, [context, open]);
     React.useEffect(() => {
       if (!open) return undefined;
       const dismiss = (event) => {
@@ -1524,14 +1695,130 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
         document.removeEventListener('keydown', escape);
       };
     }, [open]);
-    if (!skin.state.enabled || !context) return null;
-    const reading = `${context.percent}%`;
-    const size = 22;
-    const radius = 9.1;
-    const circumference = 2 * Math.PI * radius;
-    const title = contextFill(text('composer.context.aria', '上下文已用 %s'), reading);
+    const input = usage ? usageInputTokens(usage) : 0;
+    const output = usage ? Math.round(Number(usage.outputTokens) || 0) : 0;
+    const cacheHit = usage ? contextCacheHit(usage) : null;
+    let model = selection?.next?.model ?? selection?.lastUsed?.model;
+    if (!model && modelDirectories && props.sessionId) {
+      try { model = modelDirectories.directoryFor(props.sessionId)?.getSnapshot?.().current?.model; } catch {}
+    }
+    // A session with no tokens yet costs nothing even before a model is known.
+    const cost = !usage ? null : input + output === 0 ? 0 : usageCostMicro(usage, model);
+    const turns = stats ? Math.round(stats.turns) : 0;
+    const steps = stats ? Math.round(stats.steps) : 0;
+    const speed = stats && stats.decodeMs > 0 && stats.decodeTokens > 0
+      ? Math.round(stats.decodeTokens / (stats.decodeMs / 1e3))
+      : null;
+    const target = {
+      cost: cost === null ? null : cost,
+      input,
+      output,
+      cache: cacheHit === null ? null : Number(cacheHit),
+      turns,
+      steps,
+      speed: speed === null ? null : speed,
+      context: context ? context.percent : null,
+    };
+    const shown = useRollingReadings(target);
+    if (!skin.state.enabled) return null;
+    const active = variant === 'dock' ? placement === 'row'
+      : variant === 'bottom' ? placement === 'bottom'
+        : variant === 'context' ? placement === 'context'
+          : false;
+    if (!active) return null;
+    if (!usage && !stats && !context) return null;
+    const contextOnly = variant === 'context';
+    const showContext = contextOnly ? !!context : !!context && fields.context !== false;
+    const reading = context ? `${Math.round(shown.context)}%` : null;
+    const piePercent = context ? shown.context : 0;
+    // The pie follows the supplied asset: a pale disc for the remaining share and an
+    // accent wedge for the used share, sweeping clockwise from 12 o'clock. Hovering the
+    // whole button enlarges only that wedge around the pie centre.
+    const size = contextOnly ? 20 : 24;
+    const center = size / 2;
+    const radius = size * 0.404;
+    let edgeX = center;
+    let edgeY = center;
+    if (context) {
+      const angle = (piePercent * 3.6 - 90) * Math.PI / 180;
+      edgeX = center + radius * Math.cos(angle);
+      edgeY = center + radius * Math.sin(angle);
+    }
+    const labels = [];
+    const items = [];
+    const item = (key, value, { icon, title, label } = {}) => h('span', {
+      key, className: 'smooth-usage-item', title, 'aria-label': label,
+    }, icon ?? null, h('span', { className: 'smooth-usage-value' }, value));
+    const inputText = `${contextExactTokens(input, text)} tok`;
+    const outputText = `${contextExactTokens(output, text)} tok`;
+    const shownInputText = `${contextExactTokens(Math.round(shown.input), text)} tok`;
+    const shownOutputText = `${contextExactTokens(Math.round(shown.output), text)} tok`;
+    if (!contextOnly) {
+    if (usage) {
+      const costText = cost === null ? '—' : usageCostText(cost);
+      const shownCostText = shown.cost === null ? '—' : usageCostText(shown.cost);
+      const costLabel = cost === null
+        ? `${text('composer.stats.used', '已用')} —`
+        : `${text('composer.stats.used', '已用')} ${costText} ${text('composer.stats.currency', '元')}`;
+      if (fields.cost !== false) {
+        labels.push(costLabel);
+        items.push(item('cost', shownCostText, {
+          icon: usageMoneyIcon(),
+          title: `${text('composer.stats.used', '已用')} · ${text('composer.stats.estimate', '按当前时段单价估算')}`,
+          label: costLabel,
+        }));
+      }
+      // The visible labels are gone; the icons carry the direction, and the title/aria
+      // name keep the meaning for a pointer and a screen reader.
+      if (fields.input !== false) {
+        labels.push(`${text('composer.stats.input', '输入')} ${inputText}`);
+        items.push(item('input', shownInputText, {
+          icon: usageArrow(USAGE_ARROW_DOWN),
+          title: text('composer.stats.input', '输入'),
+          label: labels[labels.length - 1],
+        }));
+      }
+      if (fields.output !== false) {
+        labels.push(`${text('composer.stats.output', '输出')} ${outputText}`);
+        items.push(item('output', shownOutputText, {
+          icon: usageArrow(USAGE_ARROW_UP),
+          title: text('composer.stats.output', '输出'),
+          label: labels[labels.length - 1],
+        }));
+      }
+      if (cacheHit !== null && fields.cache !== false) {
+        labels.push(`${text('composer.stats.cache', '缓存命中')} ${cacheHit}%`);
+        items.push(item('cache', `${rollingCacheText(shown.cache) ?? cacheHit}%`, {
+          icon: usageHitIcon(),
+          title: text('composer.stats.cache', '缓存命中'),
+          label: labels[labels.length - 1],
+        }));
+      }
+    }
+    if ((turns || steps) && fields.counts !== false) {
+      const countsText = contextFill(text('composer.stats.counts', '%s 轮 %s 步'), turns, steps);
+      labels.push(`${text('composer.stats.countsTitle', '轮次与步数')} ${countsText}`);
+      items.push(item('counts', contextFill(text('composer.stats.counts', '%s 轮 %s 步'), Math.round(shown.turns), Math.round(shown.steps)), {
+        icon: usageStepIcon(),
+        title: text('composer.stats.countsTitle', '轮次与步数'),
+        label: labels[labels.length - 1],
+      }));
+    }
+    if (speed !== null && fields.speed !== false) {
+      const speedText = contextFill(text('composer.stats.speed', '%s tok/s'), speed);
+      labels.push(`${text('composer.stats.speedTitle', '输出速度')} ${speedText}`);
+      items.push(item('speed', contextFill(text('composer.stats.speed', '%s tok/s'), Math.round(shown.speed)), {
+        icon: usageSpeedIcon(),
+        title: text('composer.stats.speedTitle', '输出速度'),
+        label: labels[labels.length - 1],
+      }));
+    }
+    }
+    if (showContext) labels.push(contextFill(text('composer.context.aria', '上下文已用 %s'), reading));
+    if (contextOnly && !context) return null;
+    if (!contextOnly && !items.length && !showContext) return null;
     let panel = null;
-    if (open) {
+    if (open && context) {
       const rect = triggerRef.current?.getBoundingClientRect?.();
       const width = Math.min(268, window.innerWidth - 16);
       const left = rect ? Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)) : 8;
@@ -1551,7 +1838,6 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
         { key: 'ttft', label: text('composer.context.ttft', '首 token 平均（TTFT）'), value: stats.ttftSteps > 0 ? contextDuration(stats.ttftMs / stats.ttftSteps, text) : null },
         { key: 'tps', label: text('composer.context.tps', '输出速度（TPS）'), value: stats.decodeMs > 0 ? contextFill(text('composer.context.tpsValue', '%s tok/s'), Math.round(stats.decodeTokens / (stats.decodeMs / 1e3))) : null },
       ].filter((row) => row.value !== null) : [];
-      const cacheHit = usage ? contextCacheHit(usage) : null;
       const tokenRows = usage ? [
         { key: 'cacheHit', label: text('composer.context.cacheHit', '缓存命中'), value: cacheHit === null ? null : `${cacheHit}%` },
         { key: 'uncachedInput', label: text('composer.context.uncachedInput', '未缓存输入'), value: contextFill(text('composer.context.tok', '%s tok'), contextExactTokens(usage.uncachedInputTokens, text)) },
@@ -1590,30 +1876,139 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
           h('div', { className: 'smooth-context-grid' }, tokenRows.map(metric))) : null,
       ), document.body);
     }
-    return h(React.Fragment, null,
+    const contextReading = showContext
+      ? h('span', { key: 'context', className: 'smooth-context-reading' },
+        h('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size, 'aria-hidden': true },
+          h('circle', { className: 'smooth-context-pie-rest', cx: center, cy: center, r: radius }),
+          piePercent >= 100
+            ? h('circle', { className: 'smooth-context-pie-used', cx: center, cy: center, r: radius })
+            : piePercent > 0
+              ? h('path', {
+                  className: 'smooth-context-pie-used',
+                  d: `M${center} ${center} L${center} ${center - radius} A${radius} ${radius} 0 ${piePercent > 50 ? 1 : 0} 1 ${edgeX} ${edgeY} Z`,
+                })
+              : null),
+        h('span', { className: 'smooth-context-value' }, reading))
+      : null;
+    // Items are built in the default order above; the stored order only decides how the
+    // already-built nodes are laid out, so adding a field never needs a second switch.
+    const byKey = {};
+    items.forEach((node, index) => {
+      const key = node.key ?? node.props?.key;
+      byKey[key] = { node, label: labels[index] };
+    });
+    if (showContext) byKey.context = { node: contextReading, label: labels[items.length] };
+    const order = contextOnly ? ['context']
+      : (skin.state.usageOrder || ['cost', 'input', 'output', 'cache', 'counts', 'speed', 'context']);
+    const ordered = order.map((key) => byKey[key]).filter(Boolean);
+    for (const [key, entry] of Object.entries(byKey)) {
+      if (!order.includes(key)) ordered.push(entry);
+    }
+    const orderedLabels = ordered.map((entry) => entry.label);
+    const orderedNodes = ordered.map((entry) => entry.node);
+    const children = contextOnly
+      ? [contextReading]
+      : [h('span', { key: 'figures', className: 'smooth-usage-figures' }, orderedNodes)];
+    const line = h(React.Fragment, null,
       h('button', {
-        ref: triggerRef, type: 'button', className: 'smooth-context-button',
-        title, 'aria-label': title, 'aria-haspopup': 'dialog', 'aria-expanded': open,
-        onClick: () => setOpen((value) => !value),
-      }, h('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size, 'aria-hidden': true },
-        h('circle', { className: 'smooth-context-ring-track', cx: size / 2, cy: size / 2, r: radius }),
-        h('circle', {
-          className: 'smooth-context-ring-fill', cx: size / 2, cy: size / 2, r: radius,
-          strokeDasharray: `${circumference * context.percent / 100} ${circumference}`,
-          transform: `rotate(-90 ${size / 2} ${size / 2})`,
-        }),
-        h('text', {
-          className: 'smooth-context-ring-label', x: size / 2, y: size / 2,
-          'text-anchor': 'middle', dominantBaseline: 'central',
-        }, reading))),
+        ref: triggerRef, type: 'button',
+        className: contextOnly ? 'smooth-usage-context'
+          : variant === 'bottom' ? 'smooth-usage-line smooth-usage-line--bottom'
+            : 'smooth-usage-line',
+        title: contextOnly || showContext
+          ? contextFill(text('composer.context.aria', '上下文已用 %s'), reading)
+          : text('composer.stats.aria', '本次对话用量'),
+        'aria-label': orderedLabels.join('，'),
+        'aria-haspopup': context ? 'dialog' : undefined,
+        'aria-expanded': context ? open : undefined,
+        onClick: context ? () => setOpen((value) => !value) : undefined,
+      }, children),
       panel);
+    return line;
   }
-  // This list slot renders in the resident composer's control row (the hero has no input
-  // state yet), immediately before the model seat. `order` keeps the seat closest to the
-  // model control; the dock row it replaces is hidden by the stylesheet.
+  function UsageBottomLeftSeat(props) {
+    const skin = useSmoothState();
+    const placement = skin.state.usagePlacement || 'row';
+    const align = skin.state.usageAlign || 'left';
+    return placement === 'bottom' && align === 'left'
+      ? h(UsageLine, { ...props, variant: 'bottom' }) : null;
+  }
+  function UsageBottomCenter(props) {
+    const skin = useSmoothState();
+    const [rect, setRect] = React.useState(null);
+    const menuButton = useTarget('[data-slot="conversation.input.model"] button[aria-haspopup="menu"]');
+    const fallbackButton = useTarget('[data-slot="conversation.input.model"] button');
+    const modelButton = menuButton || fallbackButton;
+    const layoutEffect = React.useLayoutEffect || React.useEffect;
+    layoutEffect(() => {
+      if (!skin.state.enabled || !modelButton || typeof window === 'undefined') {
+        setRect(null);
+        return undefined;
+      }
+      const modelSeat = modelButton.closest?.('[data-slot="conversation.input.model"]');
+      const row = modelSeat?.parentElement?.parentElement?.parentElement;
+      const tools = row?.children?.[0];
+      const measure = () => {
+        const modelRect = modelButton.getBoundingClientRect();
+        const visibleTools = tools ? Array.from(tools.children).filter((element) => element.offsetWidth > 0) : [];
+        const toolsRect = tools?.getBoundingClientRect?.();
+        const leftEdge = visibleTools.length
+          ? Math.max(...visibleTools.map((element) => element.getBoundingClientRect().right))
+          : toolsRect?.right;
+        if (!modelRect.width || !leftEdge || modelRect.left <= leftEdge) {
+          setRect(null);
+          return;
+        }
+        const gap = 8;
+        setRect({
+          left: leftEdge + gap,
+          top: modelRect.top,
+          width: Math.max(0, modelRect.left - leftEdge - gap * 2),
+          height: modelRect.height,
+        });
+      };
+      measure();
+      const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+      const observed = [modelButton, tools, ...(tools ? Array.from(tools.children) : [])];
+      for (const element of observed) observer?.observe?.(element);
+      window.addEventListener('resize', measure);
+      window.addEventListener('scroll', measure, true);
+      return () => {
+        observer?.disconnect();
+        window.removeEventListener('resize', measure);
+        window.removeEventListener('scroll', measure, true);
+      };
+    }, [modelButton, skin.state.enabled]);
+    if (skin.state.usagePlacement !== 'bottom' || (skin.state.usageAlign || 'left') !== 'center'
+      || !rect || typeof document === 'undefined') return null;
+    return createPortal(h('div', {
+      className: 'smooth-usage-bottom-fixed',
+      style: {
+        left: `${rect.left}px`, top: `${rect.top}px`,
+        width: `${rect.width}px`, height: `${rect.height}px`,
+      },
+    }, h(UsageLine, { ...props, variant: 'bottom' })), document.body);
+  }
+  function UsageSeat(props) {
+    const skin = useSmoothState();
+    const placement = skin.state.usagePlacement || 'row';
+    const align = skin.state.usageAlign || 'left';
+    if (placement === 'context') return h(UsageLine, { ...props, variant: 'context' });
+    if (placement === 'bottom' && align === 'right') return h(UsageLine, { ...props, variant: 'bottom' });
+    if (placement === 'bottom' && align === 'center') return h(UsageBottomCenter, props);
+    return null;
+  }
+  // The host's dock row is the default home; the bottom-left seat uses the host's left
+  // footer slot. The context reading and the bottom-right variant use the right slot.
+  disposers.push(slots.inject('conversation.composer.dock', () => slots.register({
+    name: 'conversation.composer.dock', id: `${PLUGIN_ID}.usage`, order: 10,
+  }, UsageLine)));
   disposers.push(slots.inject('conversation.input.right', () => slots.register({
-    name: 'conversation.input.right', id: `${PLUGIN_ID}.context`, order: 60,
-  }, ContextMeterSeat)));
+    name: 'conversation.input.right', id: `${PLUGIN_ID}.usage.context`, order: 1000,
+  }, UsageSeat)));
+  disposers.push(slots.inject('conversation.input.left', () => slots.register({
+    name: 'conversation.input.left', id: `${PLUGIN_ID}.usage.bottom`, order: 10,
+  }, UsageBottomLeftSeat)));
   function decorate(name, wrap, offset = -10) {
     return slots.inject(name, () => {
       let native;

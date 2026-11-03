@@ -37,7 +37,8 @@ async function writeArtifact(url, content) {
 
 async function build() {
   const shared = await read('./src/shared.js');
-  const [skin, boot, watch, bridge, think, composer, usage, account, layout, scrollbar, client, host] = await Promise.all([
+  const [pricing, skin, boot, watch, bridge, think, composer, usage, account, layout, scrollbar, client, host] = await Promise.all([
+    read('./src/pricing.js'),
     read('./src/skin.js'),
     read('./src/boot.js'),
     read('./src/watch.js'),
@@ -57,7 +58,7 @@ async function build() {
   // that watch host surfaces (composer, account, usage), and bridge.js precedes the two
   // that call the Host half's listener.
   const hostChanged = await writeArtifact(new URL('index.js', OUT), `${shared}\n${boot}\n${host}`);
-  const clientChanged = await writeArtifact(new URL('client.js', OUT), `${CLIENT_ARTIFACT}${shared}\n${skin}\n${boot}\n${watch}\n${bridge}\n${think}\n${composer}\n${usage}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`);
+  const clientChanged = await writeArtifact(new URL('client.js', OUT), `${CLIENT_ARTIFACT}${shared}\n${pricing}\n${skin}\n${boot}\n${watch}\n${bridge}\n${think}\n${composer}\n${usage}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`);
   console.log(hostChanged || clientChanged ? `Built ${manifest.name}` : `${manifest.name}: artifacts unchanged`);
 }
 

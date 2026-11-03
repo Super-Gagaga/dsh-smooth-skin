@@ -1,0 +1,8 @@
+<svg width="580" height="200" xmlns="http://www.w3.org/2000/svg">
+  <!-- 黑色 270° 缺圆 -->
+  <path d="M180,100 A80,80 0 0,1 100,180 A80,80 0 0,1 20,100 A80,80 0 0,1 100,20 L100,100 Z" fill="#000"/>
+  <!-- 蓝色扇形，向右上偏移 8,-8 -->
+  <path transform="translate(0,0)" d="M100,100 L100,20 A80,80 0 0,1 180,100 Z" fill="#3388ff"/>
+  <!-- 文字25%，字号80，高度和扇形一致，放在右侧 -->
+  <text x="210" y="110" font-size="160" fill="#3388ff" dominant-baseline="middle">25%</text>
+</svg>
