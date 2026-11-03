@@ -184,10 +184,12 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
   };
 }
 
-/** Every child the Smooth page renders below its header, across its sections. */
-const pageChildren = (runtime) => runtime.settings.component().children
-  .slice(1)
-  .flatMap((section) => (section && section.children) || []);
+/** Every child the Smooth page renders below its header, across its tab pages. */
+const pageChildren = (runtime) => {
+  const pages = runtime.settings.component().children
+    .find((child) => child && child.props?.className === 'smooth-pages');
+  return (pages?.children || []).flatMap((page) => (page && page.children) || []);
+};
 
 /** The page's settings rows, in order: the group headings carry no `title` prop. */
 const settingRows = (runtime) => pageChildren(runtime)
@@ -199,7 +201,7 @@ const splashPart = (runtime) => pageChildren(runtime)
 
 /** The footer's one reset button. */
 const resetButton = (runtime) => runtime.settings.component().children.at(-1)
-  .children[0].children[0].children[0];
+  .children[0].children[0];
 
 test('built client exports an activatable plugin with every service declared', () => {
   const runtime = loadClient();
@@ -612,6 +614,81 @@ test('the settings page carries the enable switch, the mode choice and the launc
   runtime.dispose();
 });
 
+test('the settings page moves between three tabbed pages without remounting the controls', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  const root = () => runtime.settings.component();
+  const tablist = () => root().children
+    .find((child) => child && child.props?.className === 'smooth-tabs');
+  const tabs = () => tablist().children.filter((child) => child && child.props?.role === 'tab');
+  const pages = () => root().children
+    .find((child) => child && child.props?.className === 'smooth-pages').children;
+  assert.equal(tablist().children[0].props.className, 'smooth-tabs-thumb', 'the selected pill is one sliding thumb');
+  assert.equal(tablist().props.style['--smooth-tab-index'], '0');
+  assert.deepEqual(tabs().map((tab) => tab.props['aria-selected']), [true, false, false]);
+  assert.deepEqual(tabs().map((tab) => tab.children[1].children[0]), ['外观', '统计', '启动']);
+  assert.deepEqual(pages().map((page) => page.props.hidden), [false, true, true]);
+  assert.equal(pages()[0].props['data-active'], 'true');
+  // Every page stays mounted; only the visible one is un-hidden, so switching tabs
+  // never loses the draft state of a control (the theme grid, the field order, ...).
+  tabs()[1].props.onClick();
+  assert.equal(tablist().props.style['--smooth-tab-index'], '1', 'the thumb slides instead of jumping');
+  assert.deepEqual(tabs().map((tab) => tab.props['aria-selected']), [false, true, false]);
+  assert.deepEqual(pages().map((page) => page.props.hidden), [true, false, true]);
+  assert.equal(pages()[1].props['data-active'], 'true');
+  assert.equal(pages()[1].props['data-smooth-enter'], 'forward', 'the page arrives from the direction of travel');
+  assert.equal(pages()[1].props['aria-labelledby'], 'smooth-tab-usage');
+  // Arrow keys move the tab selection in both directions.
+  tabs()[1].props.onKeyDown({ key: 'ArrowRight', preventDefault() {} });
+  assert.deepEqual(pages().map((page) => page.props.hidden), [true, true, false]);
+  assert.equal(tablist().props.style['--smooth-tab-index'], '2');
+  tabs()[2].props.onKeyDown({ key: 'ArrowLeft', preventDefault() {} });
+  assert.deepEqual(pages().map((page) => page.props.hidden), [true, false, true]);
+  assert.equal(pages()[1].props['data-smooth-enter'], 'back', 'going back slides the other way');
+  runtime.dispose();
+});
+
+test('swiping or horizontally scrolling the tab strip changes page without a click', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  const root = () => runtime.settings.component();
+  const tablist = () => root().children
+    .find((child) => child && child.props?.className === 'smooth-tabs');
+  const pages = () => root().children
+    .find((child) => child && child.props?.className === 'smooth-pages').children;
+  let captures = 0;
+  const pointer = (type, x) => tablist().props[type]({
+    button: 0, clientX: x, clientY: 20, pointerId: 7,
+    currentTarget: { setPointerCapture() { captures += 1; } },
+  });
+  // A plain press must not capture the pointer: capture retargets the following
+  // click to the strip, so the tab button would never receive it.
+  pointer('onPointerDown', 320);
+  assert.equal(captures, 0, 'a press leaves the click on the tab button');
+  // A leftward drag over the strip advances one page and names the entry direction.
+  pointer('onPointerMove', 250);
+  pointer('onPointerUp', 250);
+  assert.deepEqual(pages().map((page) => page.props.hidden), [true, false, true]);
+  assert.equal(pages()[1].props['data-smooth-enter'], 'forward');
+  // A rightward drag goes back; it does not overshoot past the first page.
+  pointer('onPointerDown', 200);
+  pointer('onPointerMove', 280);
+  pointer('onPointerUp', 280);
+  assert.deepEqual(pages().map((page) => page.props.hidden), [false, true, true]);
+  assert.equal(pages()[0].props['data-smooth-enter'], 'back');
+  pointer('onPointerDown', 200);
+  pointer('onPointerMove', 280);
+  pointer('onPointerUp', 280);
+  assert.deepEqual(pages().map((page) => page.props.hidden), [false, true, true], 'the first page is the end');
+  // A vertical drag or a short horizontal wiggle is not a swipe.
+  pointer('onPointerDown', 200);
+  pointer('onPointerMove', 200 - 12);
+  pointer('onPointerUp', 200 - 12);
+  tablist().props.onWheel({ deltaX: 48, deltaY: 3 });
+  assert.deepEqual(pages().map((page) => page.props.hidden), [true, false, true], 'a horizontal trackpad scroll advances one page');
+  runtime.dispose();
+});
+
 test('the usage settings preview follows the selected figures', () => {
   const runtime = loadClient();
   runtime.plugin.apply(runtime.ctx);
@@ -673,8 +750,10 @@ test('the usage placement buttons switch the seat and persist it', () => {
   runtime.plugin.apply(runtime.ctx);
   const head = () => pageChildren(runtime)
     .find((child) => child && child.props?.className === 'smooth-usage-head');
+  const controlsTree = () => head().children
+    .find((child) => child && child.props?.className === 'smooth-usage-controls');
   const placementButtons = () => {
-    const row = head().children
+    const row = controlsTree().children
       .find((child) => child && typeof child.type === 'function' && child.props && 'value' in child.props && 'onChange' in child.props);
     return row.type(row.props).children.filter((child) => child && child.type === 'button');
   };
@@ -688,19 +767,62 @@ test('the usage placement buttons switch the seat and persist it', () => {
   assert.ok(runtime.attributes.has('data-smooth-usage-placement'), 'the page publishes the seat for the stylesheet');
   placementButtons().find((button) => button.props['data-placement'] === 'bottom').props.onClick();
   assert.equal(stored().usagePlacement, 'bottom');
-  // The alignment control appears only for the bottom-bar placement.
-  const fieldsRow = () => pageChildren(runtime)
-    .find((child) => child && typeof child.type === 'function' && child.props && 'fields' in child.props);
-  const fieldsTree = fieldsRow().type(fieldsRow().props);
-  const alignRow = fieldsTree.children.find((child) => child.props?.className === 'smooth-usage-align');
-  assert.ok(alignRow, 'the bottom placement shows the button-position control');
-  const alignOptions = alignRow.children.find((child) => child.props?.className === 'smooth-usage-align-options');
+  // The alignment control appears only for the bottom-bar placement, stacked under
+  // the placement buttons inside the same row.
+  const controlNodes = () => controlsTree().children
+    .filter(Boolean)
+    .map((child) => (typeof child.type === 'function' ? child.type(child.props) : child));
+  const alignRow = () => controlNodes()
+    .find((child) => child && child.props?.className === 'smooth-usage-align');
+  assert.ok(alignRow(), 'the bottom placement shows the button-position control');
+  const alignOptions = alignRow().children.find((child) => child.props?.className === 'smooth-usage-align-options');
   alignOptions.children.find((button) => button.props['data-align'] === 'center').props.onClick();
   assert.equal(stored().usageAlign, 'center');
   placementButtons().find((button) => button.props['data-placement'] === 'row').props.onClick();
   assert.equal(stored().usagePlacement, 'row');
-  const rowTree = fieldsRow().type(fieldsRow().props);
-  assert.ok(!rowTree.children.some((child) => child?.props?.className === 'smooth-usage-align'), 'the own-row placement hides the control');
+  assert.ok(!alignRow(), 'the own-row placement hides the control');
+  runtime.dispose();
+});
+
+test('the placement and alignment choices slide their pill and follow a drag', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  const head = () => pageChildren(runtime)
+    .find((child) => child && child.props?.className === 'smooth-usage-head');
+  const controlsTree = () => head().children
+    .find((child) => child && child.props?.className === 'smooth-usage-controls');
+  const controlNodes = () => controlsTree().children
+    .filter(Boolean)
+    .map((child) => (typeof child.type === 'function' ? child.type(child.props) : child));
+  const placement = () => controlNodes()
+    .find((child) => child && child.props?.className === 'smooth-usage-placement');
+  const alignOptions = () => controlNodes()
+    .find((child) => child && child.props?.className === 'smooth-usage-align')
+    ?.children.find((child) => child.props?.className === 'smooth-usage-align-options');
+  const stored = () => JSON.parse(runtime.storage.get('dsh-smooth-skin:state'));
+  const drag = (node, from, to) => {
+    node.props.onPointerDown({ button: 0, clientX: from, clientY: 10, pointerId: 3 });
+    node.props.onPointerMove({ clientX: to, clientY: 10, pointerId: 3 });
+    node.props.onPointerUp({});
+  };
+  // The default seat is the middle option of both groups, so the pill starts there.
+  assert.equal(placement().children[0].props.className, 'smooth-segment-thumb', 'the track has one sliding pill');
+  assert.equal(placement().props.style['--smooth-segment-index'], '1');
+  assert.equal(alignOptions().children[0].props.className, 'smooth-segment-thumb');
+  assert.equal(alignOptions().props.style['--smooth-segment-index'], '0');
+  // A click still moves the pill one slot.
+  alignOptions().children.find((button) => button.props['data-align'] === 'center').props.onClick();
+  assert.equal(stored().usageAlign, 'center');
+  assert.equal(alignOptions().props.style['--smooth-segment-index'], '1');
+  // Dragging left advances an option; dragging right goes back, and both stop at the ends.
+  drag(alignOptions(), 260, 210);
+  assert.equal(stored().usageAlign, 'right');
+  assert.equal(alignOptions().props.style['--smooth-segment-index'], '2');
+  drag(alignOptions(), 210, 260);
+  assert.equal(stored().usageAlign, 'center');
+  drag(placement(), 300, 250);
+  assert.equal(stored().usagePlacement, 'row');
+  assert.ok(!alignOptions(), 'the own-row seat still hides the alignment choice');
   runtime.dispose();
 });
 
@@ -825,6 +947,16 @@ test('the client injects remote.session so the model directory resolves for a fr
   // to the native menu (or opened nothing until the first keystroke).
   assert.ok(runtime.plugin.inject.includes('remote.session'), 'remote.session must be declared: directoryFor guards it against the caller');
   assert.ok(runtime.plugin.inject.includes('modelDirectories'));
+  runtime.dispose();
+});
+
+test('the tab and field-editor labels exist in both locales', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  for (const key of ['settings.tabsLabel', 'settings.tab.appearance', 'settings.tab.usage', 'settings.tab.startup', 'settings.usageFields', 'settings.usagePlacementHint']) {
+    assert.equal(typeof runtime.dictionaries.zh[key], 'string', `missing zh ${key}`);
+    assert.equal(typeof runtime.dictionaries.en[key], 'string', `missing en ${key}`);
+  }
   runtime.dispose();
 });
 
