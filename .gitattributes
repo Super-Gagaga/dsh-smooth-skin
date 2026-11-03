@@ -7,3 +7,7 @@
 *.ico binary
 *.woff binary
 *.woff2 binary
+
+# Windows 批处理必须保留 CRLF，否则 cmd.exe 的多行块与标签可能解析失败
+*.cmd text eol=crlf
+*.bat text eol=crlf
