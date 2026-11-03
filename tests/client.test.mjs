@@ -63,6 +63,12 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
       const cell = currentFrame.cells[index] || (currentFrame.cells[index] = { value: initial });
       return [cell.value, (next) => { cell.value = typeof next === 'function' ? next(cell.value) : next; }];
     },
+    useRef: (initial) => {
+      assert.ok(currentFrame, 'useRef ran outside a test render');
+      const index = currentFrame.at++;
+      const cell = currentFrame.cells[index] || (currentFrame.cells[index] = { current: initial });
+      return cell;
+    },
   };
   const modules = { react, 'react-dom': { createPortal: (node) => ({ portal: node, props: node.props }) } };
   const services = {
@@ -131,6 +137,8 @@ function loadClient({ stored, unavailable = [], screen, outer, origin = [240, 66
       getElementById: (id) => (id === 'dsh-smooth-splash' ? { querySelector: (selector) => (selector === 'animate' ? swim : null) } : null),
       body: {
         toggleAttribute: (name, enabled) => enabled ? attributes.add(name) : attributes.delete(name),
+        setAttribute: (name) => attributes.add(name),
+        getAttribute: (name) => (attributes.has(name) ? '' : null),
         removeAttribute: (name) => attributes.delete(name),
         hasAttribute: (name) => attributes.has(name),
         style: bodyStyle,
@@ -596,11 +604,103 @@ test('the settings page carries the enable switch, the mode choice and the launc
   assert.equal(rows[4].props.disabled, false);
   await rows[4].props.onChange(false);
   assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')),
-    { enabled: true, theme: 'auto', boot: false, mark: 'blue', translucency: 5, windowSize: { enabled: true, width: 1440, height: 900 } });
+    { enabled: true, theme: 'auto', boot: false, mark: 'blue', translucency: 5, windowSize: { enabled: true, width: 1440, height: 900 }, usageFields: { cost: true, input: true, output: true, cache: true, counts: false, speed: false, context: true }, usagePlacement: 'bottom', usageAlign: 'left', usageOrder: ['cost', 'input', 'output', 'cache', 'counts', 'speed', 'context'] });
   assert.equal(settingRows(runtime)[4].props.checked, false);
   await resetButton(runtime).props.onClick();
   assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')),
-    { enabled: true, theme: 'auto', boot: true, mark: 'blue', translucency: 5, windowSize: { enabled: true, width: 1440, height: 900 } });
+    { enabled: true, theme: 'auto', boot: true, mark: 'blue', translucency: 5, windowSize: { enabled: true, width: 1440, height: 900 }, usageFields: { cost: true, input: true, output: true, cache: true, counts: false, speed: false, context: true }, usagePlacement: 'bottom', usageAlign: 'left', usageOrder: ['cost', 'input', 'output', 'cache', 'counts', 'speed', 'context'] });
+  runtime.dispose();
+});
+
+test('the usage settings preview follows the selected figures', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  const fieldsRow = () => pageChildren(runtime)
+    .find((child) => child && typeof child.type === 'function' && child.props && 'fields' in child.props);
+  assert.ok(fieldsRow(), 'the settings page carries the usage fields row');
+  const collect = (tree) => {
+    const out = [];
+    (function walk(node) {
+      if (Array.isArray(node)) { node.forEach(walk); return; }
+      if (typeof node === 'string') { out.push(node); return; }
+      if (!node || typeof node !== 'object') return;
+      if (typeof node.type === 'function') { walk(node.type(node.props)); return; }
+      out.push(node);
+      (node.children || []).forEach(walk);
+    })(tree);
+    return out;
+  };
+  const fresh = () => collect(fieldsRow());
+  const fields = () => fresh().filter((node) => node.props?.className === 'smooth-usage-field');
+  const fieldValue = (key) => fields().find((node) => node.props.key === key).children
+    .find((child) => child.props?.className === 'smooth-usage-field-value');
+  const previewKeys = () => fields().map((node) => node.props.key);
+  assert.deepEqual(previewKeys(), ['cost', 'input', 'output', 'cache', 'counts', 'speed', 'context']);
+  // The sample figures are the deliberately uniform 8s from the design mock.
+  const previewText = fresh().filter((part) => typeof part === 'string').join(' ');
+  assert.match(previewText, /8\.888/);
+  assert.match(previewText, /888,888,888 tok/);
+  assert.match(previewText, /888,888 tok/);
+  assert.match(previewText, /88%/);
+  assert.match(previewText, /8 轮 8 步/);
+  assert.match(previewText, /8 tok\/s/);
+  // The checkbox below a field toggles its visibility, but the sortable field stays in
+  // the editor so it can be dragged or re-enabled.
+  const input = fresh().find((node) => node.type === 'input' && node.props?.name === 'input');
+  assert.ok(input, 'one checkbox per figure');
+  input.props.onChange({ target: { checked: false } });
+  assert.equal(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')).usageFields.input, false);
+  const inputField = fields().find((node) => node.props.key === 'input');
+  assert.equal(inputField.props['data-visible'], 'false');
+  // Dragging the cost value onto the input value moves it after input and stores the order.
+  const costValue = fieldValue('cost');
+  const inputValue = fieldValue('input');
+  costValue.props.onDragStart({ dataTransfer: { setData() {}, effectAllowed: 'move' } });
+  inputValue.props.onDrop({ preventDefault() {}, dataTransfer: { getData: () => 'cost' } });
+  assert.deepEqual(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')).usageOrder,
+    ['input', 'cost', 'output', 'cache', 'counts', 'speed', 'context']);
+  assert.deepEqual(previewKeys(), ['input', 'cost', 'output', 'cache', 'counts', 'speed', 'context']);
+  // The context checkbox hides the pie column without removing it from the editor.
+  const context = fresh().find((node) => node.type === 'input' && node.props?.name === 'context');
+  context.props.onChange({ target: { checked: false } });
+  assert.equal(JSON.parse(runtime.storage.get('dsh-smooth-skin:state')).usageFields.context, false);
+  assert.equal(fields().find((node) => node.props.key === 'context').props['data-visible'], 'false');
+  runtime.dispose();
+});
+
+test('the usage placement buttons switch the seat and persist it', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  const head = () => pageChildren(runtime)
+    .find((child) => child && child.props?.className === 'smooth-usage-head');
+  const placementButtons = () => {
+    const row = head().children
+      .find((child) => child && typeof child.type === 'function' && child.props && 'value' in child.props && 'onChange' in child.props);
+    return row.type(row.props).children.filter((child) => child && child.type === 'button');
+  };
+  const stored = () => JSON.parse(runtime.storage.get('dsh-smooth-skin:state'));
+  assert.deepEqual(
+    placementButtons().map((button) => button.props['data-placement']),
+    ['context', 'bottom', 'row'],
+  );
+  placementButtons().find((button) => button.props['data-placement'] === 'context').props.onClick();
+  assert.equal(stored().usagePlacement, 'context');
+  assert.ok(runtime.attributes.has('data-smooth-usage-placement'), 'the page publishes the seat for the stylesheet');
+  placementButtons().find((button) => button.props['data-placement'] === 'bottom').props.onClick();
+  assert.equal(stored().usagePlacement, 'bottom');
+  // The alignment control appears only for the bottom-bar placement.
+  const fieldsRow = () => pageChildren(runtime)
+    .find((child) => child && typeof child.type === 'function' && child.props && 'fields' in child.props);
+  const fieldsTree = fieldsRow().type(fieldsRow().props);
+  const alignRow = fieldsTree.children.find((child) => child.props?.className === 'smooth-usage-align');
+  assert.ok(alignRow, 'the bottom placement shows the button-position control');
+  const alignOptions = alignRow.children.find((child) => child.props?.className === 'smooth-usage-align-options');
+  alignOptions.children.find((button) => button.props['data-align'] === 'center').props.onClick();
+  assert.equal(stored().usageAlign, 'center');
+  placementButtons().find((button) => button.props['data-placement'] === 'row').props.onClick();
+  assert.equal(stored().usagePlacement, 'row');
+  const rowTree = fieldsRow().type(fieldsRow().props);
+  assert.ok(!rowTree.children.some((child) => child?.props?.className === 'smooth-usage-align'), 'the own-row placement hides the control');
   runtime.dispose();
 });
 

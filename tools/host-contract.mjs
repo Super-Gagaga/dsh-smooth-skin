@@ -83,6 +83,7 @@ export const HOST_SLOTS = [
   'conversation.input.right',
   'conversation.input.permission',
   'conversation.input.left',
+  'conversation.composer.dock',
   'conversation.hero.agentPreset',
   'conversation.hero.workspace',
   'conversation.hero.workspace.directoryFlow',
@@ -134,12 +135,14 @@ export const HOST_VALUES = [
 const OWN_ATTRIBUTES = new Set([
   'data-active',
   'data-default',
+  'data-disabled',
   'data-error',
   'data-expanded',
   'data-pane',
   'data-preview',
   'data-selected',
   'data-view',
+  'data-visible',
 ]);
 
 /** Host attributes written through `element.dataset`, so the kebab-case spelling never

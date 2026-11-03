@@ -6,6 +6,7 @@ import vm from 'node:vm';
 const read = (url) => readFile(new URL(url, import.meta.url), 'utf8');
 
 const shared = await read('../src/shared.js');
+const pricing = await read('../src/pricing.js');
 const skin = await read('../src/skin.js');
 const boot = await read('../src/boot.js');
 const watch = await read('../src/watch.js');
@@ -71,8 +72,8 @@ test('normalize clamps unknown persisted values to the defaults', async () => {
   const { normalize, DEFAULTS } = await loadHostHalf();
   assert.deepEqual(normalize(null), DEFAULTS);
   assert.deepEqual(normalize({ enabled: 'yes', theme: 'neon' }), DEFAULTS);
-  assert.deepEqual(normalize({ enabled: false, theme: 'iron' }), { enabled: false, theme: 'iron', boot: true, mark: DEFAULTS.mark, translucency: DEFAULTS.translucency, windowSize: DEFAULTS.windowSize });
-  assert.deepEqual(normalize({ enabled: true, theme: 'auto', boot: false }), { enabled: true, theme: 'auto', boot: false, mark: DEFAULTS.mark, translucency: DEFAULTS.translucency, windowSize: DEFAULTS.windowSize });
+  assert.deepEqual(normalize({ enabled: false, theme: 'iron' }), { enabled: false, theme: 'iron', boot: true, mark: DEFAULTS.mark, translucency: DEFAULTS.translucency, windowSize: DEFAULTS.windowSize, usageFields: DEFAULTS.usageFields, usagePlacement: DEFAULTS.usagePlacement, usageAlign: DEFAULTS.usageAlign, usageOrder: DEFAULTS.usageOrder });
+  assert.deepEqual(normalize({ enabled: true, theme: 'auto', boot: false }), { enabled: true, theme: 'auto', boot: false, mark: DEFAULTS.mark, translucency: DEFAULTS.translucency, windowSize: DEFAULTS.windowSize, usageFields: DEFAULTS.usageFields, usagePlacement: DEFAULTS.usagePlacement, usageAlign: DEFAULTS.usageAlign, usageOrder: DEFAULTS.usageOrder });
   // The background translucency is a whole percentage; bad input keeps the default.
   assert.equal(normalize({}).translucency, DEFAULTS.translucency);
   assert.equal(normalize({ translucency: 0 }).translucency, 0);
@@ -83,6 +84,25 @@ test('normalize clamps unknown persisted values to the defaults', async () => {
   for (const bad of ['loud', null, {}, NaN]) {
     assert.equal(normalize({ translucency: bad }).translucency, DEFAULTS.translucency, `bad input ${String(bad)} keeps the default`);
   }
+  // Usage fields are all on by default; stored booleans survive and unknown ones stay on.
+  assert.deepEqual(normalize({ usageFields: { input: false, speed: false } }).usageFields,
+    { ...DEFAULTS.usageFields, input: false, speed: false });
+  assert.deepEqual(normalize({ usageFields: { input: 'no', context: false } }).usageFields,
+    { ...DEFAULTS.usageFields, context: false });
+  // The stored order keeps known unique keys and appends any field it omitted.
+  assert.deepEqual(normalize({ usageOrder: ['context', 'cost'] }).usageOrder,
+    ['context', 'cost', 'input', 'output', 'cache', 'counts', 'speed']);
+  assert.deepEqual(normalize({ usageOrder: ['nope', 'input', 'input'] }).usageOrder,
+    ['input', 'cost', 'output', 'cache', 'counts', 'speed', 'context']);
+  assert.deepEqual(normalize({ usageOrder: 'cost' }).usageOrder, DEFAULTS.usageOrder);
+  // Placement is one of the three seats; anything else falls back to the own row.
+  assert.equal(normalize({ usagePlacement: 'bottom' }).usagePlacement, 'bottom');
+  assert.equal(normalize({ usagePlacement: 'context' }).usagePlacement, 'context');
+  assert.equal(normalize({ usagePlacement: 'floating' }).usagePlacement, DEFAULTS.usagePlacement);
+  // Alignment is left/centre/right; anything else falls back to the plugin default.
+  assert.equal(normalize({ usageAlign: 'center' }).usageAlign, 'center');
+  assert.equal(normalize({ usageAlign: 'right' }).usageAlign, 'right');
+  assert.equal(normalize({ usageAlign: 'middle' }).usageAlign, DEFAULTS.usageAlign);
   // The mark colour is one of the offered choices; anything else falls back to blue.
   assert.equal(normalize({ mark: 'violet' }).mark, 'violet');
   assert.equal(normalize({ mark: 'chartreuse' }).mark, DEFAULTS.mark);
@@ -173,25 +193,48 @@ test('the model effort slider has separate light and dark surfaces', async () =>
   assert.match(skin, /\.smooth-model-dot\{/);
 });
 
-test('the context ring replaces the dock row and keeps the occupancy look', () => {
-  // The host dock (two stat pills plus its own context ring) is gone; the ring the
-  // composer seat draws next to the model selector is the only occupancy reading.
-  assert.match(skin, /body\[data-smooth-skin\] \[data-composer-dock\]\{display:none\}/);
-  const button = skin.match(/\.smooth-context-button\{[^}]*\}/)?.[0] || '';
-  assert.match(button, /width:22px;height:22px/, 'the ring matches the other footer controls');
-  const track = skin.match(/\.smooth-context-ring-track\{[^}]*\}/)?.[0] || '';
-  const fill = skin.match(/\.smooth-context-ring-fill\{[^}]*\}/)?.[0] || '';
-  assert.match(track, /stroke:color-mix\(in srgb,var\(--smooth-muted\) 42%,transparent\)/, 'the remaining share is a pale ring');
-  assert.match(fill, /stroke:var\(--smooth-accent\)/, 'the used share is the accent blue');
-  assert.match(fill, /stroke-width:2\.1/, 'the band is thick like the supplied ring asset');
-  assert.match(skin, /\.smooth-context-ring-label\{[^}]*font-size:7\.2px/, 'the percentage sits inside the ring');
+test('the context pie keeps the occupancy look and the dock hosts the usage line', () => {
+  // The host dock is no longer removed: the live usage line lives in it. Only the
+  // host's own ring is hidden, because the pie already reads the same value.
+  assert.match(skin, /\[data-smooth-usage-placement="(?:context|bottom)"\] \[data-composer-dock\]/, 'the dock collapses only when the capsule lives elsewhere');
+  assert.match(skin, /\.smooth-usage-context\{/);
+  assert.match(skin, /\.smooth-usage-line--bottom\{/);
+  assert.match(skin, /\[data-composer-dock\]>\$\{hostPart\('root'\)\}\{display:none\}/);
+  assert.match(skin, /\[data-composer-dock\] \[data-composer-stat\]\{display:none\}/, 'the shipped stat pills are replaced by the usage line');
+  assert.match(skin, /\.smooth-usage-line\{[^}]*justify-content:center/);
+  assert.match(skin, /\.smooth-usage-line\{[^}]*font-size:13px/);
+  assert.match(skin, /\.smooth-usage-line\{[^}]*font-variant-numeric:tabular-nums/);
+  assert.match(skin, /\.smooth-usage-figures\{[^}]*justify-content:flex-start/, 'the figures stay compact on the left with the pie at the right');
+  assert.match(skin, /\.smooth-usage-item\{/);
+  assert.match(skin, /\.smooth-usage-icon\{[^}]*width:14px;height:14px/);
+  assert.match(skin, /\.smooth-usage-value\{/);
+  assert.doesNotMatch(skin, /\.smooth-usage-sep/, 'the figures are separated by a uniform gap, not dots');
+  assert.match(skin, /\.smooth-usage-line\{[^}]*gap:4px 16px/);
+  assert.match(skin, /\.smooth-usage-figures\{[^}]*gap:4px 16px/);
+  const button = skin.match(/\.smooth-usage-line\{[^}]*\}/)?.[0] || '';
+  assert.match(button, /max-width:min\(100%,860px\)/, 'the button keeps its compact pill width');
+  assert.match(button, /border-radius:999px/, 'the compact pill opens the panel');
+  assert.match(button, /cursor:pointer/);
+  const rest = skin.match(/\.smooth-context-pie-rest\{[^}]*\}/)?.[0] || '';
+  const used = skin.match(/\.smooth-context-pie-used\{[^}]*\}/)?.[0] || '';
+  assert.match(rest, /fill:color-mix\(in srgb,var\(--smooth-muted\) 42%,transparent\)/, 'the remaining share is a pale disc');
+  assert.match(used, /fill:var\(--smooth-accent\)/, 'the used share is the accent wedge');
+  assert.match(used, /transform-origin:center/, 'the used wedge scales around the pie centre');
+  assert.match(skin, /\.smooth-context-reading\{[^}]*display:inline-flex/, 'the pie sits at the right end of the button');
+  assert.match(skin, /\.smooth-usage-line:hover \.smooth-context-pie-used/);
+  assert.match(skin, /\.smooth-usage-line:focus-visible \.smooth-context-pie-used/);
+  assert.match(skin, /\.smooth-usage-line\[aria-expanded="true"\] \.smooth-context-pie-used/);
+  assert.match(skin, /transform:scale\(1\.16\)/, 'hover, focus and an open panel enlarge the used wedge');
+  assert.doesNotMatch(skin, /\.smooth-context-pie\{[^}]*transform-origin/, 'the whole pie no longer scales');
+  assert.doesNotMatch(skin, /smooth-context-pie-used[^}]*translate/, 'the hover no longer offsets the wedge');
+  assert.match(skin, /\.smooth-context-value\{[^}]*font-size:13px/, 'the percentage matches the footer text');
   // The panel carries the readings the removed pills used to open.
   assert.match(skin, /\.smooth-context-menu\{[^}]*position:fixed/);
   assert.match(skin, /\.smooth-context-bar\{/);
   assert.match(skin, /\.smooth-context-legend-row\{/);
   assert.match(skin, /\.smooth-context-grid\{[^}]*grid-template-columns:repeat\(2/);
   assert.match(skin, /\.smooth-context-metric-value\{/);
-  assert.match(skin, /@media\(prefers-reduced-motion:reduce\)\{body\[data-smooth-skin\] \.smooth-context-menu\{animation:none\}/);
+  assert.match(skin, /@media\(prefers-reduced-motion:reduce\)\{body\[data-smooth-skin\] \.smooth-context-menu\{animation:none\}body\[data-smooth-skin\] \.smooth-context-pie-used\{transition:none\}\}/);
 });
 
 test('the effort thumb is a glider that slides between stops and follows a drag', () => {
@@ -683,23 +726,26 @@ test('the skin stylesheet is scoped to the gating body attribute and never hides
     const trimmed = selector.trim();
     if (!trimmed.startsWith('body[data-smooth-skin]')) continue;
     rules += 1;
-    // Five hides and one icon cell are allowed, each one replacing something this layout
-    // already provides: the plugin-owned collapsible balance panel, the settings close
-    // button (whose job the tab bar in the same header already does), the welcome row (the
-    // card's own info row already names the workspace and the branch), the card itself while
-    // no tab is open (there is nowhere to type yet) and the workspace row's folder/chevron
-    // glyph (the reference list names the workspace in type alone, and both glyphs share the
-    // same 16px cell, so hiding only one would shift the label on hover). The host's own
-    // preview badge is left alone. The composer dock row is hidden because its two stat
-    // pills and its context meter moved into the ring the composer seat draws next to the
-    // model selector (that ring's panel keeps the readings the pills used to open).
+    // The allowed hides each replace something this layout already provides: the
+    // plugin-owned collapsible balance panel, the settings close button (whose job the tab
+    // bar in the same header already does), the welcome row (the card's own info row
+    // already names the workspace and the branch), the card itself while no tab is open
+    // (there is nowhere to type yet), the workspace row's folder/chevron glyph (the
+    // reference list names the workspace in type alone, and both glyphs share the same
+    // 16px cell, so hiding only one would shift the label on hover), the host's own
+    // context meter in the composer dock (the skin's pie draws the same reading next to
+    // the model selector), and the two shipped stat pills in that dock (the skin's live
+    // usage line carries the same figures). The rest of the row is that usage line, and
+    // the host's own preview badge is left alone.
     const contentRules = skin.replace(/body\[data-smooth-skin\] \.smooth-account-balance\{[^}]*\}/, '')
       .replace(/body\[data-smooth-skin\] \[data-shortcut-modal="settings"\] \$\{hostPart\('header'\)\}>\$\{accountPart\('close'\)\}\{display:none\}/, '')
       .replace(/body\[data-smooth-skin\] \$\{hostPart\('composerHero'\)\} \$\{hostPart\('heroWorkspaceRow'\)\}\{[^}]*display:none[^}]*\}/, '')
       .replace(/body\[data-smooth-skin\]\[data-smooth-home\][\s\S]*?\{display:none/, '')
       .replace(/body\[data-smooth-skin\] \$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('projectRow'\)\} :is\(\$\{hostPart\('folder'\)\},\$\{hostPart\('chevron'\)\}\)\{display:none\}/, '')
-      .replace(/body\[data-smooth-skin\] \[data-composer-dock\]\{display:none\}/, '');
-    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, settings close, welcome row, empty-workspace card, workspace folder cell and composer dock row may be hidden');
+      .replace(/body\[data-smooth-skin\] \[data-composer-dock\]>\$\{hostPart\('root'\)\}\{display:none\}/, '')
+      .replace(/body\[data-smooth-skin\] \[data-composer-dock\] \[data-composer-stat\]\{display:none\}/, '')
+      .replace(/body\[data-smooth-skin\]\[data-smooth-usage-placement="(?:context|bottom)"\] \[data-composer-dock\][\s\S]*?\{display:none\}/, '');
+    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, settings close, welcome row, empty-workspace card, workspace folder cell, host context meter and shipped stat pills may be hidden');
   }
   assert.ok(rules > 10, 'the skin stylesheet has almost no scoped rules');
 });
@@ -758,7 +804,7 @@ test('the built artifacts exist and agree with the sources', async () => {
   const index = await read('../lib/index.js');
   const bundle = await read('../lib/client.js');
   assert.equal(index, `${shared}\n${boot}\n${host}`, 'rebuild the Host artifact after changing its sources');
-  assert.equal(bundle, `window.__ModuleLoader__.load({id:'dsh-smooth-skin',factory:(require)=>{const exports={};\n${shared}\n${skin}\n${boot}\n${watch}\n${bridge}\n${think}\n${composer}\n${usage}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`, 'rebuild the Client artifact after changing its sources');
+  assert.equal(bundle, `window.__ModuleLoader__.load({id:'dsh-smooth-skin',factory:(require)=>{const exports={};\n${shared}\n${pricing}\n${skin}\n${boot}\n${watch}\n${bridge}\n${think}\n${composer}\n${usage}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`, 'rebuild the Client artifact after changing its sources');
   assert.ok(index.includes(shared.trim().slice(0, 60)));
   assert.ok(index.includes('webserver/index-inject'));
   assert.ok(index.includes('export default plugin'));

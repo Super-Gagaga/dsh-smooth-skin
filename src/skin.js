@@ -372,21 +372,62 @@ body[data-smooth-skin] [data-composer-card] ${hostPart('primary')}:disabled{back
 body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type{position:absolute;top:auto;bottom:calc(var(--smooth-composer-footer-h) + 5px);right:8px;z-index:3;width:32px;height:32px;border:0;border-radius:50%;background:var(--smooth-accent);color:var(--smooth-ink);box-shadow:none;transform:none}
 body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type:hover:not(:disabled){background:color-mix(in srgb,var(--smooth-accent) 85%,var(--smooth-text))}
 body[data-smooth-skin] [data-composer-card] ${hostPart('trailing')}>${hostPart('primary')}:last-of-type:disabled{background:var(--smooth-surface-3-mild);color:var(--smooth-muted);opacity:.6}
-/* The host's own bottom dock (rounds/steps and tok/s, the token total with its cache hit
-   rate, and its context ring) is removed: those readings moved into the context panel the
-   composer seat opens, and the ring itself now sits before the model selector. */
-body[data-smooth-skin] [data-composer-dock]{display:none}
-/* The context meter, drawn like the supplied occupancy-ring asset: the reading sits in
-   the middle of the ring, and the ring opens a panel above the composer. */
-body[data-smooth-skin] .smooth-context-button{display:grid;place-items:center;flex:none;width:22px;height:22px;margin:0;padding:0;border:0;border-radius:50%;background:transparent;color:var(--smooth-muted);cursor:pointer;transition:background-color .16s ease}
-body[data-smooth-skin] .smooth-context-button:hover,
-body[data-smooth-skin] .smooth-context-button:focus-visible,
-body[data-smooth-skin] .smooth-context-button[aria-expanded="true"]{background:var(--smooth-surface-3-mild)}
-body[data-smooth-skin] .smooth-context-button:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:2px}
-body[data-smooth-skin] .smooth-context-button svg{display:block;overflow:visible}
-body[data-smooth-skin] .smooth-context-ring-track{fill:none;stroke:color-mix(in srgb,var(--smooth-muted) 42%,transparent);stroke-width:2.1}
-body[data-smooth-skin] .smooth-context-ring-fill{fill:none;stroke:var(--smooth-accent);stroke-width:2.1;transition:stroke-dasharray .3s cubic-bezier(.22,1,.36,1)}
-body[data-smooth-skin] .smooth-context-ring-label{fill:var(--smooth-text);font-family:inherit;font-size:7.2px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+/* The host's bottom dock keeps its place under the card, but its own context ring and
+   its two stat pills are hidden: the skin's usage button (registered in the composer
+   dock slot) carries every figure the pills showed, with its own context pie at the
+   right end. */
+body[data-smooth-skin] [data-composer-dock]>${hostPart('root')}{display:none}
+body[data-smooth-skin] [data-composer-dock] [data-composer-stat]{display:none}
+/* The capsule can leave the dock: folded into the context row or centred in the bottom
+   bar. In those placements the dock row has nothing left to say and collapses. */
+body[data-smooth-skin][data-smooth-usage-placement="context"] [data-composer-dock],
+body[data-smooth-skin][data-smooth-usage-placement="bottom"] [data-composer-dock]{display:none}
+/* The live usage line is the session meter's single compact button under the card: the
+   figures followed by the context pie at its right end. The button keeps its original
+   pill size; only the ink inside it grew. The direction, cache and meter icons stay
+   quiet, the figures take the text ink, and the numbers share one tabular width so a
+   streaming count never shifts the row. Hovering anywhere in the button enlarges only the
+   pie's used wedge; focus and an open panel keep the pill lit. */
+body[data-smooth-skin] .smooth-usage-line{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 16px;max-width:min(100%,860px);margin:0 auto;padding:3px 10px;border:0;border-radius:999px;background:transparent;color:var(--smooth-muted);font:inherit;font-size:13px;line-height:20px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color .16s ease}
+body[data-smooth-skin] .smooth-usage-line--bottom{margin:0;min-width:0;max-width:min(100%,620px)}
+body[data-smooth-skin] .smooth-usage-line--left{margin-left:0;margin-right:auto}
+body[data-smooth-skin] .smooth-usage-line--center{margin-left:auto;margin-right:auto}
+body[data-smooth-skin] .smooth-usage-line--right{margin-left:auto;margin-right:0}
+body[data-smooth-skin] .smooth-usage-bottom-fixed{position:fixed;z-index:8;display:flex;align-items:center;justify-content:center;pointer-events:none}
+body[data-smooth-skin] .smooth-usage-bottom-fixed .smooth-usage-line{pointer-events:auto;max-width:100%;margin:0}
+body[data-smooth-skin] .smooth-usage-line:hover,
+body[data-smooth-skin] .smooth-usage-line:focus-visible,
+body[data-smooth-skin] .smooth-usage-line[aria-expanded="true"]{background:var(--smooth-surface-3-mild)}
+body[data-smooth-skin] .smooth-usage-line:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:2px}
+body[data-smooth-skin] .smooth-usage-figures{display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:4px 16px;min-width:0}
+body[data-smooth-skin] .smooth-usage-item{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+body[data-smooth-skin] .smooth-usage-value{color:var(--smooth-text);font-weight:500}
+body[data-smooth-skin] .smooth-usage-icon{display:block;flex:none;width:14px;height:14px;color:var(--smooth-muted)}
+body[data-smooth-skin] .smooth-usage-icon-hit{opacity:.95}
+body[data-smooth-skin] .smooth-usage-item:first-child .smooth-usage-value{font-weight:600}
+/* The context pie sits at the button's right end, drawn like the supplied asset: a pale
+   disc for the remaining share with an accent wedge for the used share, and the reading
+   beside it. The stylesheet moves only the used wedge on hover/focus/open. */
+body[data-smooth-skin] .smooth-context-reading{display:inline-flex;align-items:center;gap:4px;flex:none}
+body[data-smooth-skin] .smooth-context-reading svg{display:block;flex:none;overflow:visible}
+body[data-smooth-skin] .smooth-context-pie-rest{fill:color-mix(in srgb,var(--smooth-muted) 42%,transparent)}
+body[data-smooth-skin] .smooth-context-pie-used{fill:var(--smooth-accent);transform-box:view-box;transform-origin:center;transform:scale(1);transition:transform .16s cubic-bezier(.22,1,.36,1)}
+body[data-smooth-skin] .smooth-usage-line:hover .smooth-context-pie-used,
+body[data-smooth-skin] .smooth-usage-line:focus-visible .smooth-context-pie-used,
+body[data-smooth-skin] .smooth-usage-line[aria-expanded="true"] .smooth-context-pie-used{transform:scale(1.16)}
+body[data-smooth-skin] .smooth-context-value{color:var(--smooth-text);font-size:13px;font-weight:600;line-height:20px;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+/* The context-row placement keeps only the pie and its reading, immediately before the
+   model selector. It is a quiet button until hovered, focused or open. */
+body[data-smooth-skin] .smooth-usage-context{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:0;border-radius:999px;background:transparent;color:var(--smooth-muted);font:inherit;font-size:13px;line-height:20px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color .16s ease}
+body[data-smooth-skin] .smooth-usage-context:hover,
+body[data-smooth-skin] .smooth-usage-context:focus-visible,
+body[data-smooth-skin] .smooth-usage-context[aria-expanded="true"]{background:var(--smooth-surface-3-mild)}
+body[data-smooth-skin] .smooth-usage-context:focus-visible{outline:2px solid var(--smooth-accent);outline-offset:2px}
+body[data-smooth-skin] .smooth-usage-context:hover .smooth-context-pie-used,
+body[data-smooth-skin] .smooth-usage-context:focus-visible .smooth-context-pie-used,
+body[data-smooth-skin] .smooth-usage-context[aria-expanded="true"] .smooth-context-pie-used{transform:scale(1.16)}
+/* Bottom-bar placement lives in the host's left footer slot, immediately after the
+   permission/plan controls; the native flex row aligns it, so no extra positioning. */
 body[data-smooth-skin] .smooth-context-menu{position:fixed;z-index:1200;box-sizing:border-box;padding:12px;border:1px solid var(--smooth-line-strong);border-radius:var(--smooth-radius-lg);background:color-mix(in srgb,var(--dsw-alias-bg-overlay,var(--smooth-surface-mild)) var(--smooth-glass-overlay),transparent);box-shadow:var(--smooth-shadow-2);color:var(--smooth-muted);font-size:12px;line-height:20px;animation:smooth-context-in .16s cubic-bezier(.2,0,0,1)}
 @keyframes smooth-context-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 body[data-smooth-skin] .smooth-context-head{display:flex;align-items:baseline;gap:6px;min-width:0}
@@ -409,7 +450,7 @@ body[data-smooth-skin] .smooth-context-grid{display:grid;grid-template-columns:r
 body[data-smooth-skin] .smooth-context-metric{display:flex;flex-direction:column;gap:1px;min-width:0}
 body[data-smooth-skin] .smooth-context-metric-label{color:var(--smooth-muted);font-size:11.5px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body[data-smooth-skin] .smooth-context-metric-value{color:var(--smooth-text);font-size:13px;font-weight:600;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
-@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-context-menu{animation:none}body[data-smooth-skin] .smooth-context-ring-fill{transition:none}}
+@media(prefers-reduced-motion:reduce){body[data-smooth-skin] .smooth-context-menu{animation:none}body[data-smooth-skin] .smooth-context-pie-used{transition:none}}
 body[data-smooth-skin] .smooth-composer-model{display:flex;align-items:center;min-width:0;max-width:100%;font-size:13px;line-height:20px}
 body[data-smooth-skin] .smooth-composer-model button{height:32px;min-height:32px;font-size:inherit;line-height:20px;padding-block:0}
 body[data-smooth-skin] .smooth-model-effort{display:flex;flex-direction:column;align-items:stretch;gap:0;width:100%;min-width:0;max-width:100%}

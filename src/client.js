@@ -78,7 +78,51 @@ const CSS = `/* injected through the package stylesheet; kept beside the skin ru
 .smooth-button:disabled{opacity:.5;cursor:default}
 .smooth-status{font-size:12.5px;color:var(--dsw-alias-label-secondary)}
 .smooth-status[data-error="true"]{color:var(--dsw-alias-state-error-primary)}
-@media(max-width:600px){.smooth-themes{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.smooth-theme{padding:10px 4px;font-size:12px}.smooth-row{gap:14px}.smooth-row--size{flex-direction:column;align-items:stretch;gap:12px}.smooth-size{justify-content:flex-start}.smooth-size input{width:64px}.smooth-range{width:100%}}
+/* Settings preview of the composer usage capsule. It mirrors the real button's field
+   order and look with host tokens, so it is readable even while the skin itself is off. */
+.smooth-usage-settings{padding-top:8px}
+.smooth-usage-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;min-height:24px}
+.smooth-usage-placement{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:999px;background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent))}
+.smooth-usage-placement-button{font:inherit;font-size:12px;line-height:18px;padding:4px 9px;border:0;border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;white-space:nowrap;transition:background-color .16s ease,color .16s ease}
+.smooth-usage-placement-button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12));color:var(--dsw-alias-label-primary)}
+.smooth-usage-placement-button[aria-pressed="true"]{background:var(--smooth-accent,var(--dsw-alias-brand-primary));color:var(--smooth-ink,var(--dsw-alias-label-primary-foreground,#181a1e))}
+.smooth-usage-placement-button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.smooth-usage-placement-button:disabled{opacity:.5;cursor:default}
+.smooth-usage-align{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:0 0 6px}
+.smooth-usage-align-label{color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;white-space:nowrap}
+.smooth-usage-align-options{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:999px;background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent))}
+.smooth-usage-align-button{font:inherit;font-size:12px;line-height:18px;padding:4px 9px;border:0;border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;white-space:nowrap;transition:background-color .16s ease,color .16s ease}
+.smooth-usage-align-button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12));color:var(--dsw-alias-label-primary)}
+.smooth-usage-align-button[aria-pressed="true"]{background:var(--smooth-accent,var(--dsw-alias-brand-primary));color:var(--smooth-ink,var(--dsw-alias-label-primary-foreground,#181a1e))}
+.smooth-usage-align-button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.smooth-usage-align-button:disabled{opacity:.5;cursor:default}
+.smooth-usage-preview{display:flex;flex-direction:column;gap:8px;margin:14px 0 16px;padding:16px;border-radius:var(--smooth-radius-lg);background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent))}
+.smooth-usage-preview-caption{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.smooth-usage-preview-line{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:16px;padding:3px 10px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12));color:var(--smooth-text,var(--dsw-alias-label-primary));font-size:13px;line-height:20px;font-variant-numeric:tabular-nums}
+.smooth-usage-preview-item,.smooth-usage-preview-context{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.smooth-usage-preview-value{font-weight:500}
+.smooth-usage-preview-item:first-child .smooth-usage-preview-value{font-weight:600}
+.smooth-usage-preview-icon{display:block;flex:none;width:14px;height:14px;color:var(--smooth-muted,var(--dsw-alias-label-secondary))}
+.smooth-usage-preview-pie-rest{fill:color-mix(in srgb,var(--smooth-muted,var(--dsw-alias-label-secondary)) 42%,transparent)}
+.smooth-usage-preview-pie-used{fill:var(--smooth-accent,var(--dsw-alias-brand-primary))}
+.smooth-usage-preview-context-row{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:16px;min-height:32px;color:var(--smooth-text,var(--dsw-alias-label-primary));font-size:13px;line-height:20px;font-variant-numeric:tabular-nums}
+.smooth-usage-preview-context-seat{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover,rgba(128,128,128,.12))}
+.smooth-usage-preview-model{display:inline-flex;align-items:center;gap:6px;color:var(--dsw-alias-label-secondary);font-size:13px}
+.smooth-usage-preview-model-badge{font-size:11px;line-height:16px;padding:0 5px;border-radius:999px;background:var(--dsw-alias-bg-layer-1,transparent);color:var(--dsw-alias-label-primary)}
+.smooth-usage-preview-empty{padding:4px 0;color:var(--dsw-alias-label-secondary);font-size:13px}
+.smooth-usage-editor{display:flex;align-items:flex-start;justify-content:center;gap:16px;min-width:0;padding:4px 0 2px;overflow-x:auto}
+.smooth-usage-field{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;padding:4px 2px;border-radius:var(--smooth-radius-xs)}
+.smooth-usage-field[data-visible="false"] .smooth-usage-field-value{opacity:.4}
+.smooth-usage-field-label{color:var(--dsw-alias-label-secondary);font-size:11.5px;line-height:16px;white-space:nowrap}
+.smooth-usage-field-value{display:flex;align-items:center;gap:5px;min-height:24px;white-space:nowrap;color:var(--smooth-text,var(--dsw-alias-label-primary));font-size:13px;line-height:20px;font-variant-numeric:tabular-nums;cursor:grab;user-select:none}
+.smooth-usage-field-value:active{cursor:grabbing}
+.smooth-usage-field-read{display:inline-flex;align-items:center;gap:5px}
+.smooth-usage-field-check{appearance:none;-webkit-appearance:none;position:relative;flex:none;width:18px;height:18px;margin:0;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--smooth-radius-xs);background:transparent;cursor:pointer;transition:background-color .16s ease,border-color .16s ease}
+.smooth-usage-field-check:checked{background:var(--smooth-accent,var(--dsw-alias-brand-primary));border-color:transparent}
+.smooth-usage-field-check:checked::after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:solid var(--smooth-ink,var(--dsw-alias-label-primary-foreground,#181a1e));border-width:0 2px 2px 0;transform:rotate(45deg)}
+.smooth-usage-field-check:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.smooth-usage-field-check:disabled{opacity:.5;cursor:default}
+@media(max-width:600px){.smooth-themes{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.smooth-theme{padding:10px 4px;font-size:12px}.smooth-row{gap:14px}.smooth-row--size{flex-direction:column;align-items:stretch;gap:12px}.smooth-size{justify-content:flex-start}.smooth-size input{width:64px}.smooth-range{width:100%}.smooth-usage-editor{justify-content:flex-start}.smooth-usage-head{flex-direction:column;align-items:flex-start;gap:10px}}
 @media(prefers-reduced-motion:reduce){.smooth-switch,.smooth-switch::after,.smooth-theme{transition:none}}
 `;
 
@@ -347,6 +391,8 @@ function apply(ctx) {
   function sync() {
     if (disposed) return;
     document.body.toggleAttribute(SKIN_ATTRIBUTE, !!state.enabled);
+    if (state.enabled) document.body.setAttribute(USAGE_PLACEMENT_ATTRIBUTE, state.usagePlacement || DEFAULT_USAGE_PLACEMENT);
+    else document.body.removeAttribute(USAGE_PLACEMENT_ATTRIBUTE);
     syncGlass();
     // The welcome block's flag is published by the chrome component while it is mounted,
     // so a skin that is switched off has to take it down itself.
@@ -577,6 +623,173 @@ function apply(ctx) {
         })));
   }
 
+  /** A small, non-interactive copy of the composer usage capsule for the settings page.
+   * It reuses the same field order and sample figures, so turning a checkbox off removes
+   * the same segment the real button would drop. */
+  function PreviewGlyph(kind) {
+    const icon = (viewBox, ...children) => h('svg', {
+      className: 'smooth-usage-preview-icon', viewBox, width: 14, height: 14, 'aria-hidden': true,
+    }, ...children);
+    if (kind === 'cost') {
+      return icon('0 0 12 12', h('g', {
+        fill: 'none', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round', strokeLinejoin: 'round',
+      },
+        h('path', { d: 'M3.1 2.5 6 5.6l2.9-3.1' }),
+        h('path', { d: 'M6 5.6v4' }),
+        h('path', { d: 'M3.5 6.7h5' }),
+        h('path', { d: 'M3.5 8.4h5' })));
+    }
+    if (kind === 'input' || kind === 'output') {
+      return icon('0 0 12 12', h('path', {
+        d: kind === 'input' ? 'M6 2.2v7.6M2.9 6.9 6 10l3.1-3.1' : 'M6 9.8V2.2M2.9 5.1 6 2l3.1 3.1',
+        fill: 'none', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round',
+      }));
+    }
+    if (kind === 'cache') {
+      return icon('0 0 1024 1024',
+        h('path', {
+          d: 'M544 876.8a332.8 332.8 0 1 0 0-665.6 332.8 332.8 0 0 0 0 665.6z m0 83.2a416 416 0 1 1 0-832 416 416 0 0 1 0 832z',
+          fill: 'currentColor', fillOpacity: .65,
+        }),
+        h('path', { d: 'M544 627.2a83.2 83.2 0 1 1 0-166.4 83.2 83.2 0 0 1 0 166.4z', fill: 'currentColor' }));
+    }
+    if (kind === 'counts') {
+      return icon('0 0 24 24', h('path', {
+        d: 'M3 19 L9 19 L9 13 L15 13 L15 7 L21 7',
+        fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round',
+      }));
+    }
+    if (kind === 'speed') {
+      return icon('0 0 24 24',
+        h('path', {
+          d: 'M4.5 17.5a7.5 7.5 0 1 1 15 0', fill: 'none', stroke: 'currentColor',
+          strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round',
+        }),
+        h('path', {
+          d: 'M12 14.6 15.6 9.4', fill: 'none', stroke: 'currentColor',
+          strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round',
+        }),
+        h('circle', { cx: 12, cy: 15.4, r: 1.15, fill: 'currentColor' }));
+    }
+    return null;
+  }
+  function PreviewPie() {
+    const center = 12;
+    const radius = 9.7;
+    const percent = 88;
+    const angle = (percent * 3.6 - 90) * Math.PI / 180;
+    const edgeX = center + radius * Math.cos(angle);
+    const edgeY = center + radius * Math.sin(angle);
+    return h('svg', { viewBox: '0 0 24 24', width: 24, height: 24, 'aria-hidden': true },
+      h('circle', { className: 'smooth-usage-preview-pie-rest', cx: center, cy: center, r: radius }),
+      h('path', {
+        className: 'smooth-usage-preview-pie-used',
+        d: `M${center} ${center} L${center} ${center - radius} A${radius} ${radius} 0 ${percent > 50 ? 1 : 0} 1 ${edgeX} ${edgeY} Z`,
+      }));
+  }
+  function UsageFieldValue({ field }) {
+    if (field === 'context') {
+      return h('span', { className: 'smooth-usage-field-read' },
+        PreviewPie(), h('span', { className: 'smooth-usage-preview-value' }, '88%'));
+    }
+    const values = {
+      cost: '8.888',
+      input: '888,888,888 tok',
+      output: '888,888 tok',
+      cache: '88%',
+      counts: text('settings.usage.sampleCounts', '8 轮 8 步'),
+      speed: '8 tok/s',
+    };
+    return h('span', { className: 'smooth-usage-field-read' },
+      PreviewGlyph(field), h('span', { className: 'smooth-usage-preview-value' }, values[field]));
+  }
+  function UsagePlacementRow({ value, disabled, onChange }) {
+    const options = [
+      ['context', 'In context'],
+      ['bottom', 'Bottom bar'],
+      ['row', 'Own row'],
+    ];
+    return h('div', {
+      className: 'smooth-usage-placement', role: 'group',
+      'aria-label': text('settings.usagePlacement', 'Placement'),
+    },
+      ...options.map(([key, fallback]) => h('button', {
+        key, type: 'button', className: 'smooth-usage-placement-button',
+        'data-placement': key, 'aria-pressed': value === key, disabled,
+        onClick: () => onChange(key),
+      }, text(`settings.usagePlacement.${key}`, fallback))));
+  }
+  function UsageFieldsRow({ fields, order, placement, align, disabled, onChange, onReorder, onAlign }) {
+    const labels = [
+      ['cost', 'Used cost'],
+      ['input', 'Input tokens'],
+      ['output', 'Output tokens'],
+      ['cache', 'Cache hit rate'],
+      ['counts', 'Turns and steps'],
+      ['speed', 'Output speed'],
+      ['context', 'Context share'],
+    ];
+    const labelOf = (key) => labels.find(([name]) => name === key)?.[1] ?? key;
+    const stored = Array.isArray(order) ? order : [];
+    const ordered = [
+      ...stored.filter((key) => labels.some(([name]) => name === key)),
+      ...labels.map(([key]) => key).filter((key) => !stored.includes(key)),
+    ];
+    const dragKey = { current: null };
+    return h('div', { className: 'smooth-usage-settings' },
+      h('div', { className: 'smooth-usage-preview' },
+        h('span', { className: 'smooth-usage-preview-caption' }, text('settings.usagePreview', 'Preview')),
+        h('div', {
+          className: 'smooth-usage-editor', role: 'group',
+          'aria-label': text('settings.groupUsage', 'Conversation stats'),
+        },
+          ...ordered.map((key) => h('div', {
+            key, className: 'smooth-usage-field',
+            'data-visible': fields?.[key] !== false ? 'true' : 'false',
+          },
+            h('span', { className: 'smooth-usage-field-label' }, text(`settings.usage.${key}`, labelOf(key))),
+            h('span', {
+              className: 'smooth-usage-field-value',
+              draggable: !disabled,
+              title: text('settings.usageDrag', 'Drag to reorder'),
+              onDragStart: (event) => {
+                dragKey.current = key;
+                event.dataTransfer?.setData('text/plain', key);
+                if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+              },
+              onDragOver: (event) => {
+                if (!disabled && dragKey.current && dragKey.current !== key) event.preventDefault();
+              },
+              onDrop: (event) => {
+                event.preventDefault();
+                const from = dragKey.current || event.dataTransfer?.getData('text/plain');
+                dragKey.current = null;
+                if (from && from !== key) onReorder(from, key);
+              },
+              onDragEnd: () => { dragKey.current = null; },
+            }, UsageFieldValue({ field: key })),
+            h('input', {
+              type: 'checkbox',
+              className: 'smooth-usage-field-check',
+              name: key,
+              'aria-label': text(`settings.usage.${key}`, labelOf(key)),
+              checked: fields?.[key] !== false,
+              disabled,
+              onChange: (event) => onChange(key, event.target.checked),
+            }))))),
+      placement === 'bottom' ? h('div', { className: 'smooth-usage-align' },
+        h('span', { className: 'smooth-usage-align-label' }, text('settings.usageAlign', 'Button position')),
+        h('div', {
+          className: 'smooth-usage-align-options', role: 'group',
+          'aria-label': text('settings.usageAlign', 'Button position'),
+        },
+          ...[['left', 'Left'], ['center', 'Center'], ['right', 'Right']].map(([key, fallback]) => h('button', {
+            key, type: 'button', className: 'smooth-usage-align-button',
+            'data-align': key, 'aria-pressed': (align || 'left') === key, disabled,
+            onClick: () => onAlign(key),
+          }, text(`settings.usageAlign.${key}`, fallback))))) : null);
+  }
+
   function SmoothSettings() {
     const view = useSmoothState();
     const current = view.state;
@@ -646,6 +859,37 @@ function apply(ctx) {
           onChange: (value) => view.update({ ...current, mark: value }),
         })),
       h('section', null,
+        h('div', { className: 'smooth-usage-head' },
+          h('div', { className: 'smooth-row-copy' },
+            h('h3', null, text('settings.groupUsage', 'Conversation stats')),
+            h('small', null, text('settings.usageOrderHint', 'Drag to change the order'))),
+          h(UsagePlacementRow, {
+            value: current.usagePlacement || DEFAULT_USAGE_PLACEMENT,
+            disabled: disabled || !current.enabled,
+            onChange: (value) => view.update({ ...current, usagePlacement: value }),
+          })),
+        h(UsageFieldsRow, {
+          fields: current.usageFields || DEFAULT_USAGE_FIELDS,
+          order: current.usageOrder || DEFAULT_USAGE_ORDER,
+          placement: current.usagePlacement || DEFAULT_USAGE_PLACEMENT,
+          align: current.usageAlign || DEFAULT_USAGE_ALIGN,
+          disabled: disabled || !current.enabled,
+          onChange: (key, value) => view.update({
+            ...current,
+            usageFields: { ...(current.usageFields || DEFAULT_USAGE_FIELDS), [key]: value },
+          }),
+          onAlign: (value) => view.update({ ...current, usageAlign: value }),
+          onReorder: (from, to) => {
+            const order = [...(current.usageOrder || DEFAULT_USAGE_ORDER)];
+            const fromIndex = order.indexOf(from);
+            const toIndex = order.indexOf(to);
+            if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+            order.splice(fromIndex, 1);
+            order.splice(toIndex, 0, from);
+            view.update({ ...current, usageOrder: order });
+          },
+        })),
+      h('section', null,
         h('h4', { className: 'smooth-group-title' }, text('settings.groupStartup', 'Startup')),
         h(ToggleRow, {
           title: text('settings.boot', 'Launch animation'),
@@ -711,6 +955,7 @@ function apply(ctx) {
     // The glass weight is inline state on the body; the host body comes back as it was.
     document.body.style?.removeProperty?.('--smooth-glass');
     document.body.removeAttribute(SKIN_ATTRIBUTE);
+    document.body.removeAttribute(USAGE_PLACEMENT_ATTRIBUTE);
     // The welcome block's flag is published while the chrome is mounted; a disabled
     // skin must not leave it behind (it is gated on the skin attribute anyway, but the
     // host body should come back exactly as it was).
