@@ -67,6 +67,7 @@ assets/whale.svg  开场鲸鱼的独立 SVG 文件，从 src/boot.js 导出，�
 assets/think/     四挡思考强度插图：cutout/*.webp 入库用于生成面板背景；原始 PNG 不入库
 locale/{zh,en}.json  插件管理页显示的标题与描述
 src/shared.js     调色板、主题令牌映射、状态规范化、locale 词条
+src/pricing.js    DeepSeek 价目表与当前会话金额估算（客户端，只进 client 产物）
 src/think.js      由 tools/export-think.mjs 生成的 THINK_ART（四挡插图的内联 data URL），不要手改
 src/skin.js       作用域样式表
 src/boot.js       启动动画唯一定义：注入 index 的样式/标记/脚本 + 设置页预览
