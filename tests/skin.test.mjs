@@ -208,6 +208,9 @@ test('the context pie keeps the occupancy look and the dock hosts the usage line
   assert.match(skin, /\.smooth-usage-item\{/);
   assert.match(skin, /\.smooth-usage-icon\{[^}]*width:14px;height:14px/);
   assert.match(skin, /\.smooth-usage-value\{/);
+  assert.match(skin, /\.smooth-usage-value\{color:var\(--smooth-muted\);font-weight:500/, 'the figures rest at the model trigger brightness');
+  assert.match(skin, /\.smooth-context-value\{color:var\(--smooth-muted\);font-size:13px/, 'the percentage rests at the same brightness');
+  assert.match(skin, /:is\(\.smooth-usage-line,\.smooth-usage-context\):is\(:hover,:focus-visible,\[aria-expanded="true"\]\) :is\(\.smooth-usage-value,\.smooth-context-value\)\{color:var\(--smooth-text\)\}/, 'hover, focus and the open panel brighten the figures');
   assert.doesNotMatch(skin, /\.smooth-usage-sep/, 'the figures are separated by a uniform gap, not dots');
   assert.match(skin, /\.smooth-usage-line\{[^}]*gap:4px 16px/);
   assert.match(skin, /\.smooth-usage-figures\{[^}]*gap:4px 16px/);

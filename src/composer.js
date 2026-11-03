@@ -1726,7 +1726,10 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
         : variant === 'context' ? placement === 'context'
           : false;
     if (!active) return null;
-    if (!usage && !stats && !context) return null;
+    // A fresh session projects zero tokens, zero turns and (at most) a zero context;
+    // its button would only read 0.000 / 0 tok. Leave the dock empty until the first
+    // reading exists, including the context-only seat.
+    if (!(input + output) && !turns && !steps) return null;
     const contextOnly = variant === 'context';
     const showContext = contextOnly ? !!context : !!context && fields.context !== false;
     const reading = context ? `${Math.round(shown.context)}%` : null;

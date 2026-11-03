@@ -453,6 +453,24 @@ test('the dock usage line writes the projection figures, not a scan', () => {
   assert.doesNotMatch(unpriced.text, /¥/);
   // Without any projection there is nothing to say, so the dock row stays empty.
   assert.equal(dock.component({ useProjection: () => undefined, sessionId: 's1' }), null);
+  // A fresh session projects the fields as zeros rather than omitting them; the button
+  // must stay absent until there is a token, turn or step reading to show.
+  const fresh = {
+    tokenUsage: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 },
+    sessionStats: { turns: 0, steps: 0, decodeMs: 0, decodeTokens: 0 },
+    contextPressure: { pressureTokens: 0, contextWindow: 1000 },
+    contextBreakdown: { systemTokens: 0, toolsTokens: 0, messageTokens: 0 },
+  };
+  const freshByKey = key => fresh[key];
+  assert.equal(dock.component({ useProjection: freshByKey, sessionId: 's1' }), null,
+    'a brand-new session carries no data button');
+  // The context-only seat follows the same rule.
+  usagePlacement = 'context';
+  const freshSeat = overrides.get('conversation.input.right');
+  const freshSeatElement = freshSeat.component({ useProjection: freshByKey, sessionId: 's1' });
+  assert.equal(freshSeatElement.type(freshSeatElement.props), null,
+    'a fresh context seat does not render a 0% pie');
+  usagePlacement = 'row';
   // In the context-row placement the dock yields and the input-right seat carries only
   // the pie and its reading.
   usagePlacement = 'context';
