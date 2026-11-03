@@ -46,13 +46,15 @@ node --test tests/*.test.mjs
 
 6. **标签状态属于本次客户端生命周期。** 顶部标签通过 `layout.selectPanel()`、`uiWorkspace.startSession()` / `openSession()` 和原生设置 store 导航。打开对话或页面先显示临时标签；在内容区输入、修改表单或点击操作控件后固定，单纯浏览不会累积标签，也不会自动加入其他历史会话，双击标签也可固定。点击关闭按钮或在标签上按 Delete 仅关闭标签，保留对话数据；关闭当前标签后切换到相邻标签，全部关闭时回到首页，且首页由页面本身承担，不占标签位也不作为固定目标。通过 slots 发布的共享 store 读取侧栏宽度和设置状态；在原生设置插槽内渲染标签，保留设置窗口的焦点管理。三块外观选项调用原生 `theme.setTheme()`，关闭时撤销插槽覆盖。
 
-7. **样式以 `body[data-smooth-skin]` 为开关，选择器不绑构建哈希。** Client 半注册 `settings.section` 页面、注入作用域样式表（自带 `data-plugin` 标记，避免被其他插件的热替换清理）、按状态调用 `theme.overrideTokens()`，状态存在浏览器 `localStorage`（键 `dsh-smooth-skin:state`），不经过任何 Host 通道。配色通过 `theme.overrideTokens()` 提供 light / dark 两套值；选择器优先使用宿主的 `data-plugin-panel`、`data-plugin-package`、`data-composer-card` 等真实属性，没有公开属性的部位只匹配已核对的 CSS 模块语义后缀，不绑定构建哈希；宿主大版本升级后需重新检查这些部位。
+7. **样式以 `body[data-smooth-skin]` 为开关，选择器不绑构建哈希。** Client 半注册 `settings.section` 页面、注入作用域样式表（自带 `data-plugin` 标记，避免被其他插件的热替换清理）、按状态调用 `theme.overrideTokens()`，状态存在浏览器 `localStorage`（键 `dsh-smooth-skin:state`），不经过任何 Host 通道。配色通过 `theme.overrideTokens()` 提供 light / dark 两套值；页面通透度是 body 上的一个内联变量 `--smooth-glass`（区域底板权重），各区域用 `color-mix()` 从自己的调色板色派生半透明色；跟随它的是页面、侧栏、左侧图标栏、标签条、输入区底板、整页设置与浮层菜单这些大块区域，按钮 / 列表行 / 标签芯片 / 卡片 / 输入框等组件用另一个很轻的 `--smooth-glass-mild`（每 3 点通透度降 1 点不透明度：30% 时约 90% 不透明、100% 时 67%），`#root` 内的宿主控件靠改写 `--dsw-alias-bg-layer-*` / `--dsw-specific-input-major` / `--dsw-specific-bubble` 跟上；图标栏坐在侧栏玻璃上，客户端另写 `--smooth-glass-soft`（页面权重的四次方）给它避免叠加变实心带；标签条则自己铺 surface（窗体条只铺侧栏那半），是单层、用页面权重；`#root` 里的 `--dsw-specific-sidebar-fill` 改写成 `--smooth-sidebar-glass`，宿主画的工作区列表底部虚化才跟着变透；虚化元素本身走更陡的 `--smooth-sidebar-fade`（页面权重四次方，100% 时 0）。浮层与设置另有一个很淡的权重 `--smooth-glass-overlay`（每 8 点通透度降 1 点不透明度，最低 85%），避免下面的正文透上来。底纹画在 body 的负 z 层，关闭皮肤时这个内联变量一并撤销。选择器优先使用宿主的 `data-plugin-panel`、`data-plugin-package`、`data-composer-card` 等真实属性，没有公开属性的部位只匹配已核对的 CSS 模块语义后缀，不绑定构建哈希；宿主大版本升级后需重新检查这些部位。
 
 8. **启动动画的三行由 Host 注入，脚本只做三件事。** Host 半的 `bootInjections()` 注入 `style`、`html`、`script` 三行纯数据。鲸鱼路径直接来自宿主 `FishLogo`（23.16 × 17.04），坐标取 2 位小数（最坏偏差 0.005 用户单位 ≈ 176px 下的 0.04px）；三行合计 5.2 KB（gzip 2.4 KB）；样式行在注入时去掉注释与缩进（该表内没有任何字符串，所以只删读者才需要的东西），源码里的版本保持可读。标记里没有 SMIL，脚本里没有几何运算：注入脚本只做三件事——读 `localStorage` 与减少动态效果偏好（不满足就摘掉整层）、等 `#root` 挂载、最短停留后 340ms 淡出并在 640ms 后清理；应用未挂载时最多多等 8s。宿主 index 里的 `<div id="root">` 是静态节点（已在 app.asar 的 `dsh-web-frontend/dist/index.html` 核对），所以等待只观察它的直接子节点，不再把应用挂载期间的每一次 DOM 变更都收进来；只有 `#root` 尚未解析出来时才退回观察整个文档子树，行为与之前一致。设置在下次页面加载时生效。
 
 9. **等待宿主表面统一走 `src/watch.js`。** 输入卡片、英雄区、账号菜单都由它等：一个 `MutationObserver(document.body, {childList, subtree})` 服务全部 watcher，回调合并到一帧一次，最后一个 watcher 释放时 observer 一并断开。每个 watcher 的首次检查仍是同步的，所以它装饰的元素在首帧就位；这样 React 挂载期的多次 commit 只换来一次整文档查询，而不是每个 commit 每个 watcher 各一次。账号菜单需要 `aria-expanded`，因此保留自己的 observer，但回调同样按帧合并。
 
 10. **预览与真播共用 `src/boot.js` 这一份定义。** 设置页的「预览」按钮把这份唯一定义再用一次：`splashInnerHtml()` 渲染同一个 `#dsh-smooth-splash`，时长仍取 `SPLASH_HOLD_MS` / `SPLASH_SETTLE_MS`，动画也来自同一份样式表，所以预览与真播不会各写一套。它 portal 到 `body`，只在点击后挂载，播完即卸载；若当前页面没有收到 Host 注入的样式表（旧 index、插件后装），客户端会补一份带 `data-plugin` 标记的副本，随插件卸载一起移除。系统开启「减少动态效果」时按钮禁用并在说明里写明原因——那种情况下启动也不会播。
+
+11. **窗口亚克力是安装包补丁，不是插件的一部分。** 渲染进程改不了操作系统窗口，`backgroundMaterial: "acrylic"` 必须写在 Electron 主进程创建窗口的选项里。`tools/patch-window-glass.mjs` 直接改已安装 `resources/app.asar` 里的 `lib/main.js`：win32 主窗口分支加 `backgroundColor: "#00000000"` / `backgroundMaterial: "acrylic"`，并在窗口的 `did-finish-load` 上把 `data-smooth-window-glass` 打到页面 `<body>`。它靠裁剪同一文件里的注释文字把修改压成**等长原地写**（只写 `lib/main.js` 那一段字节，asar 头与偏移不动），因此补丁能在 DSH 运行时打、下一次启动生效；原始字节备份成 `app.asar.main.js.smooth-window-glass.bak`。皮肤只读那个 body 属性：有属性才让 `html` / `body` 透明并去掉内嵌底纹，没属性就保持应用内渐变，所以未打补丁或 DSH 更新后都不会把页面变成透明白块。代价：补丁改的是用户机器上的安装包，DSH 每次更新都会覆盖（重跑 `tools/apply-window-glass.cmd`）；`main.js` 会少掉一小段注释；锚点对不上时脚本拒绝修改；只有 Windows 11 支持该材质。
 
 ## 模块地图
 
@@ -79,7 +81,9 @@ src/client.js     Client 半：设置页 + 令牌覆盖 + 样式注入 + localSt
 src/host.js       Host 半：启动动画注入 + 私有 /smooth-skin/git 桥（Git、每日 token、归档会话删除）
 build.mjs         构建脚本
 tools/            激活试验台、图标导出、启动剖析与宿主契约审计（除客户端钩子外，也核对 Host 侧 `sessions` / `workspaceRegistry` / `sessionPersistence` 的桥接符号）
+tools/patch-window-glass.mjs  桌面窗口亚克力补丁：等长原地改已安装 app.asar 的主窗口选项与页面标记；apply / restore 的 .cmd 在旁
 tests/            契约、样式作用域、宿主兼容性与交互测试
+tests/window-glass.test.mjs  窗口补丁的锚点、等长裁剪与原地写入回归
 ```
 
 `src/shared.js` 被打包进两个产物，是配色与状态规范化的唯一来源。
@@ -112,9 +116,14 @@ tests/            契约、样式作用域、宿主兼容性与交互测试
 
 浏览器侧的对照测量（真实时间、合成外壳、逐阶段计时）另有一份本地脚本，结论记在这里：外壳挂载期间**样式重算**是这份皮肤为启动付出的主要成本，其次才是 client 包的取回/解析/求值（约 6ms）。`src/watch.js` 就是据此把等待宿主表面的 observer 收成一个、并把检查按帧合并——启动期对整篇文档的查询从每次 commit 一次降到每帧一次。字节上并没有收益：`watch.js` 净增约 2.8 KB（`lib/client.js` 151538 → 154294 字节），换来的是挂载期的查询次数，而不是包体。
 
+### `tools/patch-window-glass.mjs`：桌面窗口亚克力
+
+不是插件的一部分，也不进 `lib/`：它负责改用户机器上**已安装**的 `resources/app.asar`，让主窗口带上系统亚克力。只替换 `lib/main.js` 的一段字节，保留文件长度（新增代码由裁剪注释补回），所以 asar 头、偏移和其它文件都不动，应用运行时也能打补丁、下次启动生效。写入前用 `node --check` 校验补丁后的 main.js，并核对字节数；原文件备份成 `app.asar.main.js.smooth-window-glass.bak`，`--restore` 写回。`--self-test` 只验证「等长且可解析」，不写盘。`tests/window-glass.test.mjs` 在合成 asar 上锁住锚点、等长裁剪、原地写入与幂等。
+
 ### `tests/` 各文件的职责
 
 - `tests/client.test.mjs`：直接执行浏览器构建产物，检查模块导出、依赖访问、设置页注册、启用/关闭和卸载清理。源码与构建产物必须完全一致，修改 `src/` 后需重新构建。
+- `tests/window-glass.test.mjs`：窗口补丁的锚点、等长裁剪与原地写入在合成 asar 上回归；不需要安装 DSH。
 - `tests/git-bridge.test.mjs`：在临时 Git 仓库里验证分支列表、未提交计数、建分支和带能力令牌的 Host 监听。
 - `tests/host-contract.test.mjs`：跑上面那条宿主兼容性闸门，找不到 DSH 安装时跳过。
 - `tests/boot.test.mjs`：断言 `assets/whale.svg` 与 `src/boot.js` 的常量逐字节一致。
@@ -138,6 +147,8 @@ tests/            契约、样式作用域、宿主兼容性与交互测试
 7. **窗口尺寸这条路没有宿主 API 可走。** 渲染进程的 `dshDesktop` 桥（`lib/preload-app.cjs`）只有 browser/keyboard/shortcuts/updates/deviceInfo，桌面 IPC 列表里有 `window-fullscreen` 却没有尺寸通道，主窗口的尺寸在 `lib/main.js` 里写死也不持久化，Host 半所在的子进程协议只有 ready/platform-session/shutdown/fatal。可用的一条是渲染进程自己的 `window.resizeTo`——Electron 会照做，包括对隐藏窗口（用随应用同版本的 Electron 44 实测：1280 × 820 的隐藏窗口在加载完成后为 1441 × 901，即请求的 1440 × 900 加一像素边框）。
 
 8. **旧 `lib/index.js` 报错要先构建再完全退出。** 若仍出现旧版 `lib/index.js` 访问 `host` 的报错，先构建，再从托盘完全退出 DeepSeek Harness 并重新打开；只刷新页面不会清除 Host 进程已导入的模块。
+
+9. **窗口补丁会被 DSH 更新覆盖，但不需要先退出应用。** 补丁只改 `lib/main.js` 的一段等长字节，asar 头和偏移不动，所以 DSH 运行时也能写；运行中的进程继续用它已加载的副本，**完全退出并重新打开** DSH 后新进程才按补丁创建窗口（只刷新页面不算）。DSH 每次更新会把 `app.asar` 换回官方版本——更新后重跑 `tools/apply-window-glass.cmd`；在重跑之前皮肤自动退回应用内渐变，不会坏。还原用 `tools/restore-window-glass.cmd`（或 `--restore`），同样重启生效。
 
 ## 改动前先读
 
