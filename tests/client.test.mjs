@@ -259,6 +259,22 @@ test('hover-revealed controls cannot be pinned open by a clicked control', () =>
   runtime.dispose();
 });
 
+test('the settings tabs and segment controls keep a visible track', () => {
+  const runtime = loadClient();
+  runtime.plugin.apply(runtime.ctx);
+  const sheet = [...runtime.styles][0].textContent;
+  // On the settings page's near-white ground an accent wash sat within 1.1:1 of its own
+  // track, so the control reads as one recessed track plus a raised surface pill; the
+  // accent survives as the pill's hairline ring. Dark themes invert it: the pill must stay
+  // lighter than the track, so the track takes the darkest surface and the pill the tint.
+  assert.match(sheet, /\.smooth-tabs\{[^}]*border:1px solid var\(--smooth-line,var\(--dsw-alias-border-l2\)\)[^}]*background:color-mix\(in srgb,var\(--smooth-text,var\(--dsw-alias-label-primary\)\) 8%,var\(--smooth-surface-2,var\(--dsw-alias-bg-layer-2\)\)\)/);
+  assert.match(sheet, /\.smooth-tabs-thumb\{[^}]*background:var\(--smooth-surface,var\(--dsw-alias-bg-layer-1\)\)[^}]*inset 0 0 0 1px color-mix\(in srgb,var\(--smooth-accent,var\(--dsw-alias-brand-primary\)\) 60%/);
+  assert.match(sheet, /\.smooth-usage-placement,\.smooth-usage-align-options\{[^}]*border:1px solid var\(--smooth-line,var\(--dsw-alias-border-l2\)\)[^}]*background:color-mix\(/);
+  assert.match(sheet, /\.smooth-segment-thumb\{[^}]*background:var\(--smooth-surface,var\(--dsw-alias-bg-layer-1\)\)[^}]*inset 0 0 0 1px color-mix\(/);
+  assert.match(sheet, /body\[data-ds-dark-theme\] :is\(\.smooth-tabs-thumb,\.smooth-segment-thumb\)\{[^}]*26%/);
+  runtime.dispose();
+});
+
 test('the launch window size is left to the opening and edited in settings', async () => {
   const runtime = loadClient();
   runtime.plugin.apply(runtime.ctx);
