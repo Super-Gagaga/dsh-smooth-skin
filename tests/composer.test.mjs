@@ -639,6 +639,11 @@ test('the context meter keeps the host reading, its ring style and the moved pan
   assert.match(source, /smooth-usage-context/);
   assert.match(source, /smooth-usage-line--bottom/);
   assert.match(source, /smooth-usage-bottom-fixed/);
+  // The line starts with the first chat row, not with the first token; the new-session
+  // hero has neither a row nor a reading.
+  assert.match(source, /data-chat-flow-kind/);
+  assert.match(source, /data-submission-echo/);
+  assert.match(source, /conversationStarted/);
   // The bottom-centre seat is a measurement, not a fixed centre: a permission or tool
   // button can arrive after the first frame, so a childList observer re-syncs the
   // measured controls and schedules a fresh centre.
