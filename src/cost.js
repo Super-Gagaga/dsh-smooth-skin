@@ -14,8 +14,29 @@
 const SESSION_COST_POLL_MS = 1_500;
 /** The streaming estimate is refreshed on a quarter-second cadence while text runs. */
 const STREAM_TICK_MS = 250;
-/** A tool call is output too; this constant is folded into the per-model calibration. */
-const STREAM_TOOL_TOKENS = 160;
+/** The same per-tool output weights the Claude-style meter uses, so a tool call is not
+ * charged as one flat guess. The default is the cost of an unknown tool. */
+const STREAM_TOOL_WEIGHTS = new Map([
+  ['Bash', 370], ['Edit', 460], ['Read', 125], ['Write', 1200], ['bash', 105],
+  ['bsk_inspect', 60], ['bsk_interact', 75], ['bsk_page', 75], ['desktop_eval', 240],
+  ['edit', 325], ['glob', 55], ['grep', 75], ['job_output', 70], ['ops_bash', 125],
+  ['ops_edit_file', 390], ['ops_glob', 60], ['ops_grep', 115], ['ops_read_files', 90],
+  ['ops_stat', 45], ['ops_write_file', 495], ['present', 105], ['pwsh', 135],
+  ['powershell', 135], ['read', 85], ['read_image', 55], ['run_code', 190],
+  ['send_message', 1500], ['todo_write', 230], ['web_fetch', 55], ['write', 605],
+]);
+const STREAM_TOOL_DEFAULT = 120;
+/** Word-length cost for Latin letters, CJK / symbol weights, digit triples, and
+ * whitespace runs — the same character heuristic as the Claude-style meter. */
+const STREAM_LATIN = [0, 0.496, 0.496, 0.62, 0.62, 0.62, 0.636, 0.636, 0.776, 0.776, 1.593];
+const STREAM_CJK = 0.5235;
+const STREAM_CJK_PUNCT = 2.6312;
+const STREAM_NEWLINE = 1.5161;
+const STREAM_SPACE = 0.3398;
+const STREAM_SPACES = 1.421;
+const STREAM_OTHER = 0.8153;
+const STREAM_OTHER_PER = 0.1941;
+const STREAM_PUNCT = /[\p{P}\p{S}]/u;
 
 /** The Host's settled cost for one Session, fetched through the private bridge. */
 function createSessionCostFeed(sessionId, request = bridgeRequest) {
@@ -23,9 +44,15 @@ function createSessionCostFeed(sessionId, request = bridgeRequest) {
   let value = null;
   let askedAt = 0;
   let loading = false;
+  let queued = false;
+  let retry = 0;
   let sequence = 0;
   const listeners = new Set();
   const notify = () => { for (const listener of listeners) listener(); };
+  function clearRetry() {
+    if (retry && typeof clearTimeout === 'function') clearTimeout(retry);
+    retry = 0;
+  }
   function follow(next) {
     const wanted = typeof next === 'string' ? next : '';
     if (wanted === id) return;
@@ -33,13 +60,27 @@ function createSessionCostFeed(sessionId, request = bridgeRequest) {
     value = null;
     askedAt = 0;
     loading = false;
+    queued = false;
+    clearRetry();
     sequence += 1;
     notify();
   }
   function ask(now = Date.now(), force = false) {
-    if (!id || loading || (!force && askedAt !== 0 && now - askedAt < SESSION_COST_POLL_MS)) return undefined;
+    if (!id) return undefined;
+    if (loading) { queued = true; return undefined; }
+    if (!force && askedAt !== 0 && now - askedAt < SESSION_COST_POLL_MS) {
+      // A settlement that lands inside the cooldown must still be fetched; otherwise the
+      // line keeps the previous Host amount while its live tail has already been reset.
+      if (!retry && typeof setTimeout === 'function') {
+        const wait = Math.max(0, SESSION_COST_POLL_MS - (now - askedAt));
+        retry = setTimeout(() => { retry = 0; ask(Date.now(), true); }, wait);
+        retry?.unref?.();
+      }
+      return undefined;
+    }
     askedAt = now;
     loading = true;
+    queued = false;
     const ticket = ++sequence;
     return Promise.resolve()
       .then(() => request('session-cost', { sessionId: id }))
@@ -49,7 +90,11 @@ function createSessionCostFeed(sessionId, request = bridgeRequest) {
         notify();
       })
       .catch(() => { /* keep the previous reading; the caller has a projection fallback */ })
-      .finally(() => { if (ticket === sequence) loading = false; });
+      .finally(() => {
+        if (ticket !== sequence) return;
+        loading = false;
+        if (queued) { queued = false; ask(Date.now(), true); }
+      });
   }
   return {
     follow,
@@ -61,25 +106,61 @@ function createSessionCostFeed(sessionId, request = bridgeRequest) {
       value = null;
       askedAt = 0;
       loading = false;
+      queued = false;
+      clearRetry();
       sequence += 1;
       listeners.clear();
     },
   };
 }
 
-/** A deliberately coarse tokenizer for the streaming text. Absolute precision is not
- * needed: `settle()` divides the estimate by the Host's real output delta over the same
- * span, so each model gets a multiplier that folds the remaining error away. */
+/** The character classes of the Claude-style meter: CJK, CJK punctuation, Latin word,
+ * digit run, whitespace and everything else. */
+function streamClass(code, character) {
+  if (code >= 0x2e80) return STREAM_PUNCT.test(character) ? 2 : 1;
+  if (code >= 48 && code <= 57) return 4;
+  if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) return 3;
+  if (code === 32 || (code >= 9 && code <= 13)) return 5;
+  return 6;
+}
+
+/** The same word/character heuristic as the Claude-style streaming meter. The caller
+ * then calibrates the result against the Host's real output delta, so one multiplier
+ * per model absorbs the remaining tokenizer difference. */
 function estimateStreamTokens(text) {
   let total = 0;
+  let kind = 0;
+  let length = 0;
+  let newline = false;
+  const flush = () => {
+    if (kind === 1) total += length * STREAM_CJK;
+    else if (kind === 2) total += length * STREAM_CJK_PUNCT;
+    else if (kind === 3) total += STREAM_LATIN[Math.min(length, 10)];
+    else if (kind === 4) total += Math.ceil(length / 3);
+    else if (kind === 5) total += newline ? STREAM_NEWLINE : length === 1 ? STREAM_SPACE : STREAM_SPACES;
+    else if (kind === 6) total += STREAM_OTHER + length * STREAM_OTHER_PER;
+    kind = 0;
+    length = 0;
+    newline = false;
+  };
   for (const character of String(text ?? '')) {
     const code = character.codePointAt(0);
-    if (code >= 0x2e80) total += 1.5;
-    else if (character === ' ' || character === '\n' || character === '\t') total += 0.25;
-    else if (/[A-Za-z0-9]/.test(character)) total += 0.25;
-    else total += 0.5;
+    const next = streamClass(code, character);
+    if (next !== kind) {
+      flush();
+      kind = next;
+    }
+    length += 1;
+    if (next === 5 && (code === 10 || code === 13)) newline = true;
   }
+  flush();
   return total;
+}
+
+/** A tool call's output weight, keyed by the host's `data-tool` name. */
+function streamToolTokens(node) {
+  const name = typeof node?.getAttribute === 'function' ? node.getAttribute('data-tool') : '';
+  return STREAM_TOOL_WEIGHTS.get(name) ?? STREAM_TOOL_DEFAULT;
 }
 
 function streamMedian(values) {
@@ -126,7 +207,7 @@ function createStreamingMeter() {
       if (callsSeen.has(call)) continue;
       callsSeen.add(call);
       // History can mount later (a longer row, a fold opening); it is already settled.
-      if (streaming) counted += STREAM_TOOL_TOKENS;
+      if (streaming) counted += streamToolTokens(call);
     }
     return counted;
   }

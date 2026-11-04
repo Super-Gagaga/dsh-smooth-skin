@@ -199,6 +199,10 @@ test('the context pie keeps the occupancy look and the dock hosts the usage line
   // host's own ring is hidden, because the pie already reads the same value.
   assert.match(skin, /\[data-smooth-usage-placement="(?:context|bottom)"\] \[data-composer-dock\]/, 'the dock collapses only when the capsule lives elsewhere');
   assert.match(skin, /\.smooth-usage-context\{/);
+  const contextButton = skin.match(/\.smooth-usage-context\{[^}]*\}/)?.[0] || '';
+  assert.match(contextButton, /border-radius:var\(--smooth-radius-sm\)/);
+  assert.match(contextButton, /min-height:28px/);
+  assert.match(contextButton, /padding:0 4px 0 8px/);
   assert.match(skin, /\.smooth-usage-line--bottom\{/);
   assert.match(skin, /\[data-composer-dock\]>\$\{hostPart\('root'\)\}\{display:none\}/);
   assert.match(skin, /\[data-composer-dock\] \[data-composer-stat\]\{display:none\}/, 'the shipped stat pills are replaced by the usage line');
@@ -217,7 +221,9 @@ test('the context pie keeps the occupancy look and the dock hosts the usage line
   assert.match(skin, /\.smooth-usage-figures\{[^}]*gap:4px 16px/);
   const button = skin.match(/\.smooth-usage-line\{[^}]*\}/)?.[0] || '';
   assert.match(button, /max-width:min\(100%,860px\)/, 'the button keeps its compact pill width');
-  assert.match(button, /border-radius:999px/, 'the compact pill opens the panel');
+  assert.match(button, /border-radius:var\(--smooth-radius-sm\)/, 'the button matches the permission trigger radius');
+  assert.match(button, /min-height:28px/);
+  assert.match(button, /padding:0 4px 0 8px/, 'the outer padding matches the permission trigger');
   assert.match(button, /cursor:pointer/);
   const rest = skin.match(/\.smooth-context-pie-rest\{[^}]*\}/)?.[0] || '';
   const used = skin.match(/\.smooth-context-pie-used\{[^}]*\}/)?.[0] || '';

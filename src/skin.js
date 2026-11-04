@@ -388,7 +388,7 @@ body[data-smooth-skin][data-smooth-usage-placement="bottom"] [data-composer-dock
    quiet, the figures take the text ink, and the numbers share one tabular width so a
    streaming count never shifts the row. Hovering anywhere in the button enlarges only the
    pie's used wedge; focus and an open panel keep the pill lit. */
-body[data-smooth-skin] .smooth-usage-line{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 16px;max-width:min(100%,860px);margin:0 auto;padding:3px 10px;border:0;border-radius:999px;background:transparent;color:var(--smooth-muted);font:inherit;font-size:13px;line-height:20px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color .16s ease}
+body[data-smooth-skin] .smooth-usage-line{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 16px;max-width:min(100%,860px);margin:0 auto;box-sizing:border-box;min-height:28px;padding:0 4px 0 8px;border:0;border-radius:var(--smooth-radius-sm);background:transparent;color:var(--smooth-muted);font:inherit;font-size:13px;line-height:20px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color .16s ease}
 body[data-smooth-skin] .smooth-usage-line--bottom{margin:0;min-width:0;max-width:min(100%,620px)}
 body[data-smooth-skin] .smooth-usage-line--left{margin-left:0;margin-right:auto}
 body[data-smooth-skin] .smooth-usage-line--center{margin-left:auto;margin-right:auto}
@@ -422,7 +422,7 @@ body[data-smooth-skin] .smooth-context-value{color:var(--smooth-muted);font-size
 body[data-smooth-skin] :is(.smooth-usage-line,.smooth-usage-context):is(:hover,:focus-visible,[aria-expanded="true"]) :is(.smooth-usage-value,.smooth-context-value){color:var(--smooth-text)}
 /* The context-row placement keeps only the pie and its reading, immediately before the
    model selector. It is a quiet button until hovered, focused or open. */
-body[data-smooth-skin] .smooth-usage-context{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:0;border-radius:999px;background:transparent;color:var(--smooth-muted);font:inherit;font-size:13px;line-height:20px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color .16s ease}
+body[data-smooth-skin] .smooth-usage-context{display:inline-flex;align-items:center;box-sizing:border-box;gap:4px;min-height:28px;padding:0 4px 0 8px;border:0;border-radius:var(--smooth-radius-sm);background:transparent;color:var(--smooth-muted);font:inherit;font-size:13px;line-height:20px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color .16s ease}
 body[data-smooth-skin] .smooth-usage-context:hover,
 body[data-smooth-skin] .smooth-usage-context:focus-visible,
 body[data-smooth-skin] .smooth-usage-context[aria-expanded="true"]{background:var(--smooth-surface-3-mild)}

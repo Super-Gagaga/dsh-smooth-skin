@@ -519,12 +519,14 @@ test('the dock usage line writes the projection figures, not a scan', () => {
 
 test('the money reading joins a settled Host amount with the live output tail', async () => {
   const offPeak = Date.parse('2026-01-01T12:00:00Z');
-  const peak = Date.parse('2026-01-01T02:00:00Z');
+  const peak = Date.parse('2026-01-08T02:00:00Z');
   assert.equal(sandbox.outputRate('deepseek-v4.1-flash', offPeak), 4);
   assert.equal(sandbox.outputRate('deepseek-v4.1-flash', peak), 8);
   assert.equal(sandbox.outputRate('mystery-model', offPeak), null);
-  assert.equal(sandbox.estimateTokens('hello world'), 2.75);
-  assert.equal(sandbox.estimateTokens('你好'), 3);
+  assert.equal(sandbox.peakAt(Date.parse('2026-09-24T02:00:00Z')), true);
+  assert.equal(sandbox.peakAt(Date.parse('2026-10-01T02:00:00Z')), false, 'National Day is off-peak all day');
+  assert.ok(Math.abs(sandbox.estimateTokens('hello world') - 1.5798) < 1e-9);
+  assert.ok(Math.abs(sandbox.estimateTokens('你好') - 1.047) < 1e-9);
   assert.equal(sandbox.combineCost({ costMicro: 1_000_000, partial: false }, 10, 4, 0), 1_000_040);
   assert.equal(sandbox.combineCost({ costMicro: 0, partial: false }, 10, 4, 500_000), 500_000,
     'an empty Host log next to a positive projection is settlement lag, not a free turn');
@@ -575,20 +577,20 @@ test('the streaming meter counts text growth and calibrates itself on settlement
   try {
     const meter = sandbox.streamMeter();
     meter.settle(0, 'deepseek-v4.1-flash');
-    assert.equal(meter.tokens('deepseek-v4.1-flash'), 2.75);
+    assert.ok(Math.abs(meter.tokens('deepseek-v4.1-flash') - 1.5798) < 1e-9);
     // Growth is counted, not the absolute text: a shorter second message still adds.
     stream.textContent = 'hello world again';
-    assert.ok(Math.abs(meter.tokens('deepseek-v4.1-flash') - (2.75 + 1.5)) < 1e-9);
-    // A tool call contributes its fixed weight once.
-    calls.push({ id: 'call-1' });
-    assert.ok(Math.abs(meter.tokens('deepseek-v4.1-flash') - (2.75 + 1.5 + 160)) < 1e-9);
+    assert.ok(Math.abs(meter.tokens('deepseek-v4.1-flash') - 2.5396) < 1e-9);
+    // A tool call contributes its data-tool weight once (Bash weighs 370).
+    calls.push({ id: 'call-1', getAttribute: () => 'Bash' });
+    assert.ok(Math.abs(meter.tokens('deepseek-v4.1-flash') - 372.5396) < 1e-9);
     // Settlement calibrates the estimate against the real output delta and resets the tail.
     const before = meter.tokens('deepseek-v4.1-flash');
     meter.settle(Math.ceil(before), 'deepseek-v4.1-flash');
     assert.equal(meter.tokens('deepseek-v4.1-flash'), 0);
     stream.textContent = 'hello world again!';
     const tail = meter.tokens('deepseek-v4.1-flash');
-    assert.ok(tail > 0.4 && tail < 0.6, 'the calibrated tail stays near the one appended character');
+    assert.ok(tail > 0.9 && tail < 1.1, 'the calibrated tail stays near the one appended character');
     meter.stop();
   } finally {
     delete sandbox.document;
