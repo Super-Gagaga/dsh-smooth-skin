@@ -1604,6 +1604,7 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
       goalRef.current = targetRef.current;
       startRef.current = 0;
       const duration = 5000;
+      const costDuration = 800;
       const tick = (now) => {
         rafRef.current = 0;
         const goal = targetRef.current;
@@ -1614,12 +1615,13 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
         }
         if (startRef.current === 0) startRef.current = now;
         const progress = Math.min(1, (now - startRef.current) / duration);
-        const eased = progress;
+        const costProgress = Math.min(1, (now - startRef.current) / costDuration);
         const from = fromRef.current;
         const next = {};
         for (const key of ROLLING_KEYS) {
           const before = from[key];
           const after = goal[key];
+          const eased = key === 'cost' ? costProgress : progress;
           next[key] = typeof before === 'number' && typeof after === 'number' && Number.isFinite(before) && Number.isFinite(after)
             ? before + (after - before) * eased
             : after;
@@ -1667,10 +1669,20 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     const skin = useSmoothState();
     const placement = skin.state.usagePlacement || 'row';
     const variant = props.variant || 'dock';
+    const active = variant === 'dock' ? placement === 'row'
+      : variant === 'bottom' ? placement === 'bottom'
+        : variant === 'context' ? placement === 'context'
+          : false;
+    // The context-only seat shows no money figure, and the inactive seats stay mounted
+    // in their slots; only the one visible figure may open a poller and a DOM meter.
+    const costActive = active && variant !== 'context';
     const fields = skin.state.usageFields || {};
     const [open, setOpen] = React.useState(false);
     const triggerRef = React.useRef(null);
     const panelRef = React.useRef(null);
+    const liveRef = React.useRef(null);
+    const costFeedRef = React.useRef(null);
+    const [, bumpLive] = React.useState(0);
     const usage = props.useProjection('tokenUsage');
     const stats = props.useProjection('sessionStats');
     const selection = props.useProjection('modelSelection');
@@ -1695,6 +1707,26 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
         document.removeEventListener('keydown', escape);
       };
     }, [open]);
+    React.useEffect(() => {
+      if (!skin.state.enabled || !costActive) return undefined;
+      const meter = createStreamingMeter();
+      const feed = createSessionCostFeed(props.sessionId);
+      liveRef.current = meter;
+      costFeedRef.current = feed;
+      const offLive = meter.onChange(() => bumpLive((value) => value + 1));
+      const offCost = feed.onChange(() => bumpLive((value) => value + 1));
+      meter.watch();
+      feed.follow(props.sessionId);
+      feed.ask(Date.now(), true);
+      return () => {
+        offLive();
+        offCost();
+        meter.stop();
+        feed.stop();
+        liveRef.current = null;
+        costFeedRef.current = null;
+      };
+    }, [props.sessionId, skin.state.enabled, costActive]);
     const input = usage ? usageInputTokens(usage) : 0;
     const output = usage ? Math.round(Number(usage.outputTokens) || 0) : 0;
     const cacheHit = usage ? contextCacheHit(usage) : null;
@@ -1702,10 +1734,25 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     if (!model && modelDirectories && props.sessionId) {
       try { model = modelDirectories.directoryFor(props.sessionId)?.getSnapshot?.().current?.model; } catch {}
     }
-    // A session with no tokens yet costs nothing even before a model is known.
-    const cost = !usage ? null : input + output === 0 ? 0 : usageCostMicro(usage, model);
     const turns = stats ? Math.round(stats.turns) : 0;
     const steps = stats ? Math.round(stats.steps) : 0;
+    React.useEffect(() => {
+      if (skin.state.enabled && costActive) costFeedRef.current?.ask(Date.now());
+    }, [usage?.uncachedInputTokens, usage?.cacheReadTokens, usage?.cacheWriteTokens, usage?.outputTokens, stats?.turns, stats?.steps, skin.state.enabled, costActive]);
+    React.useEffect(() => {
+      if (!costActive) return;
+      liveRef.current?.settle(output, model);
+      // The settlement resets the live tail and may reshape the calibration; render the
+      // new amount now instead of waiting for the next stream tick.
+      bumpLive((value) => value + 1);
+    }, [output, model, costActive]);
+    // A session with no tokens yet costs nothing even before a model is known. The Host
+    // reading is the settled part; the meter adds only the stream not settled yet.
+    const projectionCost = !usage ? null : input + output === 0 ? 0 : usageCostMicro(usage, model);
+    const hostCost = costFeedRef.current?.value();
+    const liveTokens = liveRef.current ? liveRef.current.tokens(model) : 0;
+    const liveRate = usageOutputRate(model, Date.now());
+    const cost = combineSessionCost(hostCost, liveTokens, liveRate, projectionCost);
     const speed = stats && stats.decodeMs > 0 && stats.decodeTokens > 0
       ? Math.round(stats.decodeTokens / (stats.decodeMs / 1e3))
       : null;
@@ -1721,10 +1768,6 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
     };
     const shown = useRollingReadings(target);
     if (!skin.state.enabled) return null;
-    const active = variant === 'dock' ? placement === 'row'
-      : variant === 'bottom' ? placement === 'bottom'
-        : variant === 'context' ? placement === 'context'
-          : false;
     if (!active) return null;
     // A fresh session projects zero tokens, zero turns and (at most) a zero context;
     // its button would only read 0.000 / 0 tok. Leave the dock empty until the first
@@ -1950,14 +1993,40 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
       }
       const modelSeat = modelButton.closest?.('[data-slot="conversation.input.model"]');
       const row = modelSeat?.parentElement?.parentElement?.parentElement;
-      const tools = row?.children?.[0];
+      const toolsOf = () => row?.children?.[0];
+      let frame = 0;
+      const requestFrame = typeof window.requestAnimationFrame === 'function'
+        ? (fn) => window.requestAnimationFrame(fn)
+        : (fn) => window.setTimeout(fn, 0);
+      const cancelFrame = typeof window.cancelAnimationFrame === 'function'
+        ? (id) => window.cancelAnimationFrame(id)
+        : (id) => window.clearTimeout(id);
       const measure = () => {
+        const tools = toolsOf();
         const modelRect = modelButton.getBoundingClientRect();
-        const visibleTools = tools ? Array.from(tools.children).filter((element) => element.offsetWidth > 0) : [];
+        const rowRect = row?.getBoundingClientRect?.();
         const toolsRect = tools?.getBoundingClientRect?.();
-        const leftEdge = visibleTools.length
-          ? Math.max(...visibleTools.map((element) => element.getBoundingClientRect().right))
-          : toolsRect?.right;
+        // The centre is the blank area to the right of the permission control, not the
+        // whole left tool group: plan / review controls can sit after it, and starting
+        // from their edge would push the capsule too far right. The permission trigger
+        // lives in its own slot, whose anchor is display:contents, so measure the real
+        // button inside it; fall back to the left group before that button exists.
+        const permissionSlot = row?.querySelector?.('[data-slot="conversation.input.permission"]');
+        const permissionControls = permissionSlot
+          ? [
+            ...(permissionSlot.matches?.('button, [role="button"]') ? [permissionSlot] : []),
+            ...Array.from(permissionSlot.querySelectorAll('button, [role="button"]')),
+          ]
+          : [];
+        const visiblePermission = permissionControls.filter((element) => {
+          const rect = element.getBoundingClientRect();
+          if (!rect.width || !rect.height) return false;
+          return !rowRect || (rect.top < rowRect.bottom && rect.bottom > rowRect.top);
+        });
+        const permissionEdge = visiblePermission.length
+          ? Math.max(...visiblePermission.map((element) => element.getBoundingClientRect().right))
+          : permissionSlot?.getBoundingClientRect?.().right;
+        const leftEdge = permissionEdge || toolsRect?.right;
         if (!modelRect.width || !leftEdge || modelRect.left <= leftEdge) {
           setRect(null);
           return;
@@ -1970,16 +2039,40 @@ const MODEL_SPARKS = Array.from({ length: 96 }, (_, index) => {
           height: modelRect.height,
         });
       };
+      const schedule = () => {
+        if (frame) return;
+        frame = requestFrame(() => { frame = 0; measure(); });
+      };
+      const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+      const observeTargets = () => {
+        if (!observer) return;
+        observer.disconnect();
+        const tools = toolsOf();
+        const targets = [row, tools, modelButton];
+        if (row) {
+          targets.push(...row.querySelectorAll('button, [role="button"]'));
+        } else if (tools) {
+          targets.push(...tools.querySelectorAll('button, [role="button"]'));
+        }
+        if (tools) targets.push(...Array.from(tools.children).filter((element) => element.offsetWidth > 0));
+        for (const element of targets) if (element) observer.observe(element);
+      };
       measure();
-      const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
-      const observed = [modelButton, tools, ...(tools ? Array.from(tools.children) : [])];
-      for (const element of observed) observer?.observe?.(element);
-      window.addEventListener('resize', measure);
-      window.addEventListener('scroll', measure, true);
+      observeTargets();
+      // childList catches a newly inserted button; the ResizeObserver above follows the
+      // width of the button and the space it takes from the centre gap.
+      const mutations = typeof MutationObserver === 'function'
+        ? new MutationObserver(() => { observeTargets(); schedule(); })
+        : null;
+      mutations?.observe(row || modelButton, { childList: true, subtree: true });
+      window.addEventListener('resize', schedule);
+      window.addEventListener('scroll', schedule, true);
       return () => {
+        if (frame) cancelFrame(frame);
         observer?.disconnect();
-        window.removeEventListener('resize', measure);
-        window.removeEventListener('scroll', measure, true);
+        mutations?.disconnect();
+        window.removeEventListener('resize', schedule);
+        window.removeEventListener('scroll', schedule, true);
       };
     }, [modelButton, skin.state.enabled]);
     if (skin.state.usagePlacement !== 'bottom' || (skin.state.usageAlign || 'left') !== 'center'

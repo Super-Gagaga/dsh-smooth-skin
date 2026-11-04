@@ -4,10 +4,11 @@ import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 
 const read = (name) => readFile(new URL(`../src/${name}`, import.meta.url), 'utf8');
-// The bundle order: pricing.js feeds the usage line, composer.js watches surfaces.
-const source = `${await read('pricing.js')}\n${await read('watch.js')}\n${await read('composer.js')}`;
+// The bundle order: pricing.js feeds the usage line, bridge.js + cost.js feed the
+// settled/live money reading, composer.js watches surfaces.
+const source = `${await read('pricing.js')}\n${await read('watch.js')}\n${await read('bridge.js')}\n${await read('cost.js')}\n${await read('composer.js')}`;
 const sandbox = { PLUGIN_ID: 'smooth', hostPart: name => `.${name}` };
-runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.installFallback = installComposerFallbackHint; globalThis.installCaret = installSmoothCaret; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker; globalThis.occupancyOf = contextOccupancyOf; globalThis.tokensText = contextTokens; globalThis.exactText = contextExactTokens; globalThis.durationText = contextDuration; globalThis.cacheHit = contextCacheHit; globalThis.fill = contextFill; globalThis.priceModel = usagePriceModel; globalThis.inputTokens = usageInputTokens; globalThis.costMicro = usageCostMicro; globalThis.costText = usageCostText; globalThis.peakAt = usagePeakAt; globalThis.offersDefault = offersDefaultEffort; globalThis.filterWorkspaces = filterWorkspaces; globalThis.workspaceName = workspaceName;', sandbox);
+runInNewContext(source + '\nglobalThis.readBranch = readWorkspaceBranch; globalThis.install = installComposerLayout; globalThis.installHint = installComposerHint; globalThis.installFallback = installComposerFallbackHint; globalThis.installCaret = installSmoothCaret; globalThis.findChip = findNativeWorkspaceChip; globalThis.openPicker = openNativeWorkspacePicker; globalThis.occupancyOf = contextOccupancyOf; globalThis.tokensText = contextTokens; globalThis.exactText = contextExactTokens; globalThis.durationText = contextDuration; globalThis.cacheHit = contextCacheHit; globalThis.fill = contextFill; globalThis.priceModel = usagePriceModel; globalThis.inputTokens = usageInputTokens; globalThis.costMicro = usageCostMicro; globalThis.outputRate = usageOutputRate; globalThis.costText = usageCostText; globalThis.peakAt = usagePeakAt; globalThis.offersDefault = offersDefaultEffort; globalThis.filterWorkspaces = filterWorkspaces; globalThis.workspaceName = workspaceName; globalThis.combineCost = combineSessionCost; globalThis.estimateTokens = estimateStreamTokens; globalThis.sessionFeed = createSessionCostFeed; globalThis.streamMeter = createStreamingMeter;', sandbox);
 
 function files(entries) {
   const calls = [];
@@ -516,6 +517,84 @@ test('the dock usage line writes the projection figures, not a scan', () => {
   assert.match(source, /rollingCacheText/);
 });
 
+test('the money reading joins a settled Host amount with the live output tail', async () => {
+  const offPeak = Date.parse('2026-01-01T12:00:00Z');
+  const peak = Date.parse('2026-01-01T02:00:00Z');
+  assert.equal(sandbox.outputRate('deepseek-v4.1-flash', offPeak), 4);
+  assert.equal(sandbox.outputRate('deepseek-v4.1-flash', peak), 8);
+  assert.equal(sandbox.outputRate('mystery-model', offPeak), null);
+  assert.equal(sandbox.estimateTokens('hello world'), 2.75);
+  assert.equal(sandbox.estimateTokens('你好'), 3);
+  assert.equal(sandbox.combineCost({ costMicro: 1_000_000, partial: false }, 10, 4, 0), 1_000_040);
+  assert.equal(sandbox.combineCost({ costMicro: 0, partial: false }, 10, 4, 500_000), 500_000,
+    'an empty Host log next to a positive projection is settlement lag, not a free turn');
+  assert.equal(sandbox.combineCost({ costMicro: 500_000, partial: true }, 10, 4, 900_000), 900_000,
+    'one unpriced settlement falls back instead of showing a confidently short bill');
+  assert.equal(sandbox.combineCost(null, 10, 4, 123), 123);
+
+  const calls = [];
+  const feed = sandbox.sessionFeed('session-1', async (action, payload) => {
+    calls.push({ action, payload });
+    return { costMicro: calls.length * 100, partial: false, model: 'deepseek-v4.1-flash' };
+  });
+  feed.follow('session-1');
+  await feed.ask(1000, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].action, 'session-cost');
+  assert.equal(calls[0].payload.sessionId, 'session-1');
+  assert.equal(feed.value().costMicro, 100);
+  await feed.ask(1200);
+  assert.equal(calls.length, 1, 'the feed never asks more than once per 1.5s');
+  await feed.ask(2600, true);
+  assert.equal(calls.length, 2);
+  feed.follow('session-2');
+  assert.equal(feed.value(), null, 'following another session drops the previous reading');
+  await feed.ask(2700, true);
+  assert.equal(calls.at(-1).payload.sessionId, 'session-2');
+  feed.stop();
+});
+
+test('the streaming meter counts text growth and calibrates itself on settlement', () => {
+  const stream = { textContent: 'hello world', parentElement: null, isConnected: true };
+  const calls = [];
+  const scroller = {
+    querySelectorAll(selector) {
+      if (selector === '[data-streaming]') return [stream];
+      if (selector === '[data-chat-call-id]') return calls;
+      return [];
+    },
+  };
+  sandbox.document = {
+    querySelector(selector) {
+      if (selector === '[data-conversation-scroll]') return scroller;
+      if (selector === '[data-streaming]') return stream;
+      return null;
+    },
+    body: null,
+  };
+  try {
+    const meter = sandbox.streamMeter();
+    meter.settle(0, 'deepseek-v4.1-flash');
+    assert.equal(meter.tokens('deepseek-v4.1-flash'), 2.75);
+    // Growth is counted, not the absolute text: a shorter second message still adds.
+    stream.textContent = 'hello world again';
+    assert.ok(Math.abs(meter.tokens('deepseek-v4.1-flash') - (2.75 + 1.5)) < 1e-9);
+    // A tool call contributes its fixed weight once.
+    calls.push({ id: 'call-1' });
+    assert.ok(Math.abs(meter.tokens('deepseek-v4.1-flash') - (2.75 + 1.5 + 160)) < 1e-9);
+    // Settlement calibrates the estimate against the real output delta and resets the tail.
+    const before = meter.tokens('deepseek-v4.1-flash');
+    meter.settle(Math.ceil(before), 'deepseek-v4.1-flash');
+    assert.equal(meter.tokens('deepseek-v4.1-flash'), 0);
+    stream.textContent = 'hello world again!';
+    const tail = meter.tokens('deepseek-v4.1-flash');
+    assert.ok(tail > 0.4 && tail < 0.6, 'the calibrated tail stays near the one appended character');
+    meter.stop();
+  } finally {
+    delete sandbox.document;
+  }
+});
+
 test('the context meter keeps the host reading, its ring style and the moved panel', () => {
   // The ring is the bounded occupancy reading; the host's dock row used the same maths.
   assert.deepEqual(
@@ -560,6 +639,17 @@ test('the context meter keeps the host reading, its ring style and the moved pan
   assert.match(source, /smooth-usage-context/);
   assert.match(source, /smooth-usage-line--bottom/);
   assert.match(source, /smooth-usage-bottom-fixed/);
+  // The bottom-centre seat is a measurement, not a fixed centre: a permission or tool
+  // button can arrive after the first frame, so a childList observer re-syncs the
+  // measured controls and schedules a fresh centre.
+  assert.match(source, /querySelectorAll\('button, \[role="button"\]'\)/);
+  assert.match(source, /new MutationObserver\(\(\) => \{ observeTargets\(\); schedule\(\); \}\)/);
+  assert.match(source, /childList: true, subtree: true/);
+  assert.match(source, /row \|\| modelButton/);
+  // The blank area starts at the permission control's right edge, not at the rightmost
+  // left-group button: plan / review controls after it must not push the centre right.
+  assert.match(source, /\[data-slot="conversation\.input\.permission"\]/);
+  assert.match(source, /permissionEdge/);
   assert.match(source, /slots\.inject\('conversation\.input\.left'/);
   assert.match(source, /variant: 'bottom'/);
 });

@@ -9,6 +9,7 @@ import {
   deleteArchivedSessionForTest,
   ensureGitServerForTest,
   gitStatusForTest,
+  sessionCostForTest,
 } from '../lib/index.js';
 
 function git(cwd, ...args) {
@@ -109,6 +110,18 @@ test('the bridge listener authenticates and answers status with a capability tok
     assert.equal(refused.statusCode, 200);
     assert.equal(refused.body.ok, false);
     assert.equal(refused.body.error.code, 'session-not-archived');
+
+    // The session-cost action rides the same token and folds a Session log under DSH_HOME.
+    const costDir = join(home, 'sessions', 'project', 'session-bridge-cost');
+    mkdirSync(costDir, { recursive: true });
+    writeFileSync(join(costDir, 'session.v1.jsonl'), JSON.stringify({
+      type: 'assistant/message', seq: 1, time: Date.parse('2026-01-01T12:00:00Z'),
+      data: { turn: 1, step: 1, model: 'deepseek-v4.1-flash', usage: { inputTokens: 1_000_000, outputTokens: 1_000_000 } },
+    }));
+    const cost = await call({ action: 'session-cost', sessionId: 'session-bridge-cost' }, token);
+    assert.equal(cost.statusCode, 200);
+    assert.equal(cost.body.ok, true);
+    assert.equal(cost.body.value.costMicro, 5_000_000);
 
     // The token survives an activation: it is the value a reloaded window keeps using.
     const persisted = readFileSync(join(home, 'cache', 'smooth-bridge-token'), 'utf8').trim();
@@ -212,6 +225,49 @@ test('the bridge permanently deletes an archived Session log and refuses unsafe 
     await assert.rejects(() => deleteArchivedSessionForTest(context(), '../outside'), /ID 无效/);
     await assert.rejects(() => deleteArchivedSessionForTest(context({ archived: ['session-unknown-0000'] }), 'session-unknown-0000'), /不存在/);
   } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('the host folds one session log into a settled cost, replacing retried steps', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'smooth-cost-home-'));
+  const previousHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = home;
+  const dir = join(home, 'sessions', 'project', 'session-cost-0001');
+  mkdirSync(dir, { recursive: true });
+  const at = Date.parse('2026-01-01T12:00:00Z'); // Thursday, outside the peak windows
+  const event = (seq, time, turn, step, input, output, model = 'deepseek-v4.1-flash') => JSON.stringify({
+    type: 'assistant/message', seq, time,
+    data: { turn, step, model, usage: { inputTokens: input, outputTokens: output, cacheReadTokens: 0, cacheWriteTokens: 0 } },
+  });
+  writeFileSync(join(dir, 'session.v1.jsonl'), [
+    event(1, at, 1, 1, 1_000_000, 0),
+    // The same (turn, step) settles again with a larger prompt: only the later sample counts.
+    event(2, at + 1000, 1, 1, 2_000_000, 0),
+    event(3, at + 2000, 1, 2, 0, 1_000_000),
+  ].join('\n'));
+  try {
+    const value = await sessionCostForTest('session-cost-0001');
+    // flash off-peak: input 1元/1M, output 4元/1M -> 2,000,000 + 4,000,000 micro.
+    assert.deepEqual(value, {
+      costMicro: 6_000_000,
+      partial: false,
+      model: 'deepseek-v4.1-flash',
+      settledAt: at + 2000,
+    });
+    assert.deepEqual(await sessionCostForTest('session-cost-0001'), value, 'the unchanged log reuses its cache');
+    await assert.rejects(() => sessionCostForTest('../outside'), /ID 无效/);
+
+    const mystery = join(home, 'sessions', 'project', 'session-cost-0002');
+    mkdirSync(mystery, { recursive: true });
+    writeFileSync(join(mystery, 'session.v1.jsonl'), event(1, at, 1, 1, 1_000_000, 0, 'mystery-model'));
+    const unknown = await sessionCostForTest('session-cost-0002');
+    assert.equal(unknown.costMicro, null, 'an unpriced event does not shrink the bill silently');
+    assert.equal(unknown.partial, true);
+    assert.equal(unknown.model, 'mystery-model');
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
 });

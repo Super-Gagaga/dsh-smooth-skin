@@ -1,13 +1,14 @@
 /**
- * The live session's cost figure, read from the Host's token projection.
+ * DeepSeek list prices and the two helpers that turn tokens into money, shared by both
+ * halves.
  *
  * DeepSeek publishes its list prices in CNY per million tokens, with a peak tier on
  * weekday mornings and afternoons (UTC) and an off-peak tier outside those windows.
  * Cache writes bill at the cache-hit rate, as the official page lists no write price.
- * The client projections carry token totals but no per-settlement times, so the whole
- * session is priced at the tier in force when the line renders; a session that spans a
- * tier boundary is an estimate. A model the table does not know gets no figure (the
- * row writes a dash) rather than a made-up one. Holidays are not modelled.
+ * The Host prices each stored settlement at the tier in force when that settlement
+ * happened; the browser prices only the still-running output tail at the current tier.
+ * A model the table does not know gets no figure (the row writes a dash) rather than a
+ * made-up one. Holidays are not modelled.
  *
  * Rates are per million tokens, so `tokens × rate` lands directly in millionths of a
  * yuan; the formatter turns that micro amount into the short currency string.
@@ -77,6 +78,14 @@ function usageCostMicro(usage, modelId, atMs = Date.now()) {
     + count(usage?.cacheWriteTokens) * tier.hit
     + count(usage?.outputTokens) * tier.out;
   return Number.isFinite(cost) && cost > 0 ? cost : 0;
+}
+
+/** The output rate in micro-currency per token at `atMs`, or null for an unpriced
+ * model. The live tail multiplies its estimated streaming output by this rate. */
+function usageOutputRate(modelId, atMs = Date.now()) {
+  const priced = usagePriceModel(modelId);
+  if (priced === null) return null;
+  return (usagePeakAt(atMs) ? USAGE_PRICES[priced].peak : USAGE_PRICES[priced].offPeak).out;
 }
 
 /** Four significant digits, without an exponent once integer digits run past four. */

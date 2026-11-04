@@ -37,12 +37,13 @@ async function writeArtifact(url, content) {
 
 async function build() {
   const shared = await read('./src/shared.js');
-  const [pricing, skin, boot, watch, bridge, think, composer, usage, account, layout, scrollbar, client, host] = await Promise.all([
+  const [pricing, skin, boot, watch, bridge, cost, think, composer, usage, account, layout, scrollbar, client, host] = await Promise.all([
     read('./src/pricing.js'),
     read('./src/skin.js'),
     read('./src/boot.js'),
     read('./src/watch.js'),
     read('./src/bridge.js'),
+    read('./src/cost.js'),
     read('./src/think.js'),
     read('./src/composer.js'),
     read('./src/usage.js'),
@@ -55,10 +56,11 @@ async function build() {
   await mkdir(OUT, { recursive: true });
   // boot.js is the opening's single definition: the Host half injects its rows, and
   // the settings page replays the same markup and timings. watch.js precedes the modules
-  // that watch host surfaces (composer, account, usage), and bridge.js precedes the two
-  // that call the Host half's listener.
-  const hostChanged = await writeArtifact(new URL('index.js', OUT), `${shared}\n${boot}\n${host}`);
-  const clientChanged = await writeArtifact(new URL('client.js', OUT), `${CLIENT_ARTIFACT}${shared}\n${pricing}\n${skin}\n${boot}\n${watch}\n${bridge}\n${think}\n${composer}\n${usage}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`);
+  // that watch host surfaces (composer, account, usage), bridge.js precedes the cost
+  // feed and the two modules that call the Host half's listener, and pricing.js is
+  // shared by both halves so a settlement and the live tail use the same rates.
+  const hostChanged = await writeArtifact(new URL('index.js', OUT), `${shared}\n${pricing}\n${boot}\n${host}`);
+  const clientChanged = await writeArtifact(new URL('client.js', OUT), `${CLIENT_ARTIFACT}${shared}\n${pricing}\n${skin}\n${boot}\n${watch}\n${bridge}\n${cost}\n${think}\n${composer}\n${usage}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`);
   console.log(hostChanged || clientChanged ? `Built ${manifest.name}` : `${manifest.name}: artifacts unchanged`);
 }
 

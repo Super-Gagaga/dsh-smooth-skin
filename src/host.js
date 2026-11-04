@@ -8,6 +8,9 @@
  *     (fixed `git` argv, `execFile`).
  *   - `usage`: the welcome page's daily token table. It reads the stored Session logs
  *     (read-only) and returns per-day totals; nothing else leaves the process.
+ *   - `session-cost`: the bottom line's settled cost for one Session. It folds that
+ *     Session's stored settlements with the shared price table; the browser adds the
+ *     still-running output stream.
  *   - `session-delete`: the archived Session list's trailing delete action. DSH has no
  *     session-delete service, so the bridge removes the Session's stored log directory
  *     (and its projection cache) for an archived Session with no running work; DSH keeps
@@ -50,6 +53,8 @@ export {
   foldSessionLog as foldSessionLogForTest,
   scanSessions as scanSessionsForTest,
   dailyUsage as dailyUsageForTest,
+  foldSessionCostLog as foldSessionCostLogForTest,
+  sessionCost as sessionCostForTest,
 };
 
 const GIT_ROUTE = '/smooth-skin/git';
@@ -299,6 +304,8 @@ async function handleBridgeRequest(req, res, tokenOf, ctx) {
       value = await checkoutBranch(cwd, body.branch, Boolean(body.create));
     } else if (body.action === 'usage') {
       value = await dailyUsage();
+    } else if (body.action === 'session-cost') {
+      value = await sessionCost(body.sessionId);
     } else if (body.action === 'session-delete') {
       value = await deleteArchivedSession(ctx, body.sessionId);
     } else {
@@ -540,6 +547,170 @@ function foldSessionLog(buffer, zlib) {
     days.set(day, value);
   }
   return days;
+}
+
+/* ------------------------------------------------------------ session cost ---
+ *
+ * The bottom line's settled amount follows the same rule as the welcome page's usage
+ * table, but per settlement rather than per day: fold the stored log's
+ * `assistant/message` / `assistant/attempt` samples, price each one at the tier in force
+ * when it happened, and let a later sample for the same (turn, step) replace the earlier
+ * one. The browser adds the still-running stream on top; this half never guesses it.
+ */
+
+const SESSION_COST_CACHE_LIMIT = 128;
+/** A Session directory may not exist yet on the first frame; do not walk for it again
+ * on every 1.5s request. */
+const SESSION_COST_MISS_MS = 2_000;
+const sessionCostCache = new Map();
+const sessionCostLogs = new Map();
+
+/** One Session's settled cost, in millionths of a yuan. */
+function foldSessionCostLog(buffer, zlib) {
+  const settled = new Map();
+  const record = (text) => {
+    let currentModel = null;
+    for (const line of text.split('\n')) {
+      const head = USAGE_LOG_EVENT.exec(line);
+      if (!head) continue;
+      const usage = lastUsageSample(line);
+      if (!usage) continue;
+      const named = USAGE_LOG_MODEL.exec(line)?.[1];
+      if (named) currentModel = named;
+      const step = USAGE_LOG_STEP.exec(line);
+      settled.set(step ? `${step[1]}/${step[2]}` : `time/${head[1]}`, {
+        time: Number(head[1]),
+        model: currentModel || 'unknown',
+        usage: {
+          uncachedInputTokens: Number(usage.inputTokens) || 0,
+          outputTokens: Number(usage.outputTokens) || 0,
+          cacheReadTokens: Number(usage.cacheReadTokens) || 0,
+          cacheWriteTokens: Number(usage.cacheWriteTokens) || 0,
+        },
+      });
+    }
+  };
+  if (zlib) {
+    const starts = zstdFrameStarts(buffer);
+    for (let index = 0; index < starts.length - 1; index++) {
+      let text;
+      try {
+        text = zlib.zstdDecompressSync(buffer.subarray(starts[index], starts[index + 1])).toString('utf8');
+      } catch {
+        continue;
+      }
+      record(text);
+    }
+  } else {
+    record(buffer.toString('utf8'));
+  }
+  let costMicro = 0;
+  let partial = false;
+  let last = null;
+  for (const event of settled.values()) {
+    const cost = usageCostMicro(event.usage, event.model, event.time);
+    if (cost === null) partial = true;
+    else costMicro += cost;
+    if (last === null || event.time >= last.time) last = event;
+  }
+  return {
+    // An unpriced old event must not silently shrink the bill; the client falls back to
+    // its projection estimate instead of showing a confidently wrong number.
+    costMicro: partial ? null : costMicro,
+    partial,
+    model: last?.model ?? null,
+    settledAt: last?.time ?? null,
+  };
+}
+
+/** The newest log file for one Session id under `$DSH_HOME/sessions`. */
+async function findSessionLog(sessionId) {
+  const { fs, path, os } = await bridgeNode();
+  const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+  const root = path.join(home, 'sessions');
+  const held = sessionCostLogs.get(sessionId);
+  if (held?.path) {
+    try {
+      await fs.stat(held.path);
+      return held.path;
+    } catch {
+      sessionCostLogs.delete(sessionId);
+    }
+  } else if (held && Date.now() - held.at < SESSION_COST_MISS_MS) {
+    return null;
+  }
+  let found = null;
+  const walk = async (directory) => {
+    let entries;
+    try {
+      entries = await fs.readdir(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const target = path.join(directory, entry.name);
+      if (!entry.isDirectory()) continue;
+      if (entry.name === sessionId) {
+        let files;
+        try {
+          files = await fs.readdir(target, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const file of files) {
+          if (!file.isFile() || !USAGE_LOG_NAME.test(file.name)) continue;
+          const logPath = path.join(target, file.name);
+          let stat;
+          try {
+            stat = await fs.stat(logPath);
+          } catch {
+            continue;
+          }
+          if (found === null || stat.mtimeMs > found.mtimeMs) found = { path: logPath, mtimeMs: stat.mtimeMs };
+        }
+        continue;
+      }
+      await walk(target);
+    }
+  };
+  await walk(root);
+  sessionCostLogs.set(sessionId, found ? { path: found.path, at: Date.now() } : { path: null, at: Date.now() });
+  while (sessionCostLogs.size > SESSION_COST_CACHE_LIMIT) {
+    sessionCostLogs.delete(sessionCostLogs.keys().next().value);
+  }
+  return found?.path ?? null;
+}
+
+/** The Host half of the bottom line's money reading. The browser adds the live tail. */
+async function sessionCost(sessionId) {
+  if (typeof sessionId !== 'string' || !SESSION_ID_PATTERN.test(sessionId)) {
+    throw new GitBridgeError('session', '会话 ID 无效');
+  }
+  const { fs, zlib } = await bridgeNode();
+  const logPath = await findSessionLog(sessionId);
+  if (!logPath) return { costMicro: 0, partial: false, model: null, settledAt: null };
+  let stat;
+  try {
+    stat = await fs.stat(logPath);
+  } catch {
+    return { costMicro: 0, partial: false, model: null, settledAt: null };
+  }
+  const cached = sessionCostCache.get(sessionId);
+  if (cached && cached.path === logPath && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
+    return cached.value;
+  }
+  let buffer;
+  try {
+    buffer = await fs.readFile(logPath);
+  } catch {
+    return null;
+  }
+  const value = foldSessionCostLog(buffer, /\.zstd$/.test(logPath) ? zlib : undefined);
+  sessionCostCache.set(sessionId, { path: logPath, size: stat.size, mtimeMs: stat.mtimeMs, value });
+  while (sessionCostCache.size > SESSION_COST_CACHE_LIMIT) {
+    sessionCostCache.delete(sessionCostCache.keys().next().value);
+  }
+  return value;
 }
 
 /** Per-day usage across the stored Sessions under `sessionsRoot`.

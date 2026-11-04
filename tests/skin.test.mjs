@@ -18,6 +18,7 @@ const account = await read('../src/account.js');
 const scrollbar = await read('../src/scrollbar.js');
 const think = await read('../src/think.js');
 const bridge = await read('../src/bridge.js');
+const cost = await read('../src/cost.js');
 const usage = await read('../src/usage.js');
 
 /** Evaluate the shared + boot + host half as an ESM module through a data: URL. */
@@ -806,8 +807,8 @@ test('a palette switch opens the new theme as a circle from the top-left corner'
 test('the built artifacts exist and agree with the sources', async () => {
   const index = await read('../lib/index.js');
   const bundle = await read('../lib/client.js');
-  assert.equal(index, `${shared}\n${boot}\n${host}`, 'rebuild the Host artifact after changing its sources');
-  assert.equal(bundle, `window.__ModuleLoader__.load({id:'dsh-smooth-skin',factory:(require)=>{const exports={};\n${shared}\n${pricing}\n${skin}\n${boot}\n${watch}\n${bridge}\n${think}\n${composer}\n${usage}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`, 'rebuild the Client artifact after changing its sources');
+  assert.equal(index, `${shared}\n${pricing}\n${boot}\n${host}`, 'rebuild the Host artifact after changing its sources');
+  assert.equal(bundle, `window.__ModuleLoader__.load({id:'dsh-smooth-skin',factory:(require)=>{const exports={};\n${shared}\n${pricing}\n${skin}\n${boot}\n${watch}\n${bridge}\n${cost}\n${think}\n${composer}\n${usage}\n${account}\n${layout}\n${scrollbar}\n${client}\nreturn exports;}});\n`, 'rebuild the Client artifact after changing its sources');
   assert.ok(index.includes(shared.trim().slice(0, 60)));
   assert.ok(index.includes('webserver/index-inject'));
   assert.ok(index.includes('export default plugin'));
