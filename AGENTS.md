@@ -38,7 +38,7 @@ node --test tests/*.test.mjs
 
 2. **注入表的行必须是纯数据。** `apply` 里把启动动画的三行（`style` / `html` / `script`）和桥接地址/能力令牌推进每份 index 的注入表，监听器随插件一起释放。行必须是可 JSON 序列化的纯数据，因为静态部署会用同一张表；服务端与桌面端使用相同内容。
 
-3. **私有桥只做四类动作，只认本次激活令牌。** 私有回环监听（`/smooth-skin/git`）提供 `status` / `checkout` 两个 Git 动作、落地页用量表的 `usage` 动作（只读扫描会话日志），以及归档列表删除按钮的 `session-delete` 动作。它只在请求到达时才用 `ctx.get` 读取 `sessions` / `workspaceRegistry` / `sessionPersistence`，并用 `ctx.waterfall` / `ctx.parallel` 走归档准入事件，因此插件激活仍然不声明任何 `inject`。它只接受带本次激活令牌的 POST，且只删除「已归档、没有仍在运行活动」的会话目录：删除前通过 `workspace/session-activity` 检查活动、`workspace/session-stop` 收尾，并清掉工作区记账与内存 store 条目（驱动客户端的 `api-session/removed`）；插件释放时关闭。令牌**跨激活保留**（写在 `$DSH_HOME/cache/smooth-bridge-token`）：页面手里的那份不会因为重新激活、重建或重启而失效，否则旧页面会被 403 挡在门外直到刷新。Host 半更新后需重启 DSH，未加载时分支按钮回退为复制分支名。
+3. **私有桥只做五类动作，只认本次激活令牌。** 私有回环监听（`/smooth-skin/git`）提供 `status` / `checkout` 两个 Git 动作、落地页用量表的 `usage` 动作（只读扫描会话日志）、底栏金额的 `session-cost` 动作（按某一会话的日志折叠已结算金额），以及归档列表删除按钮的 `session-delete` 动作。它只在请求到达时才用 `ctx.get` 读取 `sessions` / `workspaceRegistry` / `sessionPersistence`，并用 `ctx.waterfall` / `ctx.parallel` 走归档准入事件，因此插件激活仍然不声明任何 `inject`。它只接受带本次激活令牌的 POST，且只删除「已归档、没有仍在运行活动」的会话目录：删除前通过 `workspace/session-activity` 检查活动、`workspace/session-stop` 收尾，并清掉工作区记账与内存 store 条目（驱动客户端的 `api-session/removed`）；插件释放时关闭。令牌**跨激活保留**（写在 `$DSH_HOME/cache/smooth-bridge-token`）：页面手里的那份不会因为重新激活、重建或重启而失效，否则旧页面会被 403 挡在门外直到刷新。Host 半更新后需重启 DSH，未加载时分支按钮回退为复制分支名。
 
 4. **Client 产物显式导出 `name` / `inject` / `apply`。** 服务 `theme` / `slots` / `locale` / `layout` / `uiWorkspace` / `sessions` / `remote` / `remote.workspaceFiles` 均声明在 `inject` 中，manifest 同时列出相应提供模块和设置、会话模块。
 
@@ -67,19 +67,20 @@ assets/whale.svg  开场鲸鱼的独立 SVG 文件，从 src/boot.js 导出，�
 assets/think/     四挡思考强度插图：cutout/*.webp 入库用于生成面板背景；原始 PNG 不入库
 locale/{zh,en}.json  插件管理页显示的标题与描述
 src/shared.js     调色板、主题令牌映射、状态规范化、locale 词条
-src/pricing.js    DeepSeek 价目表与当前会话金额估算（客户端，只进 client 产物）
+src/pricing.js    DeepSeek 价目表与金额/输出单价（Host 与 Client 共用同一份）
 src/think.js      由 tools/export-think.mjs 生成的 THINK_ART（四挡插图的内联 data URL），不要手改
 src/skin.js       作用域样式表
 src/boot.js       启动动画唯一定义：注入 index 的样式/标记/脚本 + 设置页预览
 src/watch.js      等待宿主表面：一个共享的 body observer + 按帧合并的检查
-src/bridge.js     Host 私有桥的浏览器侧入口（Git 菜单与每日用量共用）
+src/bridge.js     Host 私有桥的浏览器侧入口（Git 菜单、每日用量与金额共用）
+src/cost.js       Host 已结算金额的轮询与流式 output 估算（金额 = 已结算 + 未结算尾巴）
 src/composer.js   真实 Git 分支读取、分支菜单、信息栏与原生控件 portal
 src/usage.js      落地页的每日 token 表：26 周热力图、图例与悬停提示
 src/account.js    账号资料、向下展开的真实余额与原生账号菜单扩展
 src/layout.js     原生导航标签、归档行删除按钮、共享布局连接与三块外观选项
 src/scrollbar.js  各滚动区域的粗细动画、空闲恢复与卸载清理
 src/client.js     Client 半：设置页 + 令牌覆盖 + 样式注入 + localStorage 状态
-src/host.js       Host 半：启动动画注入 + 私有 /smooth-skin/git 桥（Git、每日 token、归档会话删除）
+src/host.js       Host 半：启动动画注入 + 私有 /smooth-skin/git 桥（Git、每日 token、会话金额、归档会话删除）
 build.mjs         构建脚本
 tools/            激活试验台、图标导出、启动剖析与宿主契约审计（除客户端钩子外，也核对 Host 侧 `sessions` / `workspaceRegistry` / `sessionPersistence` 的桥接符号）
 tools/patch-window-glass.mjs  桌面窗口亚克力补丁：等长原地改已安装 app.asar 的主窗口选项与页面标记；apply / restore 的 .cmd 在旁
@@ -125,7 +126,7 @@ tests/window-glass.test.mjs  窗口补丁的锚点、等长裁剪与原地写入
 
 - `tests/client.test.mjs`：直接执行浏览器构建产物，检查模块导出、依赖访问、设置页注册、启用/关闭和卸载清理。源码与构建产物必须完全一致，修改 `src/` 后需重新构建。
 - `tests/window-glass.test.mjs`：窗口补丁的锚点、等长裁剪与原地写入在合成 asar 上回归；不需要安装 DSH。
-- `tests/git-bridge.test.mjs`：在临时 Git 仓库里验证分支列表、未提交计数、建分支和带能力令牌的 Host 监听。
+- `tests/git-bridge.test.mjs`：在临时 Git 仓库里验证分支列表、未提交计数、建分支和带能力令牌的 Host 监听，并验证 `session-cost` 的会话日志折叠与重试替换。
 - `tests/host-contract.test.mjs`：跑上面那条宿主兼容性闸门，找不到 DSH 安装时跳过。
 - `tests/boot.test.mjs`：断言 `assets/whale.svg` 与 `src/boot.js` 的常量逐字节一致。
 - `tests/think.test.mjs`：断言四张 think 插图存在、确实是 WebP、体积受限且与 cutout 逐字节一致。
