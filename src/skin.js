@@ -229,14 +229,18 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"]:not([aria-sel
 /* Preserve the native plugin page; only let the page's own glass ground show through. */
 body[data-smooth-skin] [data-plugin-panel]{background:transparent}
 
-/* Native settings navigation, rows and form controls. */
-body[data-smooth-skin] [data-shortcut-modal="settings"]{width:min(1080px,calc(100vw - 48px));border:1px solid var(--smooth-line-strong);border-radius:0;background:var(--smooth-app-overlay);box-shadow:var(--smooth-shadow-2)}
-body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{width:210px;min-width:180px;padding:22px 14px;background:var(--smooth-sidebar-overlay);box-shadow:none}
+/* Native settings navigation, rows and form controls. The settings surface stays
+   solid even when the page behind it is glass: this is a full-window ground, and at
+   a high translucency the page underneath (or a stale compositor frame from the
+   opening animation) shows through as a second, half-faded copy of the same rows.
+   Menus keep their overlay weight; only the settings ground opts out. */
+body[data-smooth-skin] [data-shortcut-modal="settings"]{width:min(1080px,calc(100vw - 48px));border:1px solid var(--smooth-line-strong);border-radius:0;background:var(--smooth-app);box-shadow:var(--smooth-shadow-2)}
+body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{width:210px;min-width:180px;padding:22px 14px;background:var(--smooth-sidebar);box-shadow:none}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navTitle')}{font-size:22px;font-weight:600;padding:4px 12px 18px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}{gap:5px}
 body[data-smooth-skin] [data-shortcut-modal="settings"]>nav button{min-height:42px;padding:10px 12px;border-radius:var(--smooth-radius-sm);gap:11px;font-size:14px}
 body[data-smooth-skin] [data-shortcut-modal="settings"]>nav button[aria-current="true"]{background:var(--smooth-selected-mild);font-weight:600;color:var(--smooth-text)}
-body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{background:var(--smooth-app-overlay)}
+body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{background:var(--smooth-app)}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}{padding:4px clamp(20px,3vw,44px) 36px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}>:is(section,div){max-width:1120px;margin-inline:auto}
 body[data-smooth-skin] [data-shortcut-modal="settings"] h2{font-size:24px;line-height:1.5;font-weight:600}
@@ -294,7 +298,11 @@ body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${host
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} ${hostPart('tabs')} ${hostPart('viewsMore')} svg{display:block}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;border-radius:999px;background:var(--smooth-surface-3-mild);transition:transform .26s cubic-bezier(.22,1,.36,1)}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs]:has(>[role="tab"]:nth-child(2)[aria-selected="true"])::before{transform:translateX(100%)}
-body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"]{position:relative;z-index:1;flex:1 1 0;padding:6px 18px;border:0;border-radius:0;background:transparent;color:var(--smooth-muted);font-size:13px;font-weight:500;line-height:16px}
+/* The host's tab is a 35px hit target with a -10px vertical margin and 10px/9px
+   padding; the skin's switch is a 27px pill. Keep the host's hit area out of the
+   layout and let flex centre the label inside the pill, otherwise the text sits
+   5px high and the button overflows the rounded control. */
+body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"]{position:relative;z-index:1;box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex:1 1 0;height:23px;min-height:0;margin:0 -10px;padding:0 18px;border:0;border-radius:0;background:transparent;color:var(--smooth-muted);font-size:13px;font-weight:500;line-height:1}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"][aria-selected="true"]{color:var(--smooth-text);font-weight:600}
 body[data-smooth-skin] ${hostPart('centerCol')}:has([data-content-phase]) ${hostPart('header')} [data-conversation-tabs] [role="tab"]::after{content:none}
 @media(prefers-reduced-motion:reduce){body[data-smooth-skin] ${hostPart('tabs')},body[data-smooth-skin] [data-conversation-tabs]::before,body[data-smooth-skin] ${hostPart('viewsMore')}{transition:none}}
@@ -1009,12 +1017,15 @@ body[data-smooth-skin] .smooth-workspace-filter{
 }
 /* The control is frame-fixed, so hovering it is not hovering the sidebar underneath it;
    both are named here or the reveal would flicker off the moment the pointer lands.
+   The icon rail is addressed by the pointer attribute the chrome publishes: its top
+   button lives in the shell overlay, outside the sidebar column, so the column's own
+   :hover never fires while the pointer rests on the rail.
    :where() keeps the hover's specificity below the collapse/search suppression below.
    The keyboard reveal keys on :focus-visible, never :focus-within: a clicked option
    keeps :focus after the pointer leaves, so :focus-within left the overlay pinned open
    until focus moved somewhere else. A mouse click is not :focus-visible, so the control
    follows the pointer again, while Tab still reveals it. */
-body[data-smooth-skin]:where(:has(${hostPart('sidebarCol')}:hover, .smooth-workspace-filter:hover)) .smooth-workspace-filter,
+body[data-smooth-skin]:where(:has(${hostPart('sidebarCol')}:hover, .smooth-workspace-filter:hover), [data-smooth-rail-hover]) .smooth-workspace-filter,
 body[data-smooth-skin] .smooth-workspace-filter:has(:focus-visible){opacity:1;pointer-events:auto}
 body[data-smooth-skin] .smooth-filter-option{
   appearance:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;
@@ -1216,7 +1227,7 @@ body[data-smooth-skin] .smooth-usage-models-empty{padding:6px 2px;color:var(--sm
    tab strip and the home button stay usable while settings is open — clicking the
    rail switches pages instead of closing settings, and Escape / a tab / Home
    remain the exits. */
-body[data-smooth-skin] [data-shortcut-modal="settings"]{position:fixed;inset:var(--smooth-caption) 0 0 var(--smooth-rail-width);width:auto;height:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;pointer-events:auto}
+body[data-smooth-skin] [data-shortcut-modal="settings"]{position:fixed;inset:var(--smooth-caption) 0 0 var(--smooth-rail-width);width:auto;height:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;grid-template-columns:calc(var(--smooth-left-width) - var(--smooth-rail-width)) minmax(0,1fr);pointer-events:auto}
 body[data-smooth-skin] [role="presentation"]:has(>[data-shortcut-modal="settings"]){pointer-events:none}
 body[data-smooth-skin] [role="presentation"]:has(>[data-shortcut-modal="settings"])>[aria-hidden="true"]{background:transparent;backdrop-filter:none;pointer-events:none}
 body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{box-sizing:border-box;width:calc(var(--smooth-left-width) - var(--smooth-rail-width));min-width:0;min-height:0;padding:16px 10px 10px;gap:8px}
@@ -1252,7 +1263,7 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>b
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(6)::after{content:"扩展"}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(2),
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(6){margin-top:34px}
-body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{position:relative;z-index:1;border-left:0;border-radius:0 0 0 var(--smooth-radius-xl);corner-shape:round;background:var(--smooth-app-overlay);overflow:clip}
+body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{position:relative;z-index:1;border-left:0;border-radius:0 0 0 var(--smooth-radius-xl);corner-shape:round;background:var(--smooth-app);overflow:clip}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('header')}{height:52px;padding:14px 16px 8px}
 /* The native close button would sit immediately right of whatever action the page itself
    puts in this header (通用设置 puts its "打开配置文件" there), which reads as one button

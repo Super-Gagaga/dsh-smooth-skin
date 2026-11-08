@@ -584,6 +584,9 @@ test('the conversation header follows the reference: chips under the title, swit
   assert.match(skin, /\[data-conversation-tabs\]\{position:relative;display:inline-flex;box-sizing:border-box;gap:0;margin:0;padding:0;border:1px solid var\(--smooth-line\);border-radius:999px;background:transparent;overflow:hidden\}/);
   assert.match(skin, /\[data-conversation-tabs\]::before\{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;[^}]*transition:transform \.26s cubic-bezier\(\.22,1,\.36,1\)\}/);
   assert.match(skin, /\[data-conversation-tabs\]:has\(>\[role="tab"\]:nth-child\(2\)\[aria-selected="true"\]\)::before\{transform:translateX\(100%\)\}/);
+  // The host tab is a 35px hit area with a negative margin; the pill is 27px, so the
+  // label must be centred by the button itself, not by the host's padding/margin.
+  assert.match(skin, /\[data-conversation-tabs\] \[role="tab"\]\{[^}]*display:flex;align-items:center;justify-content:center;flex:1 1 0;height:23px;min-height:0;margin:0 -10px;padding:0 18px;[^}]*line-height:1\}/);
   assert.match(skin, /\$\{hostPart\('centerCol'\)\}:hover \$\{hostPart\('header'\)\} \$\{hostPart\('tabs'\)\}/);
   // Clicking a view leaves :focus on the tab; only keyboard focus may pin the row open,
   // so the reveal keys on :focus-visible rather than :focus-within. An open 更多 menu
@@ -872,6 +875,10 @@ test('the full-workspace settings page lets the shell behind it receive clicks',
   assert.match(skin, /\[role="presentation"\]:has\(>\[data-shortcut-modal="settings"\]\)\{pointer-events:none\}/);
   assert.match(skin, /\[role="presentation"\]:has\(>\[data-shortcut-modal="settings"\]\)>\[aria-hidden="true"\]\{background:transparent;backdrop-filter:none;pointer-events:none\}/);
   assert.match(skin, /\[data-shortcut-modal="settings"\]\{position:fixed;inset:var\(--smooth-caption\) 0 0 var\(--smooth-rail-width\);[^}]*pointer-events:auto\}/);
+  // The host's grid first column is its native 188px nav; the skin widens the nav to
+  // the app-sidebar width, so the column must widen with it or the nav paints over
+  // the content (text appears to sit outside its own column).
+  assert.match(skin, /\[data-shortcut-modal="settings"\]\{[^}]*grid-template-columns:calc\(var\(--smooth-left-width\) - var\(--smooth-rail-width\)\) minmax\(0,1fr\)/);
 });
 
 test('the rail more launcher stays the lowest icon whatever later entries append', () => {
@@ -927,9 +934,12 @@ test('region grounds follow the slider while components keep a mild fill', () =>
   assert.match(skin, /\[role="treeitem"\]\[aria-selected="true"\]\{background:var\(--smooth-selected-mild\)/);
   assert.match(skin, /\.smooth-workspace-tab\[data-selected="true"\]\{background:var\(--smooth-selected-mild\)/);
   assert.match(skin, /\$\{hostPart\('composerSeat'\)\}\{background:linear-gradient\(180deg,color-mix\(in srgb,var\(--smooth-app\) 0%,transparent\) 0,var\(--smooth-app-glass\) 36px\)/);
-  // Settings and popover panels are region grounds too; their rows and buttons stay solid.
-  assert.match(skin, /\[data-shortcut-modal="settings"\]\{[^}]*background:var\(--smooth-app-overlay\)/);
-  assert.match(skin, /\[data-shortcut-modal="settings"\]>nav\{[^}]*background:var\(--smooth-sidebar-overlay\)/);
+  // The settings surface is deliberately solid even while the page behind it is glass:
+  // at a high translucency the underlying page (or a stale opening frame) reads as a
+  // half-faded second copy of the same rows. Menus keep the overlay weight below.
+  assert.match(skin, /\[data-shortcut-modal="settings"\]\{[^}]*background:var\(--smooth-app\)/);
+  assert.match(skin, /\[data-shortcut-modal="settings"\]>nav\{[^}]*background:var\(--smooth-sidebar\)/);
+  assert.match(skin, /\[data-shortcut-modal="settings"\]>\$\{hostPart\('content'\)\}\{[^}]*background:var\(--smooth-app\)/);
   assert.match(skin, /\[role="menu"\]\{[^}]*background:color-mix\(in srgb,var\(--dsw-alias-bg-overlay\) var\(--smooth-glass-overlay\),transparent\)/);
   assert.match(skin, /\.smooth-git-menu\{[^}]*var\(--smooth-glass-overlay\),transparent\)/);
   // The conversation shell root (data-phase) is cleared so the centre glass shows.
