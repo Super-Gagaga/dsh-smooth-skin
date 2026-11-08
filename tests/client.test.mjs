@@ -250,9 +250,6 @@ test('hover-revealed controls cannot be pinned open by a clicked control', () =>
   assert.match(sheet, /\.smooth-workspace-filter:has\(:focus-visible\)\{opacity:1;pointer-events:auto\}/);
   assert.ok(!/\.smooth-workspace-filter:focus-within\b/.test(sheet), 'a clicked option must not hold the overlay open');
   assert.match(sheet, /body\[data-smooth-skin\] \.smooth-workspace-filter\{[^}]*opacity:0/, 'the idle state is hidden');
-  // The rail's top button is portalled outside the sidebar column, so the reveal also
-  // listens to the pointer attribute the chrome publishes while the pointer is on the rail.
-  assert.ok(sheet.includes(', [data-smooth-rail-hover]) .smooth-workspace-filter,'), 'the icon rail keeps the filter revealed');
   // The conversation 对话 / 轨迹 switch — with the 更多 launcher sharing its row — and a
   // tab's close button follow the same rule.
   assert.match(sheet, /:is\(\[class\$="_tabs"\],\[class\*="_tabs "\]\):has\(:focus-visible\)/);

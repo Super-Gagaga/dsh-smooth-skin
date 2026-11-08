@@ -1017,15 +1017,12 @@ body[data-smooth-skin] .smooth-workspace-filter{
 }
 /* The control is frame-fixed, so hovering it is not hovering the sidebar underneath it;
    both are named here or the reveal would flicker off the moment the pointer lands.
-   The icon rail is addressed by the pointer attribute the chrome publishes: its top
-   button lives in the shell overlay, outside the sidebar column, so the column's own
-   :hover never fires while the pointer rests on the rail.
    :where() keeps the hover's specificity below the collapse/search suppression below.
    The keyboard reveal keys on :focus-visible, never :focus-within: a clicked option
    keeps :focus after the pointer leaves, so :focus-within left the overlay pinned open
    until focus moved somewhere else. A mouse click is not :focus-visible, so the control
    follows the pointer again, while Tab still reveals it. */
-body[data-smooth-skin]:where(:has(${hostPart('sidebarCol')}:hover, .smooth-workspace-filter:hover), [data-smooth-rail-hover]) .smooth-workspace-filter,
+body[data-smooth-skin]:where(:has(${hostPart('sidebarCol')}:hover, .smooth-workspace-filter:hover)) .smooth-workspace-filter,
 body[data-smooth-skin] .smooth-workspace-filter:has(:focus-visible){opacity:1;pointer-events:auto}
 body[data-smooth-skin] .smooth-filter-option{
   appearance:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;

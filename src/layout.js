@@ -402,32 +402,6 @@ function installReferenceShell({ slots, layout, uiWorkspace, sessions, modelDire
   const menuObserver = typeof MutationObserver === 'function' ? new MutationObserver(scheduleCaptionLeading) : undefined;
   if (menuObserver && document.body) menuObserver.observe(document.body, { childList: true });
   document.fonts?.ready?.then?.(scheduleCaptionLeading);
-  // The hover filter's column trigger cannot see the icon rail: the rail's top button is
-  // portalled into the shell overlay, outside the sidebar column, so the pointer can rest
-  // on the rail without the column ever being hovered. Publish that presence as a body
-  // attribute, measured from the button itself (its inset is symmetric, so left + right
-  // is the rail's full width). The stylesheet treats it exactly like the column hover.
-  let railEdge = 0;
-  const measureRail = () => {
-    const home = document.querySelector?.('.smooth-rail-home');
-    const rect = home?.getBoundingClientRect?.();
-    railEdge = rect && rect.width > 0 ? rect.left + rect.right : 0;
-  };
-  const clearRail = () => document.body?.removeAttribute('data-smooth-rail-hover');
-  const trackRail = event => {
-    if (!active) { clearRail(); return; }
-    if (!railEdge) measureRail();
-    document.body?.toggleAttribute('data-smooth-rail-hover', railEdge > 0 && event.clientX <= railEdge);
-  };
-  window.addEventListener?.('pointermove', trackRail, { passive: true });
-  window.addEventListener?.('blur', clearRail);
-  document.addEventListener?.('pointerleave', clearRail);
-  disposers.push(() => {
-    window.removeEventListener?.('pointermove', trackRail);
-    window.removeEventListener?.('blur', clearRail);
-    document.removeEventListener?.('pointerleave', clearRail);
-    clearRail();
-  });
   disposers.push(() => {
     window.removeEventListener?.('resize', scheduleCaptionLeading);
     menuObserver?.disconnect();
@@ -438,7 +412,6 @@ function installReferenceShell({ slots, layout, uiWorkspace, sessions, modelDire
   function setEnabled(enabled) {
     if (enabled === active) return;
     active = enabled;
-    if (!enabled) clearRail();
     // The conversation column opens at the plugin default: the last width the user used.
     if (enabled) applyConversationWidth();
     if (enabled) {

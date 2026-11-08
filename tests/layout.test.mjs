@@ -723,27 +723,6 @@ test('hovering the left column flips the workspace list between running and arch
   r.shell.dispose();
 });
 
-test('the icon rail keeps the filter revealed while the pointer rests on it', () => {
-  const r = runtime();
-  // The rail's top button is portalled into the shell overlay, outside the sidebar
-  // column, so the column's own :hover never fires while the pointer is over it.
-  r.sandbox.document.querySelector = selector => selector === '.smooth-rail-home'
-    ? { getBoundingClientRect: () => ({ left: 4, right: 44, width: 40, height: 36 }) }
-    : null;
-  r.shell.setEnabled(true);
-  workspaceFilter(r);
-  const move = r.events.get('window:pointermove');
-  assert.equal(typeof move, 'function', 'the chrome tracks the pointer against the icon rail');
-  move({ clientX: 30 });
-  assert.equal(r.bodyAttributes.has('data-smooth-rail-hover'), true, 'the icon rail reveals the filter');
-  move({ clientX: 120 });
-  assert.equal(r.bodyAttributes.has('data-smooth-rail-hover'), false, 'leaving the rail hands the reveal back to the sidebar');
-  move({ clientX: 8 });
-  r.events.get('window:blur')();
-  assert.equal(r.bodyAttributes.has('data-smooth-rail-hover'), false, 'leaving the window clears the reveal');
-  r.shell.dispose();
-});
-
 test('a clicked option releases focus so the overlay can follow the pointer out', () => {
   const r = runtime();
   r.shell.setEnabled(true);
