@@ -1218,16 +1218,15 @@ body[data-smooth-skin] .smooth-usage-models-empty{padding:6px 2px;color:var(--sm
    take the app's own scale. The reference mock-up sized this panel for a 1950px
    canvas (51px nav cells, 20px labels); Harness chrome runs at 13-14px, so the
    panel follows the rest of the window instead. The panel is pinned to the
-   workspace (right of the rail, under the caption), so the modal shell around it
-   must stop blocking the shell behind it: the fixed overlay and its transparent
-   mask pass clicks through, and only the panel itself takes them. The rail, the
-   tab strip and the home button stay usable while settings is open — clicking the
-   rail switches pages instead of closing settings, and Escape / a tab / Home
-   remain the exits. */
-body[data-smooth-skin] [data-shortcut-modal="settings"]{position:fixed;inset:var(--smooth-caption) 0 0 var(--smooth-rail-width);width:auto;height:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;grid-template-columns:calc(var(--smooth-left-width) - var(--smooth-rail-width)) minmax(0,1fr);pointer-events:auto}
+   conversation column (right of the app sidebar, under the caption), so the
+   sidebar and its sessions stay visible and usable. The modal shell's fixed
+   overlay and transparent mask pass clicks through, and only the panel takes
+   them; a session, the rail, a tab or Home leaves settings, and Escape still
+   closes it. */
+body[data-smooth-skin] [data-shortcut-modal="settings"]{--smooth-settings-nav:210px;position:fixed;inset:var(--smooth-caption) 0 0 var(--smooth-left-width);width:auto;height:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;grid-template-columns:var(--smooth-settings-nav) minmax(0,1fr);pointer-events:auto}
 body[data-smooth-skin] [role="presentation"]:has(>[data-shortcut-modal="settings"]){pointer-events:none}
 body[data-smooth-skin] [role="presentation"]:has(>[data-shortcut-modal="settings"])>[aria-hidden="true"]{background:transparent;backdrop-filter:none;pointer-events:none}
-body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{box-sizing:border-box;width:calc(var(--smooth-left-width) - var(--smooth-rail-width));min-width:0;min-height:0;padding:16px 10px 10px;gap:8px}
+body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{box-sizing:border-box;width:var(--smooth-settings-nav);min-width:0;min-height:0;padding:16px 10px 10px;gap:8px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navTitle')}{padding:0 10px;font-size:20px;line-height:28px;font-weight:700;letter-spacing:-.01em}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}{flex:1;min-height:0;gap:2px;padding-top:34px;overflow-x:hidden;overflow-y:auto}
 /* Native icons and labels stay in separate cells, including plugin sections.
@@ -1313,8 +1312,7 @@ body[data-smooth-skin] :is(.smooth-composer-preset,.smooth-composer-model) butto
 }
 @media(max-width:800px){
   body[data-smooth-skin] .smooth-workspace-bar{left:0;right:0;padding-left:92px}
-  body[data-smooth-skin] [data-shortcut-modal="settings"]{left:0}
-  body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{width:160px}
+  body[data-smooth-skin] [data-shortcut-modal="settings"]{left:0;--smooth-settings-nav:160px}
   body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}{padding-inline:20px}
   body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('headline')}{font-size:26px}
   body[data-smooth-skin] ${hostPart('composerHero')} ${hostPart('heroWorkspaceRow')}{font-size:13px}

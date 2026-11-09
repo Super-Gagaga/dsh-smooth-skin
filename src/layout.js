@@ -471,13 +471,14 @@ function installReferenceShell({ slots, layout, uiWorkspace, sessions, modelDire
     disposers.push(settingsStore.subscribe(rememberSettingsSection));
   }
   function closeSettings() { settingsStore?.actions.close(); }
-  /* The settings page fills the workspace, so the rail beside it is live navigation.
-   * The host's panel buttons sit behind the modal overlay; the stylesheet lets pointer
-   * events through, and a rail click must close the settings store first or the page
-   * it selects stays hidden behind the settings surface. The skin's home / plugins
-   * buttons close in their own handlers, and the account menu opens above the overlay,
-   * so neither is intercepted here. */
-  const railSelection = `${hostPart('panelList')} button, ${hostPart('panelRow')}, ${hostPart('newSession')}`;
+  /* Settings now fills only the conversation column, so the app sidebar beside it is
+   * live navigation. The host's session rows and panel buttons sit behind the modal
+   * overlay; the stylesheet lets pointer events through, but both the session and the
+   * rail selection must close the settings store first or the page they select stays
+   * hidden behind the settings surface. The skin's home / plugins buttons close in
+   * their own handlers, and the account menu opens above the overlay, so neither is
+   * intercepted here. */
+  const railSelection = `${hostPart('panelList')} button, ${hostPart('panelRow')}, ${hostPart('newSession')}, ${hostPart('sessionRow')}`;
   const closeSettingsFromRail = (event) => {
     if (!settingsStore?.getSnapshot?.()?.open) return;
     if (!event.target?.closest?.(railSelection)) return;

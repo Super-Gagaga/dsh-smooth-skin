@@ -867,18 +867,20 @@ test('the settings nav groups are three: account, application, extensions', () =
   assert.match(skin, />button:nth-child\(2\),[\s\S]{0,400}?>button:nth-child\(6\)\{margin-top:34px\}/);
 });
 
-test('the full-workspace settings page lets the shell behind it receive clicks', () => {
+test('the conversation-column settings page lets the sidebar behind it receive clicks', () => {
   // The host frames settings in a fixed modal overlay above the whole app. The skin
-  // pins the panel into the workspace (right of the rail), so the overlay and its
-  // transparent mask must stop hit-testing and only the panel may take clicks —
-  // otherwise the rail, tab strip and home button are visible but dead.
+  // pins the panel into the conversation column (right of the app sidebar), so the
+  // overlay and its transparent mask must stop hit-testing and only the panel may
+  // take clicks — otherwise the sidebar, rail, tab strip and home button are visible
+  // but dead.
   assert.match(skin, /\[role="presentation"\]:has\(>\[data-shortcut-modal="settings"\]\)\{pointer-events:none\}/);
   assert.match(skin, /\[role="presentation"\]:has\(>\[data-shortcut-modal="settings"\]\)>\[aria-hidden="true"\]\{background:transparent;backdrop-filter:none;pointer-events:none\}/);
-  assert.match(skin, /\[data-shortcut-modal="settings"\]\{position:fixed;inset:var\(--smooth-caption\) 0 0 var\(--smooth-rail-width\);[^}]*pointer-events:auto\}/);
-  // The host's grid first column is its native 188px nav; the skin widens the nav to
-  // the app-sidebar width, so the column must widen with it or the nav paints over
-  // the content (text appears to sit outside its own column).
-  assert.match(skin, /\[data-shortcut-modal="settings"\]\{[^}]*grid-template-columns:calc\(var\(--smooth-left-width\) - var\(--smooth-rail-width\)\) minmax\(0,1fr\)/);
+  assert.match(skin, /\[data-shortcut-modal="settings"\]\{[^}]*inset:var\(--smooth-caption\) 0 0 var\(--smooth-left-width\)[^}]*pointer-events:auto\}/);
+  // The host's grid first column is its native 188px nav; inside the conversation
+  // column the skin gives settings its own 210px nav, and the grid column must use
+  // the same variable or the nav paints over the content.
+  assert.match(skin, /\[data-shortcut-modal="settings"\]\{[^}]*--smooth-settings-nav:210px[^}]*grid-template-columns:var\(--smooth-settings-nav\) minmax\(0,1fr\)/);
+  assert.match(skin, /\[data-shortcut-modal="settings"\]>nav\{[^}]*width:var\(--smooth-settings-nav\)/);
 });
 
 test('the rail more launcher stays the lowest icon whatever later entries append', () => {

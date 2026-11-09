@@ -131,24 +131,27 @@ test('the welcome block follows the main surface, not the tab count', () => {
   assert.equal(r.bodyAttributes.has('data-smooth-home'), true, 'and clearing it brings the welcome page back');
 });
 
-test('a rail panel click closes the settings page before the host panel opens', () => {
+test('a rail or session click closes the settings page before the host page opens', () => {
   const r = runtime();
   r.shell.setEnabled(true);
   const click = r.events.get('click');
   assert.equal(typeof click, 'function', 'the rail navigation listener is installed');
-  // The host's rail panel button lives behind the settings overlay; the capture
-  // listener must close the page first, or the selected panel stays hidden.
+  // The host's rail panel and session rows live behind the settings overlay; the
+  // capture listener must close the page first, or the selected page stays hidden.
   r.settingsState.open = true;
   click({ target: { closest: selector => selector.includes('panelList') ? {} : null } });
   assert.deepEqual(r.settingsCloses, [true], 'the settings page closes for a rail selection');
+  r.settingsState.open = true;
+  click({ target: { closest: selector => selector.includes('sessionRow') ? {} : null } });
+  assert.deepEqual(r.settingsCloses, [true, true], 'the settings page closes for a session selection');
   // A click inside the page itself (or the account menu above the overlay) leaves it open.
   r.settingsState.open = true;
   click({ target: { closest: () => null } });
-  assert.deepEqual(r.settingsCloses, [true], 'other clicks leave the settings page open');
+  assert.deepEqual(r.settingsCloses, [true, true], 'other clicks leave the settings page open');
   r.shell.dispose();
 });
 
-test('native shared stores drive width, real navigation and full-page settings', () => {
+test('native shared stores drive width, real navigation and conversation-column settings', () => {
   const r = runtime();
   r.shell.setEnabled(true);
   assert.equal(r.layoutState.layoutInfo.sidebar, 352);
