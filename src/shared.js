@@ -318,7 +318,9 @@ function buildTokens(state) {
 
   put('--dsw-alias-interactive-bg-hover', 'hover');
   put('--dsw-alias-interactive-bg-active', 'active');
-  put('--dsw-specific-sidebar-nav-item-hover', 'hover');
+  // The host names the sidebar nav item's resting and active tokens but has no `-hover`
+  // one (checked against the installed app.asar), so overriding it would be a no-op and
+  // the contract audit reports it as an unknown token.
   put('--dsw-specific-sidebar-nav-item-active', 'active');
 
   put('--dsw-alias-button-primary-fill', 'solid');
