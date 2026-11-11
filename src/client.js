@@ -10,7 +10,7 @@ const inject = ['slots', 'theme', 'locale', 'layout', 'uiWorkspace', 'sessions',
 const LOCALE_NS = 'smooth';
 
 const CSS = `/* injected through the package stylesheet; kept beside the skin rules */
-.smooth-settings{width:100%;max-width:760px;margin:0 auto;padding:2px 0 36px;color:var(--dsw-alias-label-primary);font-size:14px;line-height:1.6;box-sizing:border-box}
+.smooth-settings{width:100%;max-width:1120px;margin:0 auto;padding:2px 0 36px;color:var(--dsw-alias-label-primary);font-size:14px;line-height:1.6;box-sizing:border-box}
 .smooth-settings h2{font-size:17px;font-weight:600;line-height:24px;margin:0;letter-spacing:-.2px}
 .smooth-settings h3{font-size:14px;font-weight:500;line-height:21px;margin:0;letter-spacing:0}
 .smooth-settings-head{display:flex;flex-direction:column;gap:5px;padding:2px 0 18px}

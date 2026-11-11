@@ -42,7 +42,7 @@ const SPLASH_CSS = `
   --smooth-splash-ink:#000000;
   position:fixed;inset:0;z-index:2147483000;box-sizing:border-box;overflow:hidden;
   display:grid;place-items:center;pointer-events:none;opacity:0;
-  background:var(--dsh-boot-bg,#f4f5f7);color:var(--smooth-splash-ink);
+  background:var(--dsh-boot-bg,#FFFFFF);color:var(--smooth-splash-ink);
 }
 body[data-ds-dark-theme] #${SPLASH_ID}{--smooth-splash-ink:#ffffff;background:var(--dsh-boot-bg,#151517)}
 /* The opening appears on its first frame and only ever fades out: a fade-in would put

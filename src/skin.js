@@ -18,6 +18,11 @@ body[data-smooth-skin]{
   --smooth-radius-xl:26px;--smooth-radius-lg:16px;--smooth-radius-md:11px;--smooth-radius-sm:8px;--smooth-radius-xs:4px;
   --smooth-shadow-1:0 2px 4px #0002,0 6px 12px #0003;
   --smooth-shadow-2:0 2px 5px #0004,0 8px 24px #0003;
+  --smooth-selected-shadow:0 1px 3px rgba(0,0,0,.45);
+  --smooth-selected-text:var(--smooth-text);
+  /* The composer well is lifted off the conversation ground by this shadow alone; the
+     light ladder overrides both shadows where the tone is known. */
+  --smooth-input-shadow:0 4px 16px rgba(0,0,0,.42);
   --dsw-radius-panel:26px;--dsw-radius-xl:26px;--dsw-radius-lg:16px;--dsw-radius-md:11px;
   --dsw-focus-ring-color:var(--smooth-accent);
   /* The page's glass. Every painted page surface takes its palette colour at this
@@ -29,6 +34,7 @@ body[data-smooth-skin]{
   --smooth-app-glass:color-mix(in srgb,var(--smooth-app) var(--smooth-glass),transparent);
   --smooth-sidebar-glass:color-mix(in srgb,var(--smooth-sidebar) var(--smooth-glass),transparent);
   --smooth-surface-glass:color-mix(in srgb,var(--smooth-surface) var(--smooth-glass),transparent);
+  --smooth-bar-glass:color-mix(in srgb,var(--smooth-bar) var(--smooth-glass),transparent);
   --smooth-rail-glass:color-mix(in srgb,var(--smooth-rail) var(--smooth-glass),transparent);
   /* The icon rail sits on the sidebar glass and the tab strip on the caption strip, so the
      page weight would stack into an almost solid band. These two grounds use a steeper
@@ -92,6 +98,11 @@ body[data-smooth-skin]:not([data-ds-dark-theme]){
   color-scheme:light;
   --smooth-shadow-1:0 2px 4px #18202c0a,0 6px 12px #18202c0f;
   --smooth-shadow-2:0 2px 5px #18202c12,0 8px 24px #18202c14;
+  /* The scheme's two lifts. A raised pill is white plus this shadow; the composer well
+     is white with a hairline and a wider, softer one. */
+  --smooth-selected-shadow:0 1px 3px rgba(15,23,42,.10);
+  --smooth-selected-text:#0F172A;
+  --smooth-input-shadow:0 4px 16px rgba(15,23,42,.08);
 }
 /* A palette switch is one paint: the View Transition API snapshots the page before the
    token write, and the new snapshot is unmasked by a circle growing out of the caption's
@@ -128,7 +139,11 @@ body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})::bef
 /* The centre surface is flat: no ambient shadow lifts it off the sidebar, so the page
    reads as one continuous ground instead of a lit panel floating above it. It is also
    the one page surface the translucency setting paints: the backdrop shows through this
-   fill, and every surface inside it stays unpainted so the page is not stacked twice. */
+   fill, and every surface inside it stays unpainted so the page is not stacked twice.
+   The trade-off is accepted on purpose: the host paints a solid base fill behind a row
+   header, so an expanded row's sticky header sits 5/255 above this glass page and reads as
+   a faint white band. Overriding that header is not an option — the same attribute is the
+   generic header of every chat row, so a fill there paints one band per row. */
 body[data-smooth-skin] ${hostPart('frame')}>${hostPart('centerCol')}{position:relative;z-index:1;box-sizing:border-box;background:var(--smooth-app-glass);border-left:0;border-radius:var(--smooth-radius-xl) 0 0 var(--smooth-radius-xl)}
 body[data-smooth-skin] ${hostPart('sidebarCol')}{background:var(--smooth-sidebar-glass);border-right:0}
 /* Host workspace plugin: the session list fades out over its last 24px with a gradient
@@ -143,8 +158,8 @@ body[data-smooth-skin] ${hostPart('centerCol')}>${hostPart('root')}{background:t
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:has(>${hostPart('logoRow')}):not(${hostPart('collapsed')}){position:relative;padding:8px 14px 10px 70px;background:transparent;--dsh-sidebar-inline-padding:14px}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:has(>${hostPart('logoRow')}):not(${hostPart('collapsed')})::after{content:"";position:absolute;top:0;bottom:0;left:0;width:var(--smooth-rail-width);border-radius:0 var(--smooth-radius-lg) 0 0;corner-shape:round;background:var(--smooth-rail-soft);box-shadow:none;pointer-events:none}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('logoRow')}{min-height:46px;margin-bottom:10px}
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}{min-height:40px;margin-bottom:18px;border:1px solid var(--smooth-line);border-radius:var(--smooth-radius-md);background:var(--smooth-surface-2-mild);font-weight:500}
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}:hover{background:var(--smooth-surface-3-mild)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}{min-height:40px;margin-bottom:18px;border:1px solid transparent;border-radius:var(--smooth-radius-md);background:var(--smooth-selected-mild);box-shadow:var(--smooth-selected-shadow);color:var(--smooth-selected-text);font-weight:600}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}:hover{background:color-mix(in srgb,var(--smooth-selected-mild) 88%,var(--smooth-hover))}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('root')}:not(${hostPart('collapsed')})>${hostPart('panelList')}{position:absolute;top:68px;bottom:82px;left:var(--smooth-rail-inset);width:var(--smooth-rail-button-size);overflow:auto;margin:0;gap:var(--smooth-rail-gap);padding:0;scrollbar-width:none}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')}{box-sizing:border-box;display:flex;align-items:center;align-self:center;flex:none;width:var(--smooth-rail-button-size);min-width:0;min-height:var(--smooth-rail-button-size);margin:0;padding:0;justify-content:center;border:0;border-radius:var(--smooth-rail-button-radius);corner-shape:round}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')} ${hostPart('panelTitle')}{position:absolute;width:1px;height:1px;padding:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
@@ -193,8 +208,8 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('footArea')} button[
 body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"]{border-radius:var(--smooth-radius-sm)}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}{height:28px;border-radius:var(--smooth-radius-sm)}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')} ${hostPart('title')}{font-size:12.5px;line-height:18px;color:var(--smooth-muted)}
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}[aria-selected="true"] ${hostPart('title')}{color:var(--smooth-text);font-weight:600}
-body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')} ${hostPart('time')}{font-size:11px;line-height:16px;color:var(--smooth-muted)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}[aria-selected="true"] ${hostPart('title')}{color:var(--smooth-selected-text);font-weight:600}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')} ${hostPart('time')}{font-size:11px;line-height:16px;color:var(--smooth-faint)}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')}{position:relative}
 body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sessionRow')}>${hostPart('slot')}::before{content:"";position:absolute;left:50%;top:50%;width:8.84px;height:8.84px;margin:-4.42px 0 0 -4.42px;background:color-mix(in srgb,var(--smooth-muted) 72%,transparent);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9.5' fill='none' stroke='black' stroke-width='2.71'/%3E%3C/svg%3E") center/8.84px 8.84px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9.5' fill='none' stroke='black' stroke-width='2.71'/%3E%3C/svg%3E") center/8.84px 8.84px no-repeat}
 /* The dot and the host's running spinner are the same geometry: a circle of
@@ -223,8 +238,8 @@ body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('sectionLabel')}{fon
    and weight. The inset bar that used to run down the selected row's leading edge read as
    a stripe pinned to one side of the row instead of as the row's own ground, so the row
    now keeps no shadow at all. */
-body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"][aria-selected="true"]{background:var(--smooth-selected-mild);border-color:transparent;box-shadow:none}
-body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"]:not([aria-selected="true"]):hover{background:var(--smooth-surface-2-mild)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"][aria-selected="true"]{background:var(--smooth-selected-mild);border-color:transparent;box-shadow:var(--smooth-selected-shadow)}
+body[data-smooth-skin] ${hostPart('sidebarCol')} [role="treeitem"]:not([aria-selected="true"]):hover{background:var(--smooth-hover-mild)}
 
 /* Preserve the native plugin page; only let the page's own glass ground show through. */
 body[data-smooth-skin] [data-plugin-panel]{background:transparent}
@@ -235,11 +250,11 @@ body[data-smooth-skin] [data-plugin-panel]{background:transparent}
    opening animation) shows through as a second, half-faded copy of the same rows.
    Menus keep their overlay weight; only the settings ground opts out. */
 body[data-smooth-skin] [data-shortcut-modal="settings"]{width:min(1080px,calc(100vw - 48px));border:1px solid var(--smooth-line-strong);border-radius:0;background:var(--smooth-app);box-shadow:var(--smooth-shadow-2)}
-body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{width:210px;min-width:180px;padding:22px 14px;background:var(--smooth-sidebar);box-shadow:none}
+body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{width:var(--smooth-settings-nav,184px);min-width:0;padding:16px 10px 10px;background:var(--smooth-app);border-right:1px solid var(--smooth-line);box-shadow:none}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navTitle')}{font-size:22px;font-weight:600;padding:4px 12px 18px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}{gap:5px}
 body[data-smooth-skin] [data-shortcut-modal="settings"]>nav button{min-height:42px;padding:10px 12px;border-radius:var(--smooth-radius-sm);gap:11px;font-size:14px}
-body[data-smooth-skin] [data-shortcut-modal="settings"]>nav button[aria-current="true"]{background:var(--smooth-selected-mild);font-weight:600;color:var(--smooth-text)}
+body[data-smooth-skin] [data-shortcut-modal="settings"]>nav button[aria-current="true"]{background:var(--smooth-surface-3-mild);font-weight:600;color:var(--smooth-selected-text);box-shadow:none}
 body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{background:var(--smooth-app)}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}{padding:4px clamp(20px,3vw,44px) 36px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}>:is(section,div){max-width:1120px;margin-inline:auto}
@@ -329,7 +344,7 @@ body[data-smooth-skin] [data-content-phase="hero"] ${hostPart('workspaceRow')}{f
    them; the footer floats on the page ground below the well. The send button is lifted
    out of that footer into the well's top-right (bottom-right once previews take the top). */
 body[data-smooth-skin] [data-composer-card]{--dsw-radius-panel:var(--smooth-radius-lg);--dsh-composer-text-max-height:min(300px,40vh);--smooth-composer-footer-h:38px;position:relative;isolation:isolate;border:0;border-radius:0;background:transparent;padding-top:0;gap:0;box-shadow:none}
-body[data-smooth-skin] [data-composer-card]::before{content:"";position:absolute;z-index:-1;left:0;right:0;top:0;bottom:var(--smooth-composer-footer-h);border:1px solid var(--smooth-line-strong);border-radius:var(--smooth-radius-lg);background:var(--dsw-specific-input-major);pointer-events:none}
+body[data-smooth-skin] [data-composer-card]::before{content:"";position:absolute;z-index:-1;left:0;right:0;top:0;bottom:var(--smooth-composer-footer-h);border:1px solid var(--smooth-line);border-radius:var(--smooth-radius-lg);background:color-mix(in srgb,var(--smooth-input) var(--smooth-glass-mild),transparent);box-shadow:var(--smooth-input-shadow);pointer-events:none}
 body[data-smooth-skin] [data-composer-card]${hostPart('cardWorkspaceTrigger')}{border-style:dashed}
 body[data-smooth-skin] [data-composer-card]${hostPart('cardWorkspaceTrigger')}::after{border:0}
 body[data-smooth-skin] [data-composer-card] ${hostPart('scroll')}{box-sizing:border-box;padding:10px 54px 10px 14px;min-height:42px;max-height:var(--dsh-composer-text-max-height);margin:0;border:0;border-radius:0;background:transparent;flex:1 1 auto}
@@ -668,6 +683,10 @@ body[data-smooth-skin] ${questionPanel} :is(button,textarea):focus-visible{outli
 @media(prefers-reduced-motion:reduce){body[data-smooth-skin] ${questionPanel} :is(${hostPart('option')},${hostPart('customRow')}){transition:none}}
 body[data-smooth-skin] [data-chat-flow-kind="assistant-step"]{color:var(--smooth-text)}
 body[data-smooth-skin] [data-chat-group-part="reasoning"]{color:var(--smooth-muted)}
+/* The thinking row's sticky header keeps the host's own base fill. Because the page below
+   it is the glass mix, that solid fill sits a few units above the ground and an expanded
+   row reads as a faint white band — accepted, since overriding the attribute is worse: it
+   is the generic header of every chat row, and a fill there paints one band per row. */
 /* Keep the native transcript column, width handles, flow routing and renderers.
    Only the native flow-gap hook separates turns; hidden/collapsed rows retain
    the host's visibility and spacing rules. Priority on this hook wins over the
@@ -876,7 +895,14 @@ body[data-smooth-skin]{
 body[data-smooth-skin] ${hostPart('frame')}:has(>${hostPart('sidebarCol')})>${hostPart('centerCol')}{border-radius:0 0 0 var(--smooth-radius-xl);overflow:clip;corner-shape:round}
 body[data-smooth-skin] .smooth-workspace-bar{
   position:fixed;top:0;left:var(--smooth-left-width);right:0;height:var(--smooth-caption);
-  display:flex;align-items:center;gap:4px;padding:0 35px 0 5px;background:var(--smooth-surface-glass);
+  display:flex;align-items:center;gap:4px;
+  /* The caption buttons (minimize / maximize / close) are painted by the overlay above the
+     page and own the top-right corner. Reserve their width, plus a gap, so a long tab strip
+     or its right arrow stops before them instead of under them: env(titlebar-area-*) is the
+     overlay's own rectangle (Electron titleBarOverlay). Without the overlay the fallbacks
+     collapse the expression to the old 35px arrow slot. */
+  padding:0 max(35px,min(200px,calc(100vw - env(titlebar-area-x,0px) - env(titlebar-area-width,100vw) + 8px))) 0 5px;
+  background:var(--smooth-bar-glass);
   border-radius:18px 0 0 0;corner-shape:round;pointer-events:auto;z-index:50;-webkit-app-region:drag;
 }
 /* The caption strip's sidebar colour now stops at the sidebar edge, so the strip's
@@ -897,14 +923,24 @@ body[data-smooth-skin] .smooth-workspace-bar::before{
 /* A collapsed sidebar parks the expand toggle (12px), the new-conversation button (48px)
    and the native caption menu in the caption's left corner. The chrome measures where the
    menu ends and publishes --smooth-caption-leading, so the strip starts to the right of
-   "编辑" instead of guessing a pixel offset; its own 92px narrow-window padding is dropped. */
+   "编辑" instead of guessing a pixel offset; its own 92px narrow-window padding is dropped.
+   The strip starts there but the *ground* must still reach the window's left edge: once the
+   sidebar column is gone nothing covers that corner, and on the acrylic window the
+   unpainted caption showed the desktop as a bright rectangle behind the collapse toggle.
+   One background-only layer paints exactly 0..leading in the same glass the expanded
+   column uses, so the strip's 18px corner and its wedge blend into it; the bar itself keeps
+   its geometry and drag region, so the host's caption buttons still take their clicks. */
+body[data-smooth-skin]:has([data-sidebar-collapsed])::after{
+  content:"";position:fixed;top:0;left:0;width:var(--smooth-caption-leading,100px);height:var(--smooth-caption);
+  background:var(--smooth-sidebar-glass);z-index:-1;pointer-events:none;
+}
 body[data-smooth-skin]:has([data-sidebar-collapsed]) .smooth-workspace-bar{left:var(--smooth-caption-leading,100px);padding-left:5px}
 body[data-smooth-skin] .smooth-workspace-tabs{position:relative;display:flex;align-items:center;gap:calc(12 * var(--smooth-tab-u));min-width:0;overflow-x:auto;scrollbar-width:none;flex:1;-webkit-app-region:drag}
 /* Electron's native caption drag region excludes every interactive tab/control. */
 body[data-smooth-skin] .smooth-workspace-bar :is(.smooth-workspace-tab,button){-webkit-app-region:no-drag}
 body[data-smooth-skin] .smooth-workspace-tab{
   position:relative;display:flex;align-items:center;justify-content:center;flex:none;max-width:calc(300 * var(--smooth-tab-u));min-width:0;
-  height:calc(43 * var(--smooth-tab-u));padding:0;border:1px solid var(--smooth-line);border-radius:999px;
+  height:calc(43 * var(--smooth-tab-u));padding:0;border:1px solid transparent;border-radius:999px;
   background:transparent;color:var(--smooth-text);font-family:inherit;font-weight:500;font-size:max(12px,calc(20 * var(--smooth-tab-u)));line-height:1.4;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab;
 }
@@ -912,26 +948,15 @@ body[data-smooth-skin] .smooth-tab-label{display:flex;align-items:center;justify
 /* Leave room inside the clipping box for italic glyphs extending past their advance. */
 body[data-smooth-skin] .smooth-tab-label>span{min-width:0;padding:.08em .2em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-smooth-skin] .smooth-workspace-tab[data-preview="true"] .smooth-tab-label{font-style:italic}
-/* Selection in this caption bar is the same fact as selection in the sidebar, so it wears
-   the same fill token in both tones. The rim stays a whisper of the selection hue: the
-   ring is mixed mostly into the fill it borders, so it only softens the chip's edge
-   instead of outlining it at full strength across the caption bar. The label keeps the
-   others' weight — the strip is laid out by the labels' own width, so a weight step would
-   shift every tab when the active one changes. */
-body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]{background:var(--smooth-selected-mild);border-color:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--smooth-indicator) 22%,transparent)}
-body[data-smooth-skin] .smooth-workspace-tab:hover{background:var(--smooth-surface-3-mild)}
-/* The caption ground is near-white in the light tones, so the shared selection fill lands
-   on it as a heavy chip: 1.31:1 against the bar, while the very same token on the sidebar's
-   own grey ground is a 1.12:1 whisper. At the top of a light window that read as a dark
-   block, not as the same selection the sidebar shows. The light tones mix the fill back
-   toward the caption surface until the chip carries the sidebar's weight, scale the hover
-   step to the same curve (so the chip never jumps dark under the pointer), and give the
-   unselected hover a whisper of ink instead of a grey layer, which otherwise sat closer to
-   the chip than to the bar. Dark tones keep the plain token: there the bar ground already
-   matches the token's tone. */
-body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab[data-selected="true"]{background:color-mix(in srgb,var(--smooth-selected-mild) 46%,var(--smooth-surface-mild))}
-body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab:not([data-selected="true"]):hover{background-color:color-mix(in srgb,var(--smooth-text) 4%,var(--smooth-surface-mild))}
-body[data-smooth-skin]:not([data-ds-dark-theme]) .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-selected-mild) 64%,var(--smooth-surface-mild))}
+/* Selection in this caption bar is the same fact as selection in the sidebar: the raised
+   white pill — white fill, one soft shadow, near-black ink. Unselected tabs are their label
+   alone (the rim is gone, like every other region divider), and the hover step is the
+   region's own hover colour rather than a component grey. The label keeps the others'
+   weight — the strip is laid out by the labels' own width, so a weight step would shift
+   every tab when the active one changes. */
+body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]{background:var(--smooth-selected-mild);border-color:transparent;box-shadow:var(--smooth-selected-shadow)}
+body[data-smooth-skin] .smooth-workspace-tab:hover{background-color:var(--smooth-hover-mild)}
+body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-selected-mild) 88%,var(--smooth-hover))}
 body[data-smooth-skin] .smooth-tab-close{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--smooth-muted);cursor:pointer}
 /* Pointer reorder: a short | floats in the gap, not on a tab border. Tabs clip
    their own overflow for the ellipsis, so the indicator is a nav child instead. */
@@ -1121,7 +1146,7 @@ body[data-smooth-skin] .smooth-git-search:focus{border-color:var(--smooth-accent
 body[data-smooth-skin] .smooth-git-list{display:flex;flex-direction:column;gap:1px;min-height:0;overflow:auto}
 body[data-smooth-skin] .smooth-git-row{display:flex;align-items:center;gap:9px;width:100%;min-height:34px;padding:5px 8px;border:0;border-radius:var(--smooth-radius-sm);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 body[data-smooth-skin] .smooth-git-row:hover:not(:disabled){background:var(--smooth-surface-3-mild)}
-body[data-smooth-skin] .smooth-git-row[data-current="true"]{background:var(--smooth-selected-mild)}
+body[data-smooth-skin] .smooth-git-row[data-current="true"]{background:var(--smooth-selected-mild);box-shadow:var(--smooth-selected-shadow)}
 /* Selection and hover must stay apart in every dark palette. The host's own dark base is
    the one that collapses them onto a single hex (#393a3e for both selected and layer3, so
    the current row would vanish under the cursor); iron's pair is merely tight at 1.07:1.
@@ -1223,22 +1248,22 @@ body[data-smooth-skin] .smooth-usage-models-empty{padding:6px 2px;color:var(--sm
    overlay and transparent mask pass clicks through, and only the panel takes
    them; a session, the rail, a tab or Home leaves settings, and Escape still
    closes it. */
-body[data-smooth-skin] [data-shortcut-modal="settings"]{--smooth-settings-nav:210px;position:fixed;inset:var(--smooth-caption) 0 0 var(--smooth-left-width);width:auto;height:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;grid-template-columns:var(--smooth-settings-nav) minmax(0,1fr);pointer-events:auto}
+body[data-smooth-skin] [data-shortcut-modal="settings"]{--smooth-settings-nav:184px;position:fixed;inset:var(--smooth-caption) 0 0 var(--smooth-left-width);width:auto;height:auto;max-width:none;max-height:none;border:0;border-radius:0 0 0 var(--smooth-radius-xl);corner-shape:round;overflow:clip;box-shadow:none;padding:0;grid-template-columns:var(--smooth-settings-nav) minmax(0,1fr);pointer-events:auto}
 body[data-smooth-skin] [role="presentation"]:has(>[data-shortcut-modal="settings"]){pointer-events:none}
 body[data-smooth-skin] [role="presentation"]:has(>[data-shortcut-modal="settings"])>[aria-hidden="true"]{background:transparent;backdrop-filter:none;pointer-events:none}
-body[data-smooth-skin] [data-shortcut-modal="settings"]>nav{box-sizing:border-box;width:var(--smooth-settings-nav);min-width:0;min-height:0;padding:16px 10px 10px;gap:8px}
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navTitle')}{padding:0 10px;font-size:20px;line-height:28px;font-weight:700;letter-spacing:-.01em}
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}{flex:1;min-height:0;gap:2px;padding-top:34px;overflow-x:hidden;overflow-y:auto}
+body[data-smooth-skin] [data-shortcut-modal="settings"] nav:not(.smooth-workspace-tabs){box-sizing:border-box;width:var(--smooth-settings-nav);min-width:0;min-height:0;margin:0;padding:16px 10px 10px;gap:8px;background:var(--smooth-app);border-right:1px solid var(--smooth-line)}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navTitle')}{box-sizing:border-box;display:flex;align-items:center;height:44px;min-height:0;margin:15px 0 -15px;padding:0 10px;overflow:hidden;font-size:20px;line-height:28px;font-weight:700;letter-spacing:-.01em}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}{flex:1;min-height:0;gap:2px;margin:0;padding:34px 0 24px;overflow-x:hidden;overflow-y:auto}
 /* Native icons and labels stay in separate cells, including plugin sections.
    Keep each row's height; a short window scrolls the list instead of crushing it.
    The cells run at the size of the screenshot this panel follows — 15px labels on a
    34px row with an 18px icon — so the column reads as text rather than as a list of
    small print; the icon column is sized to the icon so the labels share one edge. */
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button{position:relative;box-sizing:border-box;display:grid;grid-template-columns:18px minmax(0,1fr);align-items:center;flex:none;width:100%;height:34px;min-height:34px;border-radius:var(--smooth-radius-sm);padding:0 10px;gap:13px;font-size:15px;line-height:22px;text-align:left;white-space:nowrap}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button{position:relative;box-sizing:border-box;display:grid;grid-template-columns:18px minmax(0,1fr);align-items:center;flex:none;width:auto;align-self:stretch;margin:0;height:34px;min-height:34px;border-radius:var(--smooth-radius-sm);padding:0 10px;gap:13px;font-size:15px;line-height:22px;text-align:left;white-space:nowrap}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button>:is(svg,${hostPart('navIcon')}){grid-column:1;grid-row:1;justify-self:center;width:18px;height:18px;min-width:18px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button::before{grid-column:1;grid-row:1;justify-self:center;align-self:center}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button>${hostPart('navLabel')}{grid-column:2;grid-row:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button[aria-current="true"]{background:var(--smooth-selected-mild);color:var(--smooth-text);font-weight:600}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button[aria-current="true"]{background:var(--smooth-surface-3-mild);color:var(--smooth-selected-text);box-shadow:none;font-weight:600}
 /* The host builds one flat list out of the settings.section entries and puts no id
    or grouping attribute on a cell, so the groups are anchored on position:
    account | application | extensions. 应用 owns the app-level entries plus the two
@@ -1259,7 +1284,7 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>b
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(6)::after{content:"扩展"}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(2),
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('navList')}>button:nth-child(6){margin-top:34px}
-body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{position:relative;z-index:1;border-left:0;border-radius:0 0 0 var(--smooth-radius-xl);corner-shape:round;background:var(--smooth-app);overflow:clip}
+body[data-smooth-skin] [data-shortcut-modal="settings"]>${hostPart('content')}{position:relative;z-index:1;border-left:0;border-radius:0;background:var(--smooth-app);overflow:clip}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('header')}{height:52px;padding:14px 16px 8px}
 /* The native close button would sit immediately right of whatever action the page itself
    puts in this header (通用设置 puts its "打开配置文件" there), which reads as one button
@@ -1267,7 +1292,7 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('header')}{he
    every way out — a tab, the home button, Escape — so the ✕ is a second door drawn on
    top of the first. The reference mock has none. */
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('header')}>${accountPart('close')}{display:none}
-body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}{padding:0 28px 28px}
+body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}{padding:0 24px 28px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('options')}>:is(section,div){max-width:860px;margin-inline:auto}
 body[data-smooth-skin] [data-shortcut-modal="settings"] h2{font-size:17px;line-height:26px;font-weight:600}
 body[data-smooth-skin] [data-shortcut-modal="settings"] ${hostPart('row')}{box-sizing:border-box;min-height:52px;padding-block:12px}
@@ -1291,17 +1316,20 @@ body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.gen
 body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.general.item"] button[role="switch"]>span{width:16px;height:16px}
 body[data-smooth-skin] [data-shortcut-modal="settings"] [data-slot="settings.general.item"] button[role="switch"][aria-checked="true"]>span{transform:translateX(16px)}
 body[data-smooth-skin] :is(.smooth-workspace-tab,[data-composer-card]){corner-shape:round}
-body[data-smooth-skin] .smooth-workspace-tab[data-selected="true"]:hover{background-color:color-mix(in srgb,var(--smooth-selected-mild) 94%,var(--smooth-text))}
 body[data-smooth-skin] :is(.smooth-workspace-tab,.smooth-rail-home,.smooth-rail-plugins),
 body[data-smooth-skin] ${hostPart('sidebarCol')} :is(${hostPart('newSession')},${hostPart('panelRow')}),
 body[data-smooth-skin] [data-composer-card] ${hostPart('add')},
 body[data-smooth-skin] :is(.smooth-composer-preset,.smooth-composer-model) button{transition:background-color .16s cubic-bezier(.22,1,.36,1),box-shadow .16s cubic-bezier(.22,1,.36,1),color .16s cubic-bezier(.22,1,.36,1)}
 body[data-smooth-skin] :is(.smooth-rail-home,.smooth-rail-plugins):hover:not(:disabled),
-body[data-smooth-skin] ${hostPart('sidebarCol')} :is(${hostPart('newSession')},${hostPart('panelRow')}):hover:not(:disabled),
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')}:hover:not(:disabled),
 body[data-smooth-skin] [data-composer-card] ${hostPart('add')}:hover:not(:disabled),
 body[data-smooth-skin] :is(.smooth-composer-preset,.smooth-composer-model) button:hover:not(:disabled){background-color:color-mix(in srgb,var(--smooth-surface-3-mild) 95%,var(--smooth-text))}
+/* 新会话 is the workspace's raised pill, so its hover and press steps move along the
+   ground's own hover colour instead of a component grey; the white pill stays white. */
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}:hover:not(:disabled){background-color:color-mix(in srgb,var(--smooth-selected-mild) 88%,var(--smooth-hover))}
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('newSession')}:active:not(:disabled){background-color:color-mix(in srgb,var(--smooth-selected-mild) 76%,var(--smooth-hover));box-shadow:none}
 body[data-smooth-skin] :is(.smooth-rail-home,.smooth-rail-plugins):active:not(:disabled),
-body[data-smooth-skin] ${hostPart('sidebarCol')} :is(${hostPart('newSession')},${hostPart('panelRow')}):active:not(:disabled),
+body[data-smooth-skin] ${hostPart('sidebarCol')} ${hostPart('panelRow')}:active:not(:disabled),
 body[data-smooth-skin] [data-composer-card] ${hostPart('add')}:active:not(:disabled),
 body[data-smooth-skin] :is(.smooth-composer-preset,.smooth-composer-model) button:active:not(:disabled){background-color:var(--smooth-surface-2-mild);box-shadow:none}
 @media(prefers-reduced-motion:reduce){
