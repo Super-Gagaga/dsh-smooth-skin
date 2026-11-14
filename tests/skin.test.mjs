@@ -877,10 +877,11 @@ test('the skin stylesheet is scoped to the gating body attribute and never hides
       .replace(/body\[data-smooth-skin\] \$\{hostPart\('composerHero'\)\} \$\{hostPart\('heroWorkspaceRow'\)\}\{[^}]*display:none[^}]*\}/, '')
       .replace(/body\[data-smooth-skin\]\[data-smooth-home\][\s\S]*?\{display:none/, '')
       .replace(/body\[data-smooth-skin\] \$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('projectRow'\)\} :is\(\$\{hostPart\('folder'\)\},\$\{hostPart\('chevron'\)\}\)\{display:none\}/, '')
+      .replace(/body\[data-smooth-skin\] \$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('panelEntry'\)\} \$\{hostPart\('panelUnpin'\)\}\{display:none\}/, '')
       .replace(/body\[data-smooth-skin\] \[data-composer-dock\]>\$\{hostPart\('root'\)\}\{display:none\}/, '')
       .replace(/body\[data-smooth-skin\] \[data-composer-dock\] \[data-composer-stat\]\{display:none\}/, '')
       .replace(/body\[data-smooth-skin\]\[data-smooth-usage-placement="(?:context|bottom)"\] \[data-composer-dock\][\s\S]*?\{display:none\}/, '');
-    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, settings close, welcome row, empty-workspace card, workspace folder cell, host context meter and shipped stat pills may be hidden');
+    assert.ok(!/\b(display\s*:\s*none|visibility\s*:\s*hidden)\b/.test(contentRules), 'only the balance panel, settings close, welcome row, empty-workspace card, workspace folder cell, rail unpin button, host context meter and shipped stat pills may be hidden');
   }
   assert.ok(rules > 10, 'the skin stylesheet has almost no scoped rules');
 });
@@ -1108,7 +1109,7 @@ test('region grounds follow the slider while components keep a mild fill', () =>
   assert.match(skin, /body\[data-smooth-skin\]>#root\{--dsw-specific-sidebar-fill:var\(--smooth-sidebar-glass\)/);
   // The fade itself takes the steeper stacked weight so it clears faster than the page.
   assert.match(skin, /--smooth-sidebar-fade:color-mix\(in srgb,var\(--smooth-sidebar\) var\(--smooth-glass-soft\),transparent\)/);
-  assert.match(skin, /\$\{hostPart\('sidebarCol'\)\} \$\{hostPart\('fade'\)\}\{background:linear-gradient\(to bottom,transparent,var\(--smooth-sidebar-fade\)\)\}/);
+  assert.match(skin, /\$\{hostPart\('sidebarCol'\)\} :is\(\$\{hostPart\('fade'\)\},\[class\$="_scrollFade"\]\)\{background:linear-gradient\(to bottom,transparent,var\(--smooth-sidebar-fade\)\)\}/);
 
   // Overlays keep most of their fill; the client drives them a quarter as fast.
   assert.match(skin, /--smooth-glass-overlay:100%/);
