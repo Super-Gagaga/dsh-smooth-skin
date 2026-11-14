@@ -56,6 +56,8 @@
 
 **图标栏是固定尺寸的紧凑竖条。** 原生导航按钮与头像组成左侧图标栏：栏宽约 38px、按钮 35px、图标 22px，不随窗口变化，按钮沿栏中线对齐；项目树、新会话和品牌显示在右侧。按钮与图标保持原尺寸，只把图标栏底色收窄到贴着按钮。代价是栏宽被钉死，宿主改按钮尺寸时这里不会自动跟随，只能再手调这几个值。
 
+**DSH 0.2.2-rc.3 的侧栏重建后，竖条的锚点从「直系子」改成「后代」。** rc.3 把侧栏拆进 `dsh-client-ui-sidebar`，`panelList` 不再是 `root` 的直系子（现在隔着 `scrollRegion > scrollArea` 两层、在网格第 2 列第 2 行），旧选择器 `root:not(collapsed) > panelList` 整体落空，图标退回宿主流内布局、竖条空掉。改法：两条 `panelList` 规则改成后代匹配，另加三条——`panelEntry` 收窄回 38px（宿主现在是整行容器，`border-inline` 也要清零）、`panelEntry>*{min-width:0}`、`panelEntry panelUnpin{display:none}`（悬停取消固定按钮在 44px 里放不下）。选中态类名同时由 `panelActive` 改为 `panelEntryActive`；侧栏底部虚化由 `fade` 改为 `scrollFade`（选择器用 `:is(...)` 兼容两版）。代价：这套锚点仍然绑死宿主的类名与层级，宿主再改一次侧栏就要再核一遍；`data-windows-titlebar` 下收起时宿主会 `display:none` 掉 `panelList/regionArea/footArea`，我们的规则必须继续带 `:not(collapsed)` 才不会被强行显示。
+
 **「新版本」更新 pill 收成方形按钮，浮在 footer 上方。** 桌面更新 pill 在栏内收成与其余按钮同尺寸的方形按钮，并浮在 footer 上方、独占一行：`position:absolute` + `bottom:calc(100% + 8px)` + `translateX(-50%)`，footer 是包含块；文字按设置按钮的方式只做视觉隐藏（`aria-label` 与 tooltip 仍带版本信息）。
 
 **不能留在那一行，是因为 footer 本身是两行横排的。** 宿主把 footer 排成两行（账号行 + 设置行），而设置行本身是横向 flex，单列栏放不下就会横向溢出、落到头像背后；`order` / `display:contents` 这类换序手段又受宿主的嵌套层级影响，所以直接把它抬出那一行，位置不再依赖内部结构。代价是定位依赖 footer 这条包含块链，宿主重排 footer 就要重新核对。
